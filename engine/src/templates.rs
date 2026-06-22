@@ -1,8 +1,8 @@
 use crate::error::{KnurledError, Result};
 use crate::json::sha256_json;
 use crate::model::{
-    BuiltinTemplate, ENGINE_VERSION, FiveThreeOneWeek, LockEntry, Map, TemplateIncrements,
-    TemplateKind, TemplateLaneRules, TemplateSlot,
+    BuiltinTemplate, ENGINE_VERSION, FiveThreeOneWeek, LockEntry, Map, RestPolicy,
+    TemplateIncrements, TemplateKind, TemplateLaneRules, TemplateSlot,
 };
 
 pub const DEFAULT_TEMPLATE_VERSION: &str = "1.0.0";
@@ -71,6 +71,7 @@ fn gzclp_template(id: String) -> BuiltinTemplate {
         kind: TemplateKind::Gzclp,
         default_rotation: vec!["a1".into(), "b1".into(), "a2".into(), "b2".into()],
         sessions: gzclp_sessions(),
+        rest: rest_policy(120, &[("t1", 180), ("t2", 150), ("t3", 90)], &[], &[], &[]),
         lanes: TemplateLaneRules {
             t1_stages: vec!["5x3+".into(), "6x2+".into(), "10x1+".into()],
             t2_stages: vec!["3x10".into(), "3x8".into(), "3x6".into()],
@@ -98,6 +99,7 @@ fn five_three_one_template(id: String) -> BuiltinTemplate {
             "press_day".into(),
         ],
         sessions: five_three_one_sessions(),
+        rest: rest_policy(150, &[("main", 180)], &[], &[], &[]),
         lanes: TemplateLaneRules {
             t1_stages: Vec::new(),
             t2_stages: Vec::new(),
@@ -162,6 +164,13 @@ fn starting_strength_template(id: String) -> BuiltinTemplate {
         kind: TemplateKind::StartingStrength,
         default_rotation,
         sessions,
+        rest: rest_policy(
+            120,
+            &[("3x5", 180), ("1x5", 240), ("5x3", 180), ("chins", 120)],
+            &[],
+            &[],
+            &[],
+        ),
         lanes: TemplateLaneRules {
             t1_stages: Vec::new(),
             t2_stages: Vec::new(),
@@ -174,6 +183,34 @@ fn starting_strength_template(id: String) -> BuiltinTemplate {
             lower: 5.0,
         },
         weeks: Vec::new(),
+    }
+}
+
+fn rest_policy(
+    default_seconds: u32,
+    by_tier: &[(&str, u32)],
+    by_slot: &[(&str, u32)],
+    by_lane: &[(&str, u32)],
+    by_exercise: &[(&str, u32)],
+) -> RestPolicy {
+    RestPolicy {
+        default_seconds: Some(default_seconds),
+        by_tier: by_tier
+            .iter()
+            .map(|(key, seconds)| (key.to_ascii_lowercase(), *seconds))
+            .collect(),
+        by_slot: by_slot
+            .iter()
+            .map(|(key, seconds)| (key.to_ascii_lowercase(), *seconds))
+            .collect(),
+        by_lane: by_lane
+            .iter()
+            .map(|(key, seconds)| (key.to_ascii_lowercase(), *seconds))
+            .collect(),
+        by_exercise: by_exercise
+            .iter()
+            .map(|(key, seconds)| (key.to_ascii_lowercase().replace(' ', "_"), *seconds))
+            .collect(),
     }
 }
 

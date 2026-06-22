@@ -50,7 +50,7 @@
         "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
         "progression_lane": "squat.main",
         "progression_rule": "531.main",
-        "rendered_session_hash": "sha256:d92be5791422146a3678d900fcbc783fd607c7a5be2192a70951282fd69ae213",
+        "rendered_session_hash": "sha256:5f407266dc3eff0a324a2ad0fc469b7914e745d07d9acc74f2999b94f48fbfe8",
         "slot_id": "squat.main"
       },
       "item_id": "squat.main",
@@ -81,14 +81,19 @@
       },
       "progression_lane": "squat.main",
       "progression_rule": "531.main",
+      "rest": {
+        "key": "main",
+        "seconds": 180,
+        "source": "template_tier"
+      },
       "slot_id": "squat.main"
     }
   ],
   "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
-  "rendered_session_hash": "sha256:d92be5791422146a3678d900fcbc783fd607c7a5be2192a70951282fd69ae213",
+  "rendered_session_hash": "sha256:5f407266dc3eff0a324a2ad0fc469b7914e745d07d9acc74f2999b94f48fbfe8",
   "schema_version": "0.1",
   "session_id": "squat_day",
   "suggested_date": null,
-  "template_hash": "sha256:0f9114f1d007baf31a5ede05f02d9a2ff966f6e63933a2b8adda6b7c710a0d04",
+  "template_hash": "sha256:d55242ba38ac8b1647aa877bae22c90d9d22659ebe11df637075937b1330cf54",
   "type": "rendered_session"
 }

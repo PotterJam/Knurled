@@ -1,0 +1,45 @@
+import Foundation
+import Observation
+
+@MainActor
+@Observable
+final class AppModel {
+    enum Phase: Equatable {
+        case launching
+        case needsConnection
+        case ready
+    }
+
+    let engine: WorkoutEngine
+    let repos: RepoManager
+
+    var phase: Phase = .launching
+    var activeRepo: ActiveRepo?
+    var engineVersion: String?
+
+    init(engine: WorkoutEngine = RustWorkoutEngine(), repos: RepoManager = RepoManager()) {
+        self.engine = engine
+        self.repos = repos
+    }
+
+    func bootstrap() async {
+        engineVersion = try? await engine.engineVersion()
+        await loadSampleRepo()
+    }
+
+    func loadSampleRepo() async {
+        do {
+            let url = try repos.ensureSampleRepo()
+            let repo = ActiveRepo(displayName: "Sample · GZCLP", url: url, isSample: true)
+            await repo.refresh(engine: engine)
+            activeRepo = repo
+            phase = .ready
+        } catch {
+            phase = .needsConnection
+        }
+    }
+
+    func refresh() async {
+        await activeRepo?.refresh(engine: engine)
+    }
+}

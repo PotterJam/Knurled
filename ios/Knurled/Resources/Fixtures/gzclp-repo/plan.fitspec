@@ -1,0 +1,46 @@
+plan "My GZCLP" {
+  template "gzclp.standard@1.0.0"
+  units kg
+
+  schedule next_workout {
+    rotation A1, B1, A2, B2
+    suggested_days mon, wed, fri
+  }
+
+  starts {
+    squat 80kg
+    bench 55kg
+    press 37.5kg
+    deadlift 100kg
+  }
+
+  accessories {
+    A1.T3 lat_pulldown
+    B1.T3 barbell_row
+    A2.T3 lat_pulldown
+    B2.T3 barbell_row
+  }
+
+  exercise_options {
+    slot "A1.T3" {
+      primary lat_pulldown
+      chin_up { label "Chin-up" policy tracking_only }
+      cable_row { label "Cable Row" policy tracking_only }
+    }
+    slot "A2.T3" {
+      primary lat_pulldown
+      chin_up { label "Chin-up" policy tracking_only }
+      cable_row { label "Cable Row" policy tracking_only }
+    }
+    slot "B1.T3" {
+      primary barbell_row
+      seated_cable_row { label "Seated Cable Row" policy tracking_only }
+      dumbbell_row { label "Dumbbell Row" policy tracking_only }
+    }
+    slot "B2.T3" {
+      primary barbell_row
+      seated_cable_row { label "Seated Cable Row" policy tracking_only }
+      dumbbell_row { label "Dumbbell Row" policy tracking_only }
+    }
+  }
+}

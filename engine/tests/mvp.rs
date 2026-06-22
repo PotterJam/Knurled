@@ -1,5 +1,5 @@
 use knurled_core::{
-    CorrectionChange, Effect, PatchFile, StateChange, TrainingEvent, compile_plan,
+    CorrectionChange, Effect, PatchFile, RestSource, StateChange, TrainingEvent, compile_plan,
     create_initial_state, reduce_input, render_lockfile, render_next, replay_events, simulate,
     synthetic_execution_input,
 };
@@ -194,6 +194,52 @@ fn patch_can_replace_exercise_without_changing_lane_identity() {
 }
 
 #[test]
+fn rest_policy_is_resolved_from_plan_overrides_before_template_defaults() {
+    let plan = r#"plan "James GZCLP" {
+  template "gzclp.standard@1.0.0"
+  units kg
+
+  schedule next_workout {
+    rotation A1, B1, A2, B2
+    suggested_days mon, wed, fri
+  }
+
+  starts {
+    squat 80kg
+    bench 55kg
+    press 37.5kg
+    deadlift 100kg
+  }
+
+  accessories {
+    A1.T3 lat_pulldown
+    B1.T3 barbell_row
+    A2.T3 lat_pulldown
+    B2.T3 barbell_row
+  }
+
+  rest {
+    default 1 minute
+    Tier T3 75 sec
+    exercise bench 210 seconds
+    lane squat.t1 4m
+    slot A1.T2 5 min
+  }
+}
+"#;
+    let lock = render_lockfile("gzclp.standard@1.0.0").unwrap();
+    let compiled = compile_plan(plan, &lock, &[]).unwrap();
+    let rendered = render_next(&compiled, &create_initial_state(&compiled)).unwrap();
+
+    assert_eq!(rendered.items[0].rest.seconds, 240);
+    assert_eq!(rendered.items[0].rest.source, RestSource::PlanLane);
+    assert_eq!(rendered.items[1].rest.seconds, 300);
+    assert_eq!(rendered.items[1].rest.source, RestSource::PlanSlot);
+    assert_eq!(rendered.items[2].rest.seconds, 75);
+    assert_eq!(rendered.items[2].rest.source, RestSource::PlanTier);
+}
+
+#[test]
 fn five_three_one_renders_week_one_percentages() {
     let plan = r#"plan "James 5/3/1" {
   template "531.beginners@1.0.0"
@@ -299,6 +345,8 @@ fn starting_strength_phase3_rotates_deadlift_chins_clean_chins() {
     let second = render_next(&compiled, &state).unwrap();
     assert_eq!(second.items[2].exercise, "chin_up");
     assert_eq!(second.items[2].progression_lane, "chin_up.bodyweight");
+    assert_eq!(second.items[2].rest.seconds, 120);
+    assert_eq!(second.items[2].rest.source, RestSource::TemplateTier);
     assert!(second.items[2].effect_preview.pass.is_empty());
 
     state.cursor.next_session = "a_clean".into();

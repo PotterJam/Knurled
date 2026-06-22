@@ -49,6 +49,7 @@ pub fn compile_plan(
         training_maxes: plan.training_maxes,
         accessories: plan.accessories,
         exercise_options: plan.exercise_options,
+        rest: plan.rest,
         template,
         lock,
         patches,
@@ -1300,6 +1301,7 @@ fn rendered_item(
         },
         execution_contract: execution_contract(spec.recommended_input, &spec.sets),
         effect_preview: spec.effect_preview,
+        rest: resolve_rest(compiled, slot, &spec.lane, &spec.exercise),
         identity: ItemIdentity {
             item_id: slot.slot_id.clone(),
             slot_id: slot.slot_id.clone(),
@@ -1310,6 +1312,84 @@ fn rendered_item(
         },
         exercise_options,
     })
+}
+
+fn resolve_rest(
+    compiled: &CompiledPlan,
+    slot: &TemplateSlot,
+    lane: &str,
+    exercise: &str,
+) -> RestPrescription {
+    let slot_key = slot.slot_id.to_ascii_lowercase();
+    let lane_key = lane.to_ascii_lowercase();
+    let exercise_key = normalize_exercise(exercise);
+    let tier_key = slot.tier.to_ascii_lowercase();
+
+    find_rest(&compiled.rest.by_slot, &slot_key, RestSource::PlanSlot)
+        .or_else(|| find_rest(&compiled.rest.by_lane, &lane_key, RestSource::PlanLane))
+        .or_else(|| {
+            find_rest(
+                &compiled.rest.by_exercise,
+                &exercise_key,
+                RestSource::PlanExercise,
+            )
+        })
+        .or_else(|| find_rest(&compiled.rest.by_tier, &tier_key, RestSource::PlanTier))
+        .or_else(|| {
+            compiled
+                .rest
+                .default_seconds
+                .map(|seconds| rest_prescription(seconds, RestSource::PlanDefault, "default"))
+        })
+        .or_else(|| {
+            find_rest(
+                &compiled.template.rest.by_slot,
+                &slot_key,
+                RestSource::TemplateSlot,
+            )
+        })
+        .or_else(|| {
+            find_rest(
+                &compiled.template.rest.by_lane,
+                &lane_key,
+                RestSource::TemplateLane,
+            )
+        })
+        .or_else(|| {
+            find_rest(
+                &compiled.template.rest.by_exercise,
+                &exercise_key,
+                RestSource::TemplateExercise,
+            )
+        })
+        .or_else(|| {
+            find_rest(
+                &compiled.template.rest.by_tier,
+                &tier_key,
+                RestSource::TemplateTier,
+            )
+        })
+        .or_else(|| {
+            compiled
+                .template
+                .rest
+                .default_seconds
+                .map(|seconds| rest_prescription(seconds, RestSource::TemplateDefault, "default"))
+        })
+        .unwrap_or_else(|| rest_prescription(120, RestSource::EngineFallback, "engine_fallback"))
+}
+
+fn find_rest(map: &Map<u32>, key: &str, source: RestSource) -> Option<RestPrescription> {
+    map.get(key)
+        .map(|seconds| rest_prescription(*seconds, source, key))
+}
+
+fn rest_prescription(seconds: u32, source: RestSource, key: &str) -> RestPrescription {
+    RestPrescription {
+        seconds,
+        source,
+        key: key.to_owned(),
+    }
 }
 
 fn attach_rendered_session_hash(

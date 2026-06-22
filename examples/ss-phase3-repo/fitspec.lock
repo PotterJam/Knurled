@@ -1,5 +1,5 @@
 [templates."starting-strength.phase3"]
 version = "1.0.0"
 source = "builtin"
-content_hash = "sha256:180b37103d4c7a164a31efcfb3f11ba4522689598c70cc432ff4d17b823e2691"
+content_hash = "sha256:3c439f4f942ab23c01948bac7eb57bcbc87368b8a73085af26d457e8fe126085"
 engine_version = "0.1.0"

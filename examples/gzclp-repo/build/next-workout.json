@@ -57,7 +57,7 @@
         "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
         "progression_lane": "squat.t1",
         "progression_rule": "gzclp.t1",
-        "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+        "rendered_session_hash": "sha256:2ab5f33fdfdc996db7c3296b22b008624ad709c99a9d7a1f412fe4ef14bf43cd",
         "slot_id": "a1.t1"
       },
       "item_id": "a1.t1",
@@ -85,6 +85,11 @@
       },
       "progression_lane": "squat.t1",
       "progression_rule": "gzclp.t1",
+      "rest": {
+        "key": "t1",
+        "seconds": 180,
+        "source": "template_tier"
+      },
       "slot_id": "a1.t1"
     },
     {
@@ -141,7 +146,7 @@
         "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
         "progression_lane": "bench.t2",
         "progression_rule": "gzclp.t2",
-        "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+        "rendered_session_hash": "sha256:2ab5f33fdfdc996db7c3296b22b008624ad709c99a9d7a1f412fe4ef14bf43cd",
         "slot_id": "a1.t2"
       },
       "item_id": "a1.t2",
@@ -169,6 +174,11 @@
       },
       "progression_lane": "bench.t2",
       "progression_rule": "gzclp.t2",
+      "rest": {
+        "key": "t2",
+        "seconds": 150,
+        "source": "template_tier"
+      },
       "slot_id": "a1.t2"
     },
     {
@@ -212,7 +222,7 @@
         "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
         "progression_lane": "lat_pulldown.t3",
         "progression_rule": "gzclp.t3",
-        "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+        "rendered_session_hash": "sha256:2ab5f33fdfdc996db7c3296b22b008624ad709c99a9d7a1f412fe4ef14bf43cd",
         "slot_id": "a1.t3"
       },
       "item_id": "a1.t3",
@@ -240,14 +250,19 @@
       },
       "progression_lane": "lat_pulldown.t3",
       "progression_rule": "gzclp.t3",
+      "rest": {
+        "key": "t3",
+        "seconds": 90,
+        "source": "template_tier"
+      },
       "slot_id": "a1.t3"
     }
   ],
   "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
-  "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+  "rendered_session_hash": "sha256:2ab5f33fdfdc996db7c3296b22b008624ad709c99a9d7a1f412fe4ef14bf43cd",
   "schema_version": "0.1",
   "session_id": "a1",
   "suggested_date": null,
-  "template_hash": "sha256:e867943a9c87658f7f852e1c8fcdb88d495f2f3912db3f80315afa4e47a44cea",
+  "template_hash": "sha256:7fb133a3013f5ebbf37c649285aa85b220919d7848e4e94696b44979d6eb7371",
   "type": "rendered_session"
 }

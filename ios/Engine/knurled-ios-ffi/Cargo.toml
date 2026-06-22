@@ -1,0 +1,25 @@
+# Standalone crate (own [workspace] table) so it is not absorbed into the root
+# Cargo workspace. It depends on the engine crate by path; cross-workspace path
+# deps are fine. Built into a staticlib and packaged as KnurledCore.xcframework.
+[package]
+name = "knurled-ios-ffi"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[lib]
+name = "knurled_ios_ffi"
+crate-type = ["staticlib"]
+
+[dependencies]
+knurled-core = { path = "../../../engine" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.145", features = ["preserve_order"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+
+[workspace]

@@ -49,7 +49,7 @@
         "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
         "progression_lane": "squat.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+        "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
         "slot_id": "a_deadlift.squat"
       },
       "item_id": "a_deadlift.squat",
@@ -77,6 +77,11 @@
       },
       "progression_lane": "squat.linear",
       "progression_rule": "starting_strength.3x5",
+      "rest": {
+        "key": "3x5",
+        "seconds": 180,
+        "source": "template_tier"
+      },
       "slot_id": "a_deadlift.squat"
     },
     {
@@ -126,7 +131,7 @@
         "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
         "progression_lane": "press.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+        "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
         "slot_id": "a_deadlift.press"
       },
       "item_id": "a_deadlift.press",
@@ -154,6 +159,11 @@
       },
       "progression_lane": "press.linear",
       "progression_rule": "starting_strength.3x5",
+      "rest": {
+        "key": "3x5",
+        "seconds": 180,
+        "source": "template_tier"
+      },
       "slot_id": "a_deadlift.press"
     },
     {
@@ -203,7 +213,7 @@
         "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
         "progression_lane": "deadlift.linear",
         "progression_rule": "starting_strength.1x5",
-        "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+        "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
         "slot_id": "a_deadlift.deadlift"
       },
       "item_id": "a_deadlift.deadlift",
@@ -219,14 +229,19 @@
       },
       "progression_lane": "deadlift.linear",
       "progression_rule": "starting_strength.1x5",
+      "rest": {
+        "key": "1x5",
+        "seconds": 240,
+        "source": "template_tier"
+      },
       "slot_id": "a_deadlift.deadlift"
     }
   ],
   "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
-  "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+  "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
   "schema_version": "0.1",
   "session_id": "a_deadlift",
   "suggested_date": null,
-  "template_hash": "sha256:180b37103d4c7a164a31efcfb3f11ba4522689598c70cc432ff4d17b823e2691",
+  "template_hash": "sha256:3c439f4f942ab23c01948bac7eb57bcbc87368b8a73085af26d457e8fe126085",
   "type": "rendered_session"
 }

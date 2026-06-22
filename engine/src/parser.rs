@@ -1,8 +1,17 @@
 use regex::Regex;
 
+// Parser roadmap for humans and future agents:
+// This file is a bootstrap parser for the tiny MVP FitSpec surface. It was kept
+// hand-written to avoid over-designing syntax while the domain model was still
+// moving. Do not grow this into the real language parser. The intended next
+// parser is `winnow`: FitSpec is block-oriented, and winnow gives Rust-native
+// parser combinators, local parsing functions, spans, diagnostics, and an
+// incremental migration path. Use lalrpop only if FitSpec later becomes
+// expression-heavy enough to justify a generated grammar.
+
 use crate::model::{
     ExerciseAlternative, ExerciseOptions, LockEntry, Lockfile, Map, Patch, PatchOperation, Plan,
-    SCHEMA_VERSION, Schedule, SwapPolicy, Units,
+    RestPolicy, SCHEMA_VERSION, Schedule, SwapPolicy, Units,
 };
 use crate::templates::parse_template_ref;
 
@@ -25,6 +34,7 @@ pub fn parse_plan(text: &str) -> Plan {
     let training_maxes_block = extract_block(text, "training_maxes").unwrap_or_default();
     let accessories_block = extract_block(text, "accessories").unwrap_or_default();
     let exercise_options_block = extract_block(text, "exercise_options").unwrap_or_default();
+    let rest_block = extract_block(text, "rest").unwrap_or_default();
 
     Plan {
         kind: "fitspec_plan".into(),
@@ -41,6 +51,7 @@ pub fn parse_plan(text: &str) -> Plan {
         training_maxes: normalize_lift_map(parse_key_value_block(&training_maxes_block)),
         accessories: normalize_accessory_map(parse_key_value_block(&accessories_block)),
         exercise_options: parse_exercise_options(&exercise_options_block),
+        rest: parse_rest_policy(&rest_block),
     }
 }
 
@@ -249,6 +260,115 @@ fn parse_exercise_options(block: &str) -> Map<ExerciseOptions> {
     }
 
     options
+}
+
+fn parse_rest_policy(block: &str) -> RestPolicy {
+    let mut policy = RestPolicy::default();
+
+    let clean = without_comments(block);
+    for raw in clean.lines() {
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+        let Some(raw_scope) = parts.first() else {
+            continue;
+        };
+        let scope = raw_scope.to_ascii_lowercase();
+
+        if scope == "default" {
+            if let Some(seconds) = parse_rest_seconds(&parts[1..]) {
+                policy.default_seconds = Some(seconds);
+            }
+            continue;
+        }
+
+        let Some(key) = parts.get(1) else {
+            continue;
+        };
+        let rest = parts.get(2..).unwrap_or_default();
+        let Some(seconds) = parse_rest_seconds(rest) else {
+            continue;
+        };
+        let key = normalize_rest_key(&scope, key);
+
+        match scope.as_str() {
+            "tier" => {
+                policy.by_tier.insert(key, seconds);
+            }
+            "slot" => {
+                policy.by_slot.insert(key, seconds);
+            }
+            "lane" => {
+                policy.by_lane.insert(key, seconds);
+            }
+            "exercise" => {
+                policy.by_exercise.insert(key, seconds);
+            }
+            _ => {}
+        }
+    }
+
+    policy
+}
+
+fn parse_rest_seconds(parts: &[&str]) -> Option<u32> {
+    let value = parts.first()?.trim().to_ascii_lowercase();
+    let unit = parts.get(1).map(|item| item.trim().to_ascii_lowercase());
+
+    if let Some(unit) = unit
+        && let Some(seconds) = parse_rest_seconds_with_unit(&value, &unit)
+    {
+        return Some(seconds);
+    }
+
+    parse_rest_seconds_value(&value)
+}
+
+fn parse_rest_seconds_with_unit(value: &str, unit: &str) -> Option<u32> {
+    match unit {
+        "s" | "sec" | "secs" | "second" | "seconds" => parse_duration_number(value),
+        "m" | "min" | "mins" | "minute" | "minutes" => {
+            parse_duration_number(value).and_then(|minutes| minutes.checked_mul(60))
+        }
+        _ => None,
+    }
+}
+
+fn parse_rest_seconds_value(value: &str) -> Option<u32> {
+    if let Some((minutes, seconds)) = value.split_once(':') {
+        return parse_duration_number(minutes)
+            .and_then(|minutes| minutes.checked_mul(60))
+            .and_then(|total| total.checked_add(parse_duration_number(seconds)?));
+    }
+
+    for suffix in ["seconds", "second", "secs", "sec", "s"] {
+        if let Some(value) = value.strip_suffix(suffix) {
+            return parse_duration_number(value);
+        }
+    }
+
+    for suffix in ["minutes", "minute", "mins", "min", "m"] {
+        if let Some(value) = value.strip_suffix(suffix) {
+            return parse_duration_number(value).and_then(|minutes| minutes.checked_mul(60));
+        }
+    }
+
+    parse_duration_number(value)
+}
+
+fn parse_duration_number(value: &str) -> Option<u32> {
+    value.trim().parse().ok()
+}
+
+fn normalize_rest_key(scope: &str, key: &str) -> String {
+    match scope {
+        "tier" | "slot" | "lane" => key.to_ascii_lowercase(),
+        "exercise" => normalize_exercise(key),
+        _ => key.to_owned(),
+    }
 }
 
 fn normalize_lift_map(values: Map<String>) -> Map<String> {

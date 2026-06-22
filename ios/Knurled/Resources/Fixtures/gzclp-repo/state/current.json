@@ -1,0 +1,53 @@
+{
+  "cursor": {
+    "cycle": 1,
+    "next_session": "a1",
+    "week": 1
+  },
+  "engine_version": "0.1.0",
+  "lanes": {
+    "barbell_row.t3": {
+      "stage": "3x15+"
+    },
+    "bench.t1": {
+      "load": "55kg",
+      "stage": "5x3+"
+    },
+    "bench.t2": {
+      "load": "45kg",
+      "stage": "3x10"
+    },
+    "deadlift.t1": {
+      "load": "100kg",
+      "stage": "5x3+"
+    },
+    "deadlift.t2": {
+      "load": "80kg",
+      "stage": "3x10"
+    },
+    "lat_pulldown.t3": {
+      "stage": "3x15+"
+    },
+    "press.t1": {
+      "load": "37.5kg",
+      "stage": "5x3+"
+    },
+    "press.t2": {
+      "load": "30kg",
+      "stage": "3x10"
+    },
+    "squat.t1": {
+      "load": "80kg",
+      "stage": "5x3+"
+    },
+    "squat.t2": {
+      "load": "65kg",
+      "stage": "3x10"
+    }
+  },
+  "last_event_id": null,
+  "program_hash": "sha256:c86bafa0aadf143696eca8a526c2a7a3bbeb1d475b8ee66456cc4d2d09a19106",
+  "schema_version": "0.1",
+  "sessions": {},
+  "type": "state_projection"
+}
