@@ -2,7 +2,7 @@
   "accessories": {},
   "engine_version": "0.1.0",
   "exercise_options": {},
-  "lock_hash": "sha256:b631d1613c0bd8d4ea8c857d008aca046cef5921165ae5748ebb78f01a4ce0eb",
+  "lock_hash": "sha256:9b36c475746c4a467e3026531685df6dff80d895610b7fcea0db35b7f143df43",
   "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "patches": [],
   "plan": {
@@ -13,6 +13,7 @@
     "units": "kg"
   },
   "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+  "rest": {},
   "schedule": {
     "mode": "next_workout",
     "rotation": [
@@ -54,6 +55,15 @@
       "t2_stages": [],
       "t3_pass_final_set_reps": 0,
       "t3_target_reps": 0
+    },
+    "rest": {
+      "by_tier": {
+        "1x5": 240,
+        "3x5": 180,
+        "5x3": 180,
+        "chins": 120
+      },
+      "default_seconds": 120
     },
     "sessions": {
       "a_clean": [
@@ -152,7 +162,7 @@
     "version": "1.0.0",
     "weeks": []
   },
-  "template_hash": "sha256:180b37103d4c7a164a31efcfb3f11ba4522689598c70cc432ff4d17b823e2691",
+  "template_hash": "sha256:3c439f4f942ab23c01948bac7eb57bcbc87368b8a73085af26d457e8fe126085",
   "training_maxes": {},
   "type": "compiled_plan"
 }

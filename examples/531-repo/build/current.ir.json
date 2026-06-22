@@ -2,7 +2,7 @@
   "accessories": {},
   "engine_version": "0.1.0",
   "exercise_options": {},
-  "lock_hash": "sha256:38a7cc6d19494660ecc0a39765999e5e0d84e4eb0bc87db2c3e50236eec9709f",
+  "lock_hash": "sha256:683f8191444bb4be1c6008790d393286a42169351229afa9077b402e007820ef",
   "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "patches": [],
   "plan": {
@@ -13,6 +13,7 @@
     "units": "kg"
   },
   "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
+  "rest": {},
   "schedule": {
     "mode": "next_workout",
     "rotation": [
@@ -49,6 +50,12 @@
       "t2_stages": [],
       "t3_pass_final_set_reps": 0,
       "t3_target_reps": 0
+    },
+    "rest": {
+      "by_tier": {
+        "main": 180
+      },
+      "default_seconds": 150
     },
     "sessions": {
       "bench_day": [
@@ -144,7 +151,7 @@
       }
     ]
   },
-  "template_hash": "sha256:0f9114f1d007baf31a5ede05f02d9a2ff966f6e63933a2b8adda6b7c710a0d04",
+  "template_hash": "sha256:d55242ba38ac8b1647aa877bae22c90d9d22659ebe11df637075937b1330cf54",
   "training_maxes": {
     "bench": "65kg",
     "deadlift": "110kg",

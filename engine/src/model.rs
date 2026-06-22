@@ -36,6 +36,7 @@ pub struct Plan {
     pub training_maxes: Map<String>,
     pub accessories: Map<String>,
     pub exercise_options: Map<ExerciseOptions>,
+    pub rest: RestPolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -124,6 +125,7 @@ pub struct BuiltinTemplate {
     pub kind: TemplateKind,
     pub default_rotation: Vec<String>,
     pub sessions: Map<Vec<TemplateSlot>>,
+    pub rest: RestPolicy,
     pub lanes: TemplateLaneRules,
     pub increments: TemplateIncrements,
     pub weeks: Vec<FiveThreeOneWeek>,
@@ -187,9 +189,24 @@ pub struct CompiledPlan {
     pub training_maxes: Map<String>,
     pub accessories: Map<String>,
     pub exercise_options: Map<ExerciseOptions>,
+    pub rest: RestPolicy,
     pub template: BuiltinTemplate,
     pub lock: Lockfile,
     pub patches: Vec<Patch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct RestPolicy {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_seconds: Option<u32>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_tier: Map<u32>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_slot: Map<u32>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_lane: Map<u32>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_exercise: Map<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -294,9 +311,33 @@ pub struct RenderedItem {
     pub prescription: Prescription,
     pub execution_contract: ExecutionContract,
     pub effect_preview: EffectPreview,
+    pub rest: RestPrescription,
     pub identity: ItemIdentity,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exercise_options: Option<RenderedExerciseOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RestPrescription {
+    pub seconds: u32,
+    pub source: RestSource,
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RestSource {
+    PlanSlot,
+    PlanLane,
+    PlanExercise,
+    PlanTier,
+    PlanDefault,
+    TemplateSlot,
+    TemplateLane,
+    TemplateExercise,
+    TemplateTier,
+    TemplateDefault,
+    EngineFallback,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

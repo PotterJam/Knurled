@@ -1,0 +1,81 @@
+name: Knurled
+
+options:
+  bundleIdPrefix: com.knurled
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+targets:
+  Knurled:
+    type: application
+    platform: iOS
+    sources:
+      - path: Knurled
+        excludes:
+          - "Resources/Fixtures/**"
+      - path: Knurled/Resources/Fixtures
+        type: folder
+    dependencies:
+      - framework: Engine/KnurledCore.xcframework
+        embed: false
+      - target: KnurledRestActivity
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.knurled.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    info:
+      path: Knurled/Info.plist
+      properties:
+        CFBundleDisplayName: Knurled
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSSupportsLiveActivities: true
+        GitHubClientID: $(GITHUB_CLIENT_ID)
+
+  KnurledRestActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - KnurledRestActivity
+      - Knurled/Live/RestActivityAttributes.swift
+    info:
+      path: KnurledRestActivity/Info.plist
+      properties:
+        CFBundleDisplayName: Rest Timer
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.knurled.app.RestActivity
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SKIP_INSTALL: YES
+
+  KnurledTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - KnurledTests
+    dependencies:
+      - target: Knurled
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.knurled.app.tests
+        GENERATE_INFOPLIST_FILE: YES

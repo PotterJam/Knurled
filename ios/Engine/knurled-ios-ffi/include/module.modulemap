@@ -1,0 +1,4 @@
+module KnurledCoreFFI {
+    header "knurled_core.h"
+    export *
+}
