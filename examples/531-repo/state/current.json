@@ -1,0 +1,35 @@
+{
+  "cursor": {
+    "cycle": 1,
+    "next_session": "squat_day",
+    "week": 1
+  },
+  "engine_version": "0.1.0",
+  "lanes": {
+    "bench.main": {
+      "cycle": 1,
+      "training_max": "65kg",
+      "week": 1
+    },
+    "deadlift.main": {
+      "cycle": 1,
+      "training_max": "110kg",
+      "week": 1
+    },
+    "press.main": {
+      "cycle": 1,
+      "training_max": "42.5kg",
+      "week": 1
+    },
+    "squat.main": {
+      "cycle": 1,
+      "training_max": "90kg",
+      "week": 1
+    }
+  },
+  "last_event_id": null,
+  "program_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
+  "schema_version": "0.1",
+  "sessions": {},
+  "type": "state_projection"
+}

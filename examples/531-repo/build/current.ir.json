@@ -1,0 +1,155 @@
+{
+  "accessories": {},
+  "engine_version": "0.1.0",
+  "exercise_options": {},
+  "lock_hash": "sha256:38a7cc6d19494660ecc0a39765999e5e0d84e4eb0bc87db2c3e50236eec9709f",
+  "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "patches": [],
+  "plan": {
+    "name": "My 5/3/1",
+    "template": "531.beginners@1.0.0",
+    "template_id": "531.beginners",
+    "template_version": "1.0.0",
+    "units": "kg"
+  },
+  "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
+  "schedule": {
+    "mode": "next_workout",
+    "rotation": [
+      "squat_day",
+      "bench_day",
+      "deadlift_day",
+      "press_day"
+    ],
+    "suggested_days": [
+      "mon",
+      "wed",
+      "fri",
+      "sat"
+    ]
+  },
+  "schema_version": "0.1",
+  "starts": {},
+  "template": {
+    "default_rotation": [
+      "squat_day",
+      "bench_day",
+      "deadlift_day",
+      "press_day"
+    ],
+    "id": "531.beginners",
+    "increments": {
+      "default": 2.5,
+      "lower": 5.0,
+      "upper": 2.5
+    },
+    "kind": "five_three_one",
+    "lanes": {
+      "t1_stages": [],
+      "t2_stages": [],
+      "t3_pass_final_set_reps": 0,
+      "t3_target_reps": 0
+    },
+    "sessions": {
+      "bench_day": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "bench",
+          "slot_id": "bench.main",
+          "tier": "main"
+        }
+      ],
+      "deadlift_day": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "deadlift",
+          "slot_id": "deadlift.main",
+          "tier": "main"
+        }
+      ],
+      "press_day": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "press",
+          "slot_id": "press.main",
+          "tier": "main"
+        }
+      ],
+      "squat_day": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "squat",
+          "slot_id": "squat.main",
+          "tier": "main"
+        }
+      ]
+    },
+    "version": "1.0.0",
+    "weeks": [
+      {
+        "percentages": [
+          65,
+          75,
+          85
+        ],
+        "reps": [
+          "5",
+          "5",
+          "5+"
+        ],
+        "week": 1
+      },
+      {
+        "percentages": [
+          70,
+          80,
+          90
+        ],
+        "reps": [
+          "3",
+          "3",
+          "3+"
+        ],
+        "week": 2
+      },
+      {
+        "percentages": [
+          75,
+          85,
+          95
+        ],
+        "reps": [
+          "5",
+          "3",
+          "1+"
+        ],
+        "week": 3
+      },
+      {
+        "percentages": [
+          40,
+          50,
+          60
+        ],
+        "reps": [
+          "5",
+          "5",
+          "5"
+        ],
+        "week": 4
+      }
+    ]
+  },
+  "template_hash": "sha256:0f9114f1d007baf31a5ede05f02d9a2ff966f6e63933a2b8adda6b7c710a0d04",
+  "training_maxes": {
+    "bench": "65kg",
+    "deadlift": "110kg",
+    "press": "42.5kg",
+    "squat": "90kg"
+  },
+  "type": "compiled_plan"
+}

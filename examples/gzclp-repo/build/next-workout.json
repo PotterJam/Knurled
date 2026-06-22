@@ -1,0 +1,253 @@
+{
+  "display_name": "GZCLP - A1",
+  "engine_version": "0.1.0",
+  "items": [
+    {
+      "display": {
+        "subtitle": "80kg - 5x3+",
+        "title": "Squat T1"
+      },
+      "effect_preview": {
+        "adjusted_today": [],
+        "fail": [
+          {
+            "from": "5x3+",
+            "lane": "squat.t1",
+            "op": "advance_stage",
+            "to": "6x2+"
+          }
+        ],
+        "pass": [
+          {
+            "from": "80kg",
+            "lane": "squat.t1",
+            "op": "increase_load",
+            "to": "82.5kg"
+          }
+        ]
+      },
+      "execution_contract": {
+        "completion_rule": "all_required_sets_meet_target",
+        "event_template": "exercise_result_v1",
+        "fallback_inputs": [
+          "per_set_reps",
+          "load_override",
+          "note"
+        ],
+        "input_schema": {
+          "fallback": "per_set_reps",
+          "fields": [
+            {
+              "default": 5,
+              "max": null,
+              "min": 0,
+              "name": "final_set_reps",
+              "required": true,
+              "type": "integer"
+            }
+          ],
+          "mode": "amrap_final_set"
+        },
+        "recommended_input": "amrap_final_set",
+        "required_for_completion": true
+      },
+      "exercise": "squat",
+      "identity": {
+        "item_id": "a1.t1",
+        "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
+        "progression_lane": "squat.t1",
+        "progression_rule": "gzclp.t1",
+        "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+        "slot_id": "a1.t1"
+      },
+      "item_id": "a1.t1",
+      "prescription": {
+        "sets": [
+          {
+            "amrap": false,
+            "load": "80kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "80kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": true,
+            "load": "80kg",
+            "set": 3,
+            "target_reps": 5
+          }
+        ]
+      },
+      "progression_lane": "squat.t1",
+      "progression_rule": "gzclp.t1",
+      "slot_id": "a1.t1"
+    },
+    {
+      "display": {
+        "subtitle": "45kg - 3x10",
+        "title": "Bench T2"
+      },
+      "effect_preview": {
+        "adjusted_today": [],
+        "fail": [
+          {
+            "from": "3x10",
+            "lane": "bench.t2",
+            "op": "advance_stage",
+            "to": "3x8"
+          }
+        ],
+        "pass": [
+          {
+            "from": "45kg",
+            "lane": "bench.t2",
+            "op": "increase_load",
+            "to": "47.5kg"
+          }
+        ]
+      },
+      "execution_contract": {
+        "completion_rule": "all_required_sets_meet_target",
+        "event_template": "exercise_result_v1",
+        "fallback_inputs": [
+          "load_override",
+          "note"
+        ],
+        "input_schema": {
+          "fallback": "per_set_reps",
+          "fields": [
+            {
+              "default": "done_as_prescribed",
+              "max": null,
+              "min": null,
+              "name": "sets",
+              "required": true,
+              "type": "set_results"
+            }
+          ],
+          "mode": "per_set_reps"
+        },
+        "recommended_input": "per_set_reps",
+        "required_for_completion": true
+      },
+      "exercise": "bench",
+      "identity": {
+        "item_id": "a1.t2",
+        "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
+        "progression_lane": "bench.t2",
+        "progression_rule": "gzclp.t2",
+        "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+        "slot_id": "a1.t2"
+      },
+      "item_id": "a1.t2",
+      "prescription": {
+        "sets": [
+          {
+            "amrap": false,
+            "load": "45kg",
+            "set": 1,
+            "target_reps": 10
+          },
+          {
+            "amrap": false,
+            "load": "45kg",
+            "set": 2,
+            "target_reps": 10
+          },
+          {
+            "amrap": false,
+            "load": "45kg",
+            "set": 3,
+            "target_reps": 10
+          }
+        ]
+      },
+      "progression_lane": "bench.t2",
+      "progression_rule": "gzclp.t2",
+      "slot_id": "a1.t2"
+    },
+    {
+      "display": {
+        "subtitle": "bodyweight - 3x15+",
+        "title": "Lat Pulldown T3"
+      },
+      "effect_preview": {
+        "adjusted_today": [],
+        "fail": [],
+        "pass": []
+      },
+      "execution_contract": {
+        "completion_rule": "all_required_sets_meet_target",
+        "event_template": "exercise_result_v1",
+        "fallback_inputs": [
+          "per_set_reps",
+          "load_override",
+          "note"
+        ],
+        "input_schema": {
+          "fallback": "per_set_reps",
+          "fields": [
+            {
+              "default": 15,
+              "max": null,
+              "min": 0,
+              "name": "final_set_reps",
+              "required": true,
+              "type": "integer"
+            }
+          ],
+          "mode": "amrap_final_set"
+        },
+        "recommended_input": "amrap_final_set",
+        "required_for_completion": true
+      },
+      "exercise": "lat_pulldown",
+      "identity": {
+        "item_id": "a1.t3",
+        "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
+        "progression_lane": "lat_pulldown.t3",
+        "progression_rule": "gzclp.t3",
+        "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+        "slot_id": "a1.t3"
+      },
+      "item_id": "a1.t3",
+      "prescription": {
+        "sets": [
+          {
+            "amrap": false,
+            "load": null,
+            "set": 1,
+            "target_reps": 15
+          },
+          {
+            "amrap": false,
+            "load": null,
+            "set": 2,
+            "target_reps": 15
+          },
+          {
+            "amrap": true,
+            "load": null,
+            "set": 3,
+            "target_reps": 15
+          }
+        ]
+      },
+      "progression_lane": "lat_pulldown.t3",
+      "progression_rule": "gzclp.t3",
+      "slot_id": "a1.t3"
+    }
+  ],
+  "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
+  "rendered_session_hash": "sha256:e378ba9b253e12cebc010c5dadcf3dcdff3eaeabae71ff8253adfc36c95a2c2f",
+  "schema_version": "0.1",
+  "session_id": "a1",
+  "suggested_date": null,
+  "template_hash": "sha256:e867943a9c87658f7f852e1c8fcdb88d495f2f3912db3f80315afa4e47a44cea",
+  "type": "rendered_session"
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Knurled Workbench</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail">
+        <img class="brand-mark" src="./public/knurled-logo.png" alt="Knurled">
+        <nav aria-label="Workbench sections">
+          <button class="nav-item active" data-view="overview" title="Overview">⌂</button>
+          <button class="nav-item" data-view="plan" title="Plan">✎</button>
+          <button class="nav-item" data-view="patches" title="Patches">±</button>
+          <button class="nav-item" data-view="simulation" title="Simulation">↻</button>
+          <button class="nav-item" data-view="git" title="Git">⌘</button>
+        </nav>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div>
+            <h1>Knurled</h1>
+            <p id="repo-label">Static workbench</p>
+          </div>
+          <div class="actions">
+            <button id="validate-button">Validate</button>
+            <button id="preview-button">Preview</button>
+            <button id="simulate-button">Simulate</button>
+          </div>
+        </header>
+
+        <section class="status-strip" aria-label="Repo status">
+          <div>
+            <span>Status</span>
+            <strong id="status-value">Ready</strong>
+          </div>
+          <div>
+            <span>Plan</span>
+            <strong id="plan-value">James GZCLP</strong>
+          </div>
+          <div>
+            <span>Template</span>
+            <strong id="template-value">gzclp.standard@1.0.0</strong>
+          </div>
+          <div>
+            <span>Next</span>
+            <strong id="next-value">A1</strong>
+          </div>
+        </section>
+
+        <div class="workspace">
+          <section class="panel editor-panel" data-panel="plan">
+            <div class="panel-heading">
+              <h2>Plan</h2>
+              <button id="reset-sample">Reset</button>
+            </div>
+            <textarea id="plan-editor" spellcheck="false"></textarea>
+          </section>
+
+          <section class="panel output-panel" data-panel="overview">
+            <div class="tabs">
+              <button class="tab active" data-output="next">Next</button>
+              <button class="tab" data-output="validation">Validation</button>
+              <button class="tab" data-output="simulation">Simulation</button>
+              <button class="tab" data-output="git">Git</button>
+            </div>
+            <div id="output"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

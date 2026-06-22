@@ -1,0 +1,232 @@
+{
+  "display_name": "Starting Strength Phase3 - Day A - Deadlift",
+  "engine_version": "0.1.0",
+  "items": [
+    {
+      "display": {
+        "subtitle": "60kg - 3x5",
+        "title": "Squat 3X5"
+      },
+      "effect_preview": {
+        "adjusted_today": [],
+        "fail": [],
+        "pass": [
+          {
+            "from": "60kg",
+            "lane": "squat.linear",
+            "op": "increase_load",
+            "to": "65kg"
+          }
+        ]
+      },
+      "execution_contract": {
+        "completion_rule": "all_required_sets_meet_target",
+        "event_template": "exercise_result_v1",
+        "fallback_inputs": [
+          "load_override",
+          "note"
+        ],
+        "input_schema": {
+          "fallback": "per_set_reps",
+          "fields": [
+            {
+              "default": "done_as_prescribed",
+              "max": null,
+              "min": null,
+              "name": "sets",
+              "required": true,
+              "type": "set_results"
+            }
+          ],
+          "mode": "per_set_reps"
+        },
+        "recommended_input": "per_set_reps",
+        "required_for_completion": true
+      },
+      "exercise": "squat",
+      "identity": {
+        "item_id": "a_deadlift.squat",
+        "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+        "progression_lane": "squat.linear",
+        "progression_rule": "starting_strength.3x5",
+        "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+        "slot_id": "a_deadlift.squat"
+      },
+      "item_id": "a_deadlift.squat",
+      "prescription": {
+        "sets": [
+          {
+            "amrap": false,
+            "load": "60kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "60kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "60kg",
+            "set": 3,
+            "target_reps": 5
+          }
+        ]
+      },
+      "progression_lane": "squat.linear",
+      "progression_rule": "starting_strength.3x5",
+      "slot_id": "a_deadlift.squat"
+    },
+    {
+      "display": {
+        "subtitle": "30kg - 3x5",
+        "title": "Press 3X5"
+      },
+      "effect_preview": {
+        "adjusted_today": [],
+        "fail": [],
+        "pass": [
+          {
+            "from": "30kg",
+            "lane": "press.linear",
+            "op": "increase_load",
+            "to": "32.5kg"
+          }
+        ]
+      },
+      "execution_contract": {
+        "completion_rule": "all_required_sets_meet_target",
+        "event_template": "exercise_result_v1",
+        "fallback_inputs": [
+          "load_override",
+          "note"
+        ],
+        "input_schema": {
+          "fallback": "per_set_reps",
+          "fields": [
+            {
+              "default": "done_as_prescribed",
+              "max": null,
+              "min": null,
+              "name": "sets",
+              "required": true,
+              "type": "set_results"
+            }
+          ],
+          "mode": "per_set_reps"
+        },
+        "recommended_input": "per_set_reps",
+        "required_for_completion": true
+      },
+      "exercise": "press",
+      "identity": {
+        "item_id": "a_deadlift.press",
+        "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+        "progression_lane": "press.linear",
+        "progression_rule": "starting_strength.3x5",
+        "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+        "slot_id": "a_deadlift.press"
+      },
+      "item_id": "a_deadlift.press",
+      "prescription": {
+        "sets": [
+          {
+            "amrap": false,
+            "load": "30kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "30kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "30kg",
+            "set": 3,
+            "target_reps": 5
+          }
+        ]
+      },
+      "progression_lane": "press.linear",
+      "progression_rule": "starting_strength.3x5",
+      "slot_id": "a_deadlift.press"
+    },
+    {
+      "display": {
+        "subtitle": "80kg - 1x5",
+        "title": "Deadlift 1X5"
+      },
+      "effect_preview": {
+        "adjusted_today": [],
+        "fail": [],
+        "pass": [
+          {
+            "from": "80kg",
+            "lane": "deadlift.linear",
+            "op": "increase_load",
+            "to": "85kg"
+          }
+        ]
+      },
+      "execution_contract": {
+        "completion_rule": "all_required_sets_meet_target",
+        "event_template": "exercise_result_v1",
+        "fallback_inputs": [
+          "load_override",
+          "note"
+        ],
+        "input_schema": {
+          "fallback": "per_set_reps",
+          "fields": [
+            {
+              "default": "done_as_prescribed",
+              "max": null,
+              "min": null,
+              "name": "sets",
+              "required": true,
+              "type": "set_results"
+            }
+          ],
+          "mode": "per_set_reps"
+        },
+        "recommended_input": "per_set_reps",
+        "required_for_completion": true
+      },
+      "exercise": "deadlift",
+      "identity": {
+        "item_id": "a_deadlift.deadlift",
+        "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+        "progression_lane": "deadlift.linear",
+        "progression_rule": "starting_strength.1x5",
+        "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+        "slot_id": "a_deadlift.deadlift"
+      },
+      "item_id": "a_deadlift.deadlift",
+      "prescription": {
+        "sets": [
+          {
+            "amrap": false,
+            "load": "80kg",
+            "set": 1,
+            "target_reps": 5
+          }
+        ]
+      },
+      "progression_lane": "deadlift.linear",
+      "progression_rule": "starting_strength.1x5",
+      "slot_id": "a_deadlift.deadlift"
+    }
+  ],
+  "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+  "rendered_session_hash": "sha256:a8634f38b6c8f1ea7c3bc2b1bab69584c3ede4c5ce315f0b98c9160e52552af0",
+  "schema_version": "0.1",
+  "session_id": "a_deadlift",
+  "suggested_date": null,
+  "template_hash": "sha256:180b37103d4c7a164a31efcfb3f11ba4522689598c70cc432ff4d17b823e2691",
+  "type": "rendered_session"
+}

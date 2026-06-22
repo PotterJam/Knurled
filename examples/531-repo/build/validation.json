@@ -1,0 +1,17 @@
+{
+  "checked": {
+    "execution_contracts": true,
+    "generated_file_freshness": false,
+    "patch_validity": true,
+    "plan_syntax": true,
+    "renderability": true,
+    "state_log_consistency": true,
+    "template_lock": true
+  },
+  "engine_version": "0.1.0",
+  "errors": [],
+  "schema_version": "0.1",
+  "status": "valid",
+  "type": "validation_report",
+  "warnings": []
+}
