@@ -1,0 +1,5 @@
+[templates."gzclp.standard"]
+version = "1.0.0"
+source = "builtin"
+content_hash = "sha256:e867943a9c87658f7f852e1c8fcdb88d495f2f3912db3f80315afa4e47a44cea"
+engine_version = "0.1.0"

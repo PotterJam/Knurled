@@ -1,0 +1,16 @@
+[package]
+name = "knurled-cli"
+description = "CLI for Knurled FitSpec training repositories"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "knurled"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+knurled-core = { path = "../engine" }
+serde_json.workspace = true

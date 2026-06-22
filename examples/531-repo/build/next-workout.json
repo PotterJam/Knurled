@@ -1,0 +1,94 @@
+{
+  "display_name": "5/3/1 - Squat",
+  "engine_version": "0.1.0",
+  "items": [
+    {
+      "display": {
+        "subtitle": "57.5kg - 5 / 5 / 5+",
+        "title": "Squat MAIN"
+      },
+      "effect_preview": {
+        "adjusted_today": [],
+        "fail": [],
+        "pass": [
+          {
+            "from": "1",
+            "lane": "squat.main",
+            "op": "advance_531_week",
+            "to": "2"
+          }
+        ]
+      },
+      "execution_contract": {
+        "completion_rule": "all_required_sets_meet_target",
+        "event_template": "exercise_result_v1",
+        "fallback_inputs": [
+          "per_set_reps",
+          "load_override",
+          "note"
+        ],
+        "input_schema": {
+          "fallback": "per_set_reps",
+          "fields": [
+            {
+              "default": 5,
+              "max": null,
+              "min": 0,
+              "name": "final_set_reps",
+              "required": true,
+              "type": "integer"
+            }
+          ],
+          "mode": "amrap_final_set"
+        },
+        "recommended_input": "amrap_final_set",
+        "required_for_completion": true
+      },
+      "exercise": "squat",
+      "identity": {
+        "item_id": "squat.main",
+        "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
+        "progression_lane": "squat.main",
+        "progression_rule": "531.main",
+        "rendered_session_hash": "sha256:d92be5791422146a3678d900fcbc783fd607c7a5be2192a70951282fd69ae213",
+        "slot_id": "squat.main"
+      },
+      "item_id": "squat.main",
+      "prescription": {
+        "sets": [
+          {
+            "amrap": false,
+            "load": "57.5kg",
+            "percentage": 65,
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "67.5kg",
+            "percentage": 75,
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": true,
+            "load": "77.5kg",
+            "percentage": 85,
+            "set": 3,
+            "target_reps": 5
+          }
+        ]
+      },
+      "progression_lane": "squat.main",
+      "progression_rule": "531.main",
+      "slot_id": "squat.main"
+    }
+  ],
+  "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
+  "rendered_session_hash": "sha256:d92be5791422146a3678d900fcbc783fd607c7a5be2192a70951282fd69ae213",
+  "schema_version": "0.1",
+  "session_id": "squat_day",
+  "suggested_date": null,
+  "template_hash": "sha256:0f9114f1d007baf31a5ede05f02d9a2ff966f6e63933a2b8adda6b7c710a0d04",
+  "type": "rendered_session"
+}

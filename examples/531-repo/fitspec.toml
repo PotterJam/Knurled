@@ -1,0 +1,6 @@
+[repo]
+schema_version = "0.1"
+units = "kg"
+
+[build]
+commit_generated = true

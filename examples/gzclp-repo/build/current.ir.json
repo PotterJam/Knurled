@@ -1,0 +1,170 @@
+{
+  "accessories": {
+    "A1.T3": "lat_pulldown",
+    "A2.T3": "lat_pulldown",
+    "B1.T3": "barbell_row",
+    "B2.T3": "barbell_row"
+  },
+  "engine_version": "0.1.0",
+  "exercise_options": {},
+  "lock_hash": "sha256:946a6cef9cee6c70e06f617e87f9b419335e827cc3bbe871334f74d9f46af76f",
+  "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "patches": [],
+  "plan": {
+    "name": "My GZCLP",
+    "template": "gzclp.standard@1.0.0",
+    "template_id": "gzclp.standard",
+    "template_version": "1.0.0",
+    "units": "kg"
+  },
+  "plan_hash": "sha256:e9beba881fe373c927942ecbba2ee09e27b818472cafbdeb0b702c8c6cb244ab",
+  "schedule": {
+    "mode": "next_workout",
+    "rotation": [
+      "a1",
+      "b1",
+      "a2",
+      "b2"
+    ],
+    "suggested_days": [
+      "mon",
+      "wed",
+      "fri"
+    ]
+  },
+  "schema_version": "0.1",
+  "starts": {
+    "bench": "55kg",
+    "deadlift": "100kg",
+    "press": "37.5kg",
+    "squat": "80kg"
+  },
+  "template": {
+    "default_rotation": [
+      "a1",
+      "b1",
+      "a2",
+      "b2"
+    ],
+    "id": "gzclp.standard",
+    "increments": {
+      "default": 2.5,
+      "lower": 5.0,
+      "upper": 2.5
+    },
+    "kind": "gzclp",
+    "lanes": {
+      "t1_stages": [
+        "5x3+",
+        "6x2+",
+        "10x1+"
+      ],
+      "t2_stages": [
+        "3x10",
+        "3x8",
+        "3x6"
+      ],
+      "t3_pass_final_set_reps": 25,
+      "t3_target_reps": 15
+    },
+    "sessions": {
+      "a1": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "squat",
+          "slot_id": "a1.t1",
+          "tier": "t1"
+        },
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "bench",
+          "slot_id": "a1.t2",
+          "tier": "t2"
+        },
+        {
+          "accessory_key": "A1.T3",
+          "default_exercise": "lat_pulldown",
+          "exercise": null,
+          "slot_id": "a1.t3",
+          "tier": "t3"
+        }
+      ],
+      "a2": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "bench",
+          "slot_id": "a2.t1",
+          "tier": "t1"
+        },
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "squat",
+          "slot_id": "a2.t2",
+          "tier": "t2"
+        },
+        {
+          "accessory_key": "A2.T3",
+          "default_exercise": "lat_pulldown",
+          "exercise": null,
+          "slot_id": "a2.t3",
+          "tier": "t3"
+        }
+      ],
+      "b1": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "press",
+          "slot_id": "b1.t1",
+          "tier": "t1"
+        },
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "deadlift",
+          "slot_id": "b1.t2",
+          "tier": "t2"
+        },
+        {
+          "accessory_key": "B1.T3",
+          "default_exercise": "barbell_row",
+          "exercise": null,
+          "slot_id": "b1.t3",
+          "tier": "t3"
+        }
+      ],
+      "b2": [
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "deadlift",
+          "slot_id": "b2.t1",
+          "tier": "t1"
+        },
+        {
+          "accessory_key": null,
+          "default_exercise": null,
+          "exercise": "press",
+          "slot_id": "b2.t2",
+          "tier": "t2"
+        },
+        {
+          "accessory_key": "B2.T3",
+          "default_exercise": "barbell_row",
+          "exercise": null,
+          "slot_id": "b2.t3",
+          "tier": "t3"
+        }
+      ]
+    },
+    "version": "1.0.0",
+    "weeks": []
+  },
+  "template_hash": "sha256:e867943a9c87658f7f852e1c8fcdb88d495f2f3912db3f80315afa4e47a44cea",
+  "training_maxes": {},
+  "type": "compiled_plan"
+}

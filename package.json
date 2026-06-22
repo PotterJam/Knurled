@@ -1,0 +1,11 @@
+{
+  "name": "knurled",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "knurled": "cargo run -p knurled-cli --",
+    "test": "cargo test --workspace",
+    "serve": "cargo run -p knurled-cli -- serve",
+    "build:example": "cargo run -p knurled-cli -- build examples/gzclp-repo"
+  }
+}

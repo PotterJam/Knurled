@@ -1,0 +1,38 @@
+{
+  "cursor": {
+    "cycle": 1,
+    "next_session": "a_deadlift",
+    "week": 1
+  },
+  "engine_version": "0.1.0",
+  "lanes": {
+    "bench.linear": {
+      "load": "40kg",
+      "stage": "3x5"
+    },
+    "chin_up.bodyweight": {
+      "stage": "3 sets to fatigue"
+    },
+    "deadlift.linear": {
+      "load": "80kg",
+      "stage": "1x5"
+    },
+    "power_clean.linear": {
+      "load": "40kg",
+      "stage": "5x3"
+    },
+    "press.linear": {
+      "load": "30kg",
+      "stage": "3x5"
+    },
+    "squat.linear": {
+      "load": "60kg",
+      "stage": "3x5"
+    }
+  },
+  "last_event_id": null,
+  "program_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+  "schema_version": "0.1",
+  "sessions": {},
+  "type": "state_projection"
+}
