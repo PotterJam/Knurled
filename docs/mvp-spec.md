@@ -341,7 +341,7 @@ Example GZCLP plan:
 
 ```fitspec
 plan "James GZCLP" {
-  template "gzcl.p@1.0.0"
+  template "gzcl.gzclp@1.0.0"
   units kg
 
   schedule next_workout {
@@ -446,7 +446,7 @@ Locks template versions, content hashes, and engine compatibility.
 Example:
 
 ```toml
-[templates."gzcl.p"]
+[templates."gzcl.gzclp"]
 version = "1.0.0"
 source = "builtin"
 content_hash = "sha256:abc123"
@@ -491,7 +491,7 @@ Templates are versioned packages.
 Examples:
 
 ```text
-gzcl.p@1.0.0
+gzcl.gzclp@1.0.0
 gzcl.p-zero@1.0.0
 531.basic@1.0.0
 531.beginners@1.0.0
@@ -508,19 +508,19 @@ Plan config only
 Escape hatch:
 
 ```bash
-fitspec template vendor gzcl.p
+fitspec template vendor gzcl.gzclp
 ```
 
 This copies the expanded template into:
 
 ```text
-templates/gzcl.p.fitspec
+templates/gzcl.gzclp.fitspec
 ```
 
 Then the plan can reference:
 
 ```fitspec
-template "./templates/gzcl.p.fitspec"
+template "./templates/gzcl.gzclp.fitspec"
 ```
 
 Rules:
@@ -1316,7 +1316,7 @@ T3
 Minimum templates:
 
 ```text
-gzcl.p
+gzcl.gzclp
 gzcl.p-zero
 ```
 
@@ -1645,10 +1645,10 @@ If the CLI/app cannot find the locked template version, backtest must fail clear
 Cannot backtest.
 
 Missing template:
-gzcl.p@1.0.0 sha256:abc123
+gzcl.gzclp@1.0.0 sha256:abc123
 
 Run:
-fitspec template install gzcl.p@1.0.0
+fitspec template install gzcl.gzclp@1.0.0
 or vendor the template.
 ```
 
@@ -1730,7 +1730,7 @@ fitspec
 ### 29.1 Create repo
 
 ```bash
-fitspec init my-training --template gzcl.p
+fitspec init my-training --template gzcl.gzclp
 ```
 
 Prompts:
@@ -1817,11 +1817,11 @@ These create explicit log events, not silent state edits.
 
 ```bash
 fitspec template list
-fitspec template show gzcl.p
-fitspec template explain gzcl.p
-fitspec template vendor gzcl.p
-fitspec template upgrade gzcl.p
-fitspec template diff gzcl.p@1.0.0 gzcl.p@1.1.0
+fitspec template show gzcl.gzclp
+fitspec template explain gzcl.gzclp
+fitspec template vendor gzcl.gzclp
+fitspec template upgrade gzcl.gzclp
+fitspec template diff gzcl.gzclp@1.0.0 gzcl.gzclp@1.1.0
 ```
 
 ### 29.7 Git helpers
@@ -1862,7 +1862,7 @@ FitSpec Workbench
 
 Repo: my-training
 Plan: James GZCLP
-Template: gzcl.p@1.0.0
+Template: gzcl.gzclp@1.0.0
 Status: valid
 
 Next workout:

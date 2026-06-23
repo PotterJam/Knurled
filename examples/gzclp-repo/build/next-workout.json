@@ -54,10 +54,10 @@
       "exercise": "squat",
       "identity": {
         "item_id": "a1.t1",
-        "plan_hash": "sha256:a1ce3509db497697dab97734cfbcfbbbc16f5580adb52a938f220470072b5bfa",
+        "plan_hash": "sha256:06ba76ecd9eaead6ed5644ed91653380c01f34581e72c14c44dd5d7229050284",
         "progression_lane": "squat.t1",
         "progression_rule": "gzcl.t1",
-        "rendered_session_hash": "sha256:2d3caa4273cce4e88aa7a3f68d8940158b63548339bff0e6af06af082c664365",
+        "rendered_session_hash": "sha256:e298fa9e8a4b24e3748544a3c447cddf3b218ebb862aef3bca675e74c81c51bf",
         "slot_id": "a1.t1"
       },
       "item_id": "a1.t1",
@@ -143,10 +143,10 @@
       "exercise": "bench",
       "identity": {
         "item_id": "a1.t2",
-        "plan_hash": "sha256:a1ce3509db497697dab97734cfbcfbbbc16f5580adb52a938f220470072b5bfa",
+        "plan_hash": "sha256:06ba76ecd9eaead6ed5644ed91653380c01f34581e72c14c44dd5d7229050284",
         "progression_lane": "bench.t2",
         "progression_rule": "gzcl.t2",
-        "rendered_session_hash": "sha256:2d3caa4273cce4e88aa7a3f68d8940158b63548339bff0e6af06af082c664365",
+        "rendered_session_hash": "sha256:e298fa9e8a4b24e3748544a3c447cddf3b218ebb862aef3bca675e74c81c51bf",
         "slot_id": "a1.t2"
       },
       "item_id": "a1.t2",
@@ -219,10 +219,10 @@
       "exercise": "lat_pulldown",
       "identity": {
         "item_id": "a1.t3",
-        "plan_hash": "sha256:a1ce3509db497697dab97734cfbcfbbbc16f5580adb52a938f220470072b5bfa",
+        "plan_hash": "sha256:06ba76ecd9eaead6ed5644ed91653380c01f34581e72c14c44dd5d7229050284",
         "progression_lane": "lat_pulldown.t3",
         "progression_rule": "gzcl.t3",
-        "rendered_session_hash": "sha256:2d3caa4273cce4e88aa7a3f68d8940158b63548339bff0e6af06af082c664365",
+        "rendered_session_hash": "sha256:e298fa9e8a4b24e3748544a3c447cddf3b218ebb862aef3bca675e74c81c51bf",
         "slot_id": "a1.t3"
       },
       "item_id": "a1.t3",
@@ -258,11 +258,11 @@
       "slot_id": "a1.t3"
     }
   ],
-  "plan_hash": "sha256:a1ce3509db497697dab97734cfbcfbbbc16f5580adb52a938f220470072b5bfa",
-  "rendered_session_hash": "sha256:2d3caa4273cce4e88aa7a3f68d8940158b63548339bff0e6af06af082c664365",
+  "plan_hash": "sha256:06ba76ecd9eaead6ed5644ed91653380c01f34581e72c14c44dd5d7229050284",
+  "rendered_session_hash": "sha256:e298fa9e8a4b24e3748544a3c447cddf3b218ebb862aef3bca675e74c81c51bf",
   "schema_version": "0.1",
   "session_id": "a1",
   "suggested_date": null,
-  "template_hash": "sha256:d35b90968ec94ee5de3411170c9d76075fc1034c65447d8f84e8ad9567ce68c9",
+  "template_hash": "sha256:f759b186f5de27cdf86e8846ea8af72e12623fcb5b290d0a4e217dd1971e010c",
   "type": "rendered_session"
 }

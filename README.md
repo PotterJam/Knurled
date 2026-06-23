@@ -21,7 +21,7 @@ For simple fixed programs such as Starting Strength, Knurled does not need user-
 
 Built-in program presets currently include:
 
-- `gzcl.p@1.0.0`
+- `gzcl.gzclp@1.0.0`
 - `gzcl.p-zero@1.0.0`
 - `531.basic@1.0.0`
 - `531.beginners@1.0.0`
@@ -31,7 +31,7 @@ Built-in program presets currently include:
 
 ```bash
 cargo test --workspace
-cargo run -p knurled-cli -- init examples/gzclp-repo --template gzcl.p
+cargo run -p knurled-cli -- init examples/gzclp-repo --template gzcl.gzclp
 cargo run -p knurled-cli -- init examples/ss-phase3-repo --template starting-strength.phase3
 cargo run -p knurled-cli -- validate examples/gzclp-repo
 cargo run -p knurled-cli -- preview examples/gzclp-repo --weeks 4

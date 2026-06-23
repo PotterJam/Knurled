@@ -25,7 +25,7 @@ pub struct BuiltinTemplateInfo {
 /// Every built-in template the engine knows how to render.
 pub const BUILTIN_TEMPLATES: &[BuiltinTemplateInfo] = &[
     BuiltinTemplateInfo {
-        id: "gzcl.p",
+        id: "gzcl.gzclp",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "GZCLP",
         kind: TemplateKind::Gzclp,
@@ -69,7 +69,7 @@ pub const BUILTIN_TEMPLATES: &[BuiltinTemplateInfo] = &[
 ];
 
 /// The template a fresh repo is seeded with when none is specified.
-pub const DEFAULT_TEMPLATE_ID: &str = "gzcl.p";
+pub const DEFAULT_TEMPLATE_ID: &str = "gzcl.gzclp";
 
 /// All built-in templates, for callers (CLI, app) that need to list them.
 pub fn builtin_templates() -> &'static [BuiltinTemplateInfo] {
