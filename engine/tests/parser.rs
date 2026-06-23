@@ -62,6 +62,29 @@ fn exercise_options_parse_same_line_policy_directives() {
 }
 
 #[test]
+fn template_version_property_matches_at_form() {
+    let at_form = parse_plan(
+        r#"plan "P" {
+  template "gzclp.standard@1.0.0"
+  units kg
+}
+"#,
+    )
+    .unwrap();
+    let property_form = parse_plan(
+        r#"plan "P" {
+  template "gzclp.standard" version="1.0.0"
+  units kg
+}
+"#,
+    )
+    .unwrap();
+
+    assert_eq!(at_form.template, "gzclp.standard@1.0.0");
+    assert_eq!(property_form.template, at_form.template);
+}
+
+#[test]
 fn malformed_plan_returns_error() {
     assert!(parse_plan("").is_err());
     assert!(

@@ -71,6 +71,6 @@ Lockfiles are TOML and decode straight through `serde` (`toml` crate). The parse
 
 The current surface covers `plan`, `template`, `units`, `schedule`, `starts`, `training_maxes`, `accessories`, exercise options, rest overrides, lockfile template entries, and the MVP patch operations (`replace-exercise`, `add-conditioning`, `cap`). The checked-in 5/3/1 `assistance` block is accepted as a known no-op until the model stores it.
 
-A few authoring notes that fall out of KDL: list items are whitespace-separated (`rotation A1 B1 A2 B2`, no commas); values that start with a digit must be quoted (`squat "80kg"`); and multiple child nodes on one line need a `;` separator (`label "DB Bench"; policy tracking_only`).
+A few authoring notes that fall out of KDL: list items are whitespace-separated (`rotation A1 B1 A2 B2`, no commas); values that start with a digit must be quoted (`squat "80kg"`); and multiple child nodes on one line need a `;` separator (`label "DB Bench"; policy tracking_only`). The template version may be written either inline (`template "gzclp.standard@1.0.0"`) or as a property (`template "gzclp.standard" version="1.0.0"`); both normalize to the same `id@version` identity.
 
 Future agents: extend FitSpec by adding a match arm to the phase-two walk, not a bespoke sub-parser, and keep the model shapes stable — they feed the identity hashes and every client. The patch surface is deliberately narrow; richer contextual operations are a natural expansion area, expressed as new nodes/properties rather than prose.

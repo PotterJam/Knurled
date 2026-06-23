@@ -1,5 +1,5 @@
 plan "My Starting Strength" {
-  template "starting-strength.phase3@1.0.0"
+  template "starting-strength.phase3" version="1.0.0"
   units kg
 
   schedule next_workout {
