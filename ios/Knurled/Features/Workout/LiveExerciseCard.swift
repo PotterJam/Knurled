@@ -125,13 +125,21 @@ struct SetRowView: View {
                 }
                 Spacer()
                 if set.logged {
-                    Button(action: onEdit) {
-                        HStack(spacing: 4) {
+                    HStack(spacing: 10) {
+                        Button(action: onEdit) {
                             Text("\(set.reps)").font(.body.monospaced().weight(.semibold))
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                         }
+                        .buttonStyle(.plain)
+                        Button {
+                            set.logged = false
+                        } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.green)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Undo set")
                     }
-                    .buttonStyle(.plain)
                 } else if !isEntering {
                     HStack(spacing: 8) {
                         Button("Missed") {
@@ -143,6 +151,7 @@ struct SetRowView: View {
                         Button("Done") {
                             set.reps = set.prescribed.targetReps
                             set.logged = true
+                            if !isLastSet { onLogged() }
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -160,7 +169,7 @@ struct SetRowView: View {
                     Button {
                         set.logged = true
                         entering = false
-                        onLogged()
+                        if !isLastSet { onLogged() }
                     } label: {
                         Text("Save")
                             .font(.callout.weight(.semibold))
