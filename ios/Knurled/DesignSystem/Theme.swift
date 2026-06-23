@@ -1,5 +1,68 @@
 import SwiftUI
 
+/// A selectable colour scheme. Each scheme pairs an `accent` (the primary
+/// tint used for prominent controls, logged checkmarks and the active row)
+/// with a `danger` colour used for "missed"/invalid states.
+struct KnurledPalette: Equatable {
+    let accent: Color
+    let danger: Color
+}
+
+enum KnurledColorScheme: String, CaseIterable, Identifiable {
+    case brass
+    case steel
+    case sage
+    case violet
+
+    var id: String { rawValue }
+
+    /// The name shown in the picker, e.g. "Brass".
+    var title: String {
+        switch self {
+        case .brass: return "Brass"
+        case .steel: return "Steel"
+        case .sage: return "Sage"
+        case .violet: return "Violet"
+        }
+    }
+
+    /// The accent / danger pairing, e.g. "cherry · crimson".
+    var subtitle: String {
+        switch self {
+        case .brass: return "cherry · crimson"
+        case .steel: return "cherry · crimson"
+        case .sage: return "dusty rose"
+        case .violet: return "magenta red"
+        }
+    }
+
+    var palette: KnurledPalette {
+        switch self {
+        case .brass:
+            return KnurledPalette(
+                accent: Color(red: 0.83, green: 0.64, blue: 0.31),
+                danger: Color(red: 0.80, green: 0.22, blue: 0.27)
+            )
+        case .steel:
+            return KnurledPalette(
+                accent: Color(red: 0.38, green: 0.56, blue: 0.92),
+                danger: Color(red: 0.80, green: 0.22, blue: 0.27)
+            )
+        case .sage:
+            return KnurledPalette(
+                accent: Color(red: 0.55, green: 0.71, blue: 0.53),
+                // Dusty rose, deepened a touch from the mockup for more presence.
+                danger: Color(red: 0.71, green: 0.38, blue: 0.44)
+            )
+        case .violet:
+            return KnurledPalette(
+                accent: Color(red: 0.64, green: 0.47, blue: 0.92),
+                danger: Color(red: 0.85, green: 0.28, blue: 0.42)
+            )
+        }
+    }
+}
+
 enum KnurledTheme {
     static let accent = Color("AccentColor")
 
@@ -29,4 +92,17 @@ enum KnurledTheme {
 
 extension Font {
     static let knurledMono = Font.system(.title3, design: .monospaced).weight(.semibold)
+}
+
+private struct KnurledPaletteKey: EnvironmentKey {
+    static let defaultValue = KnurledColorScheme.sage.palette
+}
+
+extension EnvironmentValues {
+    /// The active scheme's palette. Deep views (status chips, set rows) read
+    /// this for the `danger` colour; `accent` flows through the standard tint.
+    var knurledPalette: KnurledPalette {
+        get { self[KnurledPaletteKey.self] }
+        set { self[KnurledPaletteKey.self] = newValue }
+    }
 }
