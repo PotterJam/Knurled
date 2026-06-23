@@ -17,8 +17,8 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    ENGINE_VERSION, ExecutionInput, build_outputs, build_repo, read_training_repo, reduce_input,
-    validate_execution_input, validate_repo,
+    ENGINE_VERSION, ExecutionInput, RenderedSession, build_outputs, build_repo, read_training_repo,
+    reduce_input, validate_execution_input, validate_repo,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -87,9 +87,14 @@ pub extern "C" fn knurled_build_repo(dir: *const c_char, write: c_int) -> *mut c
     })
 }
 
+/// Reduces an execution input against the **rendered session snapshot** the workout was
+/// started from (spec §16/§31), not whatever the repo currently renders. The caller passes
+/// the snapshot JSON it captured at start, so a sync/repo change between start and submit
+/// cannot silently re-target the reduction.
 #[unsafe(no_mangle)]
 pub extern "C" fn knurled_reduce_input(
     dir: *const c_char,
+    rendered_session_json: *const c_char,
     execution_input_json: *const c_char,
 ) -> *mut c_char {
     guard("knurled_reduce_input", || {
@@ -97,9 +102,17 @@ pub extern "C" fn knurled_reduce_input(
             Ok(value) => value,
             Err(error) => return fail(error),
         };
+        let rendered_json = match unsafe { borrow(rendered_session_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
         let input_json = match unsafe { borrow(execution_input_json) } {
             Ok(value) => value,
             Err(error) => return fail(error),
+        };
+        let rendered: RenderedSession = match serde_json::from_str(rendered_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid rendered session: {error}")),
         };
         let input: ExecutionInput = match serde_json::from_str(input_json) {
             Ok(value) => value,
@@ -112,10 +125,6 @@ pub extern "C" fn knurled_reduce_input(
         let outputs = match build_outputs(&repo.compiled, &repo.events) {
             Ok(value) => value,
             Err(error) => return fail(error),
-        };
-        let rendered = match outputs.next_workout {
-            Some(value) => value,
-            None => return fail("repo has no next workout to reduce against"),
         };
         match reduce_input(&repo.compiled, &outputs.state, &rendered, &input) {
             Ok(result) => ok(result),

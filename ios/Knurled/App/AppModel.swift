@@ -31,6 +31,7 @@ final class AppModel {
     func bootstrap() async {
         engineVersion = try? await engine.engineVersion()
         await github.restore()
+        if await restoreSelection() { return }
         await loadSampleRepo()
     }
 

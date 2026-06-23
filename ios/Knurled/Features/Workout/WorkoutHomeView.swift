@@ -30,6 +30,7 @@ struct NextWorkoutView: View {
     let session: RenderedSession
     @Environment(AppModel.self) private var app
     @State private var showSkip = false
+    @State private var isSyncing = false
 
     var body: some View {
         ScrollView {
@@ -67,9 +68,24 @@ struct NextWorkoutView: View {
             }
             .padding()
         }
-        .refreshable { await app.refresh() }
+        .refreshable { await app.sync() }
         .sheet(isPresented: $showSkip) {
             SkipWorkoutSheet(repo: repo, session: session)
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { isSyncing = true; await app.sync(); isSyncing = false }
+                } label: {
+                    if isSyncing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(isSyncing)
+                .accessibilityLabel("Sync")
+            }
         }
     }
 

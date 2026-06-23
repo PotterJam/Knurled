@@ -101,6 +101,19 @@ final class LiveItem: Identifiable {
         todayLoad = load
     }
 
+    /// A partial save records only the sets actually logged so far, as per-set reps, so an
+    /// in-progress exercise (e.g. 2 of 3 sets) is not dropped (§16/§31).
+    func partialInput() -> ItemInput {
+        ItemInput(
+            itemId: id,
+            mode: InputMode.perSetReps,
+            sets: sets.filter(\.logged).map { ActualSet(set: $0.id, load: $0.load, reps: $0.reps) },
+            performedExercise: performedExercise,
+            swapReason: isSwapped ? "preferred alternative" : nil,
+            swapPolicy: swapPolicy
+        )
+    }
+
     func itemInput() -> ItemInput {
         let performed = performedExercise
         let reason = isSwapped ? "preferred alternative" : nil
@@ -135,13 +148,34 @@ final class LiveWorkout: Identifiable {
     let repo: ActiveRepo
     let session: RenderedSession
     let startedAt: String
+    let continuesEventId: String?
     var items: [LiveItem]
 
-    init(repo: ActiveRepo, session: RenderedSession) {
+    init(repo: ActiveRepo, session: RenderedSession, resuming saved: TrainingEvent? = nil) {
         self.repo = repo
         self.session = session
-        self.startedAt = Self.timestamp()
+        self.startedAt = saved?.startedAt ?? Self.timestamp()
+        self.continuesEventId = saved?.id
         self.items = session.items.map { LiveItem(item: $0) }
+        if let saved { prefill(from: saved) }
+    }
+
+    /// Restores the sets already logged in a saved partial so the user continues exactly where
+    /// they left off (§16/§19).
+    private func prefill(from saved: TrainingEvent) {
+        for result in saved.results {
+            guard let item = items.first(where: { $0.id == result.slotId }) else { continue }
+            if let performed = result.performedExercise, performed != item.item.exercise {
+                item.performedExercise = performed
+                item.swapPolicy = result.swapPolicy
+            }
+            for actual in result.actual {
+                guard let set = item.sets.first(where: { $0.id == actual.set }) else { continue }
+                set.reps = actual.reps
+                if let load = actual.load { set.load = load }
+                set.logged = true
+            }
+        }
     }
 
     var requiredItems: [LiveItem] { items.filter(\.required) }
@@ -150,14 +184,17 @@ final class LiveWorkout: Identifiable {
     var anyLogged: Bool { items.contains(where: \.anyLogged) }
 
     func executionInput(status: String, timestamp: String) -> ExecutionInput {
-        let included = status == ExecutionStatus.complete ? items : items.filter(\.isComplete)
+        let isComplete = status == ExecutionStatus.complete
+        let inputs = isComplete
+            ? items.map { $0.itemInput() }
+            : items.filter(\.anyLogged).map { $0.partialInput() }
         return ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
             status: status,
             startedAt: startedAt,
-            completedAt: status == ExecutionStatus.complete ? timestamp : nil,
-            savedAt: status == ExecutionStatus.complete ? nil : timestamp,
-            inputs: included.map { $0.itemInput() }
+            completedAt: isComplete ? timestamp : nil,
+            savedAt: isComplete ? nil : timestamp,
+            inputs: inputs
         )
     }
 

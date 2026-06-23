@@ -35,7 +35,7 @@ import Foundation
             inputs: rendered.items.map(Self.passingInput)
         )
 
-        let outcome = try await engine.reduce(dir: dir, input: input)
+        let outcome = try await engine.reduce(dir: dir, session: rendered, input: input)
         #expect(outcome.result.validation.isValid)
 
         let event = try #require(outcome.result.event)

@@ -59,9 +59,11 @@ extension AppModel {
             changes: []
         )
         let line = try EventEncoding.line(event)
-        try LogReader().appendEvent(line: line, dir: repo.url, timestamp: timestamp)
-        _ = try await engine.build(dir: repo.url, write: true)
-        await repo.refresh(engine: engine)
-        await pushIfConnected(repo: repo, message: Self.commitMessage(for: event, timestamp: timestamp))
+        try await record(
+            eventLine: line,
+            in: repo,
+            timestamp: timestamp,
+            message: Self.commitMessage(for: event, timestamp: timestamp)
+        )
     }
 }

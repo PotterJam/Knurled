@@ -23,9 +23,10 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(ExecutionInputValidation.self, from: raw)
     }
 
-    func reduce(dir: URL, input: ExecutionInput) throws -> ReductionOutcome {
-        let json = try encode(input)
-        let raw = try call(dir: dir, json: json) { knurled_reduce_input($0, $1) }
+    func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionOutcome {
+        let sessionJSON = try encode(session)
+        let inputJSON = try encode(input)
+        let raw = try call(dir: dir, json1: sessionJSON, json2: inputJSON) { knurled_reduce_input($0, $1, $2) }
         let result = try decode(ReductionResult.self, from: raw)
         return ReductionOutcome(result: result, eventLine: Self.extractEventLine(from: raw))
     }
@@ -63,8 +64,25 @@ actor RustWorkoutEngine: WorkoutEngine {
         }
     }
 
-    private func encode(_ input: ExecutionInput) throws -> String {
-        let data = try KnurledCoding.encoder().encode(input)
+    private func call(
+        dir: URL,
+        json1: String,
+        json2: String,
+        _ body: (UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    ) throws -> String {
+        try dir.path(percentEncoded: false).withCString { cdir in
+            try json1.withCString { cjson1 in
+                try json2.withCString { cjson2 in
+                    guard let pointer = body(cdir, cjson1, cjson2) else { throw EngineError.emptyResponse }
+                    defer { knurled_string_free(pointer) }
+                    return String(cString: pointer)
+                }
+            }
+        }
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        let data = try KnurledCoding.encoder().encode(value)
         return String(decoding: data, as: UTF8.self)
     }
 

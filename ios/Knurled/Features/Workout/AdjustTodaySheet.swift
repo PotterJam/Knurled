@@ -6,7 +6,6 @@ struct AdjustTodaySheet: View {
 
     @State private var loadText: String
     @State private var scope: AdjustScope = .remaining
-    @State private var reason: String = ""
 
     init(live: LiveItem) {
         self.live = live
@@ -33,9 +32,6 @@ struct AdjustTodaySheet: View {
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
-                }
-                Section("Reason (optional)") {
-                    TextField("Not feeling good / tired / sore", text: $reason)
                 }
                 Section {
                     Text("Adjusting today logs what happened. It does not change your future plan — the prescribed load repeats next time.")

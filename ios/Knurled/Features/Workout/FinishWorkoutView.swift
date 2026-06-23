@@ -88,7 +88,7 @@ struct FinishWorkoutView: View {
         guard case .computing = phase else { return }
         let input = workout.executionInput(status: ExecutionStatus.complete, timestamp: timestamp)
         do {
-            let outcome = try await app.engine.reduce(dir: workout.repo.url, input: input)
+            let outcome = try await app.engine.reduce(dir: workout.repo.url, session: workout.session, input: input)
             if outcome.result.validation.isValid {
                 phase = .preview(outcome)
             } else {
@@ -103,7 +103,12 @@ struct FinishWorkoutView: View {
     private func submit(_ outcome: ReductionOutcome) async {
         phase = .submitting
         do {
-            try await app.commit(outcome: outcome, in: workout.repo, timestamp: timestamp)
+            try await app.commit(
+                outcome: outcome,
+                in: workout.repo,
+                timestamp: timestamp,
+                continuesEventId: workout.continuesEventId
+            )
             onCommitted()
             dismiss()
         } catch {
