@@ -2,12 +2,23 @@ import SwiftUI
 
 struct SettingsHomeView: View {
     @Environment(AppModel.self) private var app
+    @Environment(ThemeStore.self) private var theme
     @State private var showConnect = false
     @State private var isSyncing = false
 
     var body: some View {
+        @Bindable var theme = theme
         NavigationStack {
             List {
+                Section("Appearance") {
+                    Picker("Colour scheme", selection: $theme.scheme) {
+                        ForEach(KnurledColorScheme.allCases) { scheme in
+                            SchemeRow(scheme: scheme).tag(scheme)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
+
                 Section("Repository") {
                     if let repo = app.activeRepo {
                         LabeledContent("Active", value: repo.displayName)
@@ -68,5 +79,33 @@ struct SettingsHomeView: View {
                 GitHubConnectView()
             }
         }
+    }
+}
+
+/// A single colour-scheme option: name, accent/danger description and a pair
+/// of swatches previewing the two colours.
+private struct SchemeRow: View {
+    let scheme: KnurledColorScheme
+
+    var body: some View {
+        HStack(spacing: KnurledTheme.Spacing.s) {
+            HStack(spacing: 4) {
+                swatch(scheme.palette.accent)
+                swatch(scheme.palette.danger)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(scheme.title)
+                Text(scheme.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func swatch(_ color: Color) -> some View {
+        Circle()
+            .fill(color)
+            .frame(width: 16, height: 16)
+            .overlay(Circle().strokeBorder(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5))
     }
 }

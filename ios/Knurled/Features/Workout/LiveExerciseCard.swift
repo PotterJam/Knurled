@@ -60,7 +60,7 @@ struct LiveExerciseCard: View {
                 Spacer()
                 if live.isComplete {
                     Label("Done", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.tint)
                 }
             }
             .font(.footnote)
@@ -99,6 +99,7 @@ struct SetRowView: View {
     var onEdit: () -> Void
     var onLogged: () -> Void
 
+    @Environment(\.knurledPalette) private var palette
     @State private var entering = false
 
     private var isAmrapFinal: Bool { isAmrap && isLastSet }
@@ -135,7 +136,7 @@ struct SetRowView: View {
                         } label: {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(.tint)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Undo set")
@@ -146,7 +147,8 @@ struct SetRowView: View {
                             set.reps = set.prescribed.targetReps
                             entering = true
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(palette.danger)
                         .controlSize(.small)
                         Button("Done") {
                             set.reps = set.prescribed.targetReps

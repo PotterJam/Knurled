@@ -25,11 +25,13 @@ struct StatusChip: View {
     let text: String
     var style: Style = .neutral
 
+    @Environment(\.knurledPalette) private var palette
+
     private var color: Color {
         switch style {
         case .ok: return .green
         case .warn: return .orange
-        case .bad: return .red
+        case .bad: return palette.danger
         case .neutral: return KnurledTheme.steel
         }
     }
