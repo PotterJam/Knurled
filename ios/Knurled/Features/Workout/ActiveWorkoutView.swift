@@ -2,17 +2,17 @@ import SwiftUI
 
 struct ActiveWorkoutView: View {
     @State private var workout: LiveWorkout
-    @State private var restTimer: RestTimer
     @State private var showFinish = false
     @State private var isSaving = false
     @State private var errorMessage: String?
+
+    private let controller = WorkoutLiveController.shared
 
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
 
     init(repo: ActiveRepo, session: RenderedSession, resuming: TrainingEvent? = nil) {
         _workout = State(initialValue: LiveWorkout(repo: repo, session: session, resuming: resuming))
-        _restTimer = State(initialValue: RestTimer(workoutName: session.displayName))
     }
 
     var body: some View {
@@ -20,7 +20,7 @@ struct ActiveWorkoutView: View {
             VStack(spacing: KnurledTheme.Spacing.m) {
                 progress
                 ForEach(workout.items) { item in
-                    LiveExerciseCard(live: item, restTimer: restTimer)
+                    LiveExerciseCard(live: item, controller: controller)
                 }
             }
             .padding()
@@ -29,12 +29,13 @@ struct ActiveWorkoutView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                RestTimerBar(timer: restTimer)
-                    .animation(.snappy, value: restTimer.isRunning)
+                RestTimerBar(controller: controller)
+                    .animation(.snappy, value: controller.isResting)
                 bottomBar
             }
         }
-        .onDisappear { restTimer.skip() }
+        .onAppear { controller.begin(workout) }
+        .onDisappear { controller.end() }
         .sheet(isPresented: $showFinish) {
             FinishWorkoutView(workout: workout) { dismiss() }
         }

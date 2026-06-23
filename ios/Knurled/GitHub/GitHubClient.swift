@@ -84,6 +84,13 @@ struct GitHubClient: Sendable {
         return newCommit
     }
 
+    /// Makes the very first commit of a repository that has no commits yet.
+    ///
+    /// The Git Data API (blobs/trees/commits/refs) returns 409 "Git Repository is empty" on a
+    /// repo with zero commits, so we can't build the first commit with it directly. Instead we
+    /// bootstrap the branch with a single file via the Contents API — which *does* work on an
+    /// empty repo and creates the branch — then replace it with one root commit holding every
+    /// file via the now-usable Git Data API.
     @discardableResult
     func commitInitial(
         owner: String,
@@ -93,6 +100,16 @@ struct GitHubClient: Sendable {
         dir: URL,
         message: String
     ) async throws -> String {
+        guard let firstPath = files.first,
+              let firstData = try? Data(contentsOf: dir.appending(path: firstPath)) else {
+            throw GitHubError.badResponse
+        }
+
+        _ = try await putContents(
+            owner: owner, repo: repo, branch: branch,
+            path: firstPath, content: firstData, message: message
+        )
+
         var entries: [[String: Any]] = []
         for path in files {
             let fileURL = dir.appending(path: path)
@@ -110,13 +127,39 @@ struct GitHubClient: Sendable {
         let newCommit = try await post("/repos/\(owner)/\(repo)/git/commits", body: commitBody).sha
 
         let refBody = try JSONSerialization.data(
-            withJSONObject: ["ref": "refs/heads/\(branch)", "sha": newCommit]
+            withJSONObject: ["sha": newCommit, "force": true]
         )
-        _ = try await send("POST", "/repos/\(owner)/\(repo)/git/refs", body: refBody)
+        _ = try await send("PATCH", "/repos/\(owner)/\(repo)/git/refs/heads/\(branch)", body: refBody)
         return newCommit
     }
 
     // MARK: - Plumbing
+
+    /// Creates or updates a single file via the Contents API, returning the resulting commit
+    /// sha. Unlike the Git Data API this works on an empty repository and creates `branch`.
+    private func putContents(
+        owner: String,
+        repo: String,
+        branch: String,
+        path: String,
+        content: Data,
+        message: String
+    ) async throws -> String {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "message": message,
+            "content": content.base64EncodedString(),
+            "branch": branch
+        ])
+        let encodedPath = path.split(separator: "/").map {
+            $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0)
+        }.joined(separator: "/")
+        let data = try await send("PUT", "/repos/\(owner)/\(repo)/contents/\(encodedPath)", body: body)
+        struct ContentsResponse: Decodable {
+            struct Commit: Decodable { let sha: String }
+            let commit: Commit
+        }
+        return try GitHub.decoder().decode(ContentsResponse.self, from: data).commit.sha
+    }
 
     private func createBlob(owner: String, repo: String, content: Data) async throws -> String {
         let body = try JSONSerialization.data(

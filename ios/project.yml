@@ -35,11 +35,17 @@ targets:
       - framework: Engine/KnurledCore.xcframework
         embed: false
       - target: KnurledRestActivity
+    entitlements:
+      path: Knurled/Knurled.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.knurled.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.knurled.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: KNURLED_APP
     info:
       path: Knurled/Info.plist
       properties:
@@ -56,6 +62,12 @@ targets:
     sources:
       - KnurledRestActivity
       - Knurled/Live/RestActivityAttributes.swift
+      - Knurled/Live/WorkoutLiveIntents.swift
+    entitlements:
+      path: KnurledRestActivity/KnurledRestActivity.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.knurled.app
     info:
       path: KnurledRestActivity/Info.plist
       properties:

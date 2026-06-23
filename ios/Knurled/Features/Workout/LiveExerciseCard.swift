@@ -2,7 +2,7 @@ import SwiftUI
 
 struct LiveExerciseCard: View {
     let live: LiveItem
-    let restTimer: RestTimer
+    let controller: WorkoutLiveController
     @State private var showAdjust = false
     @State private var showSwap = false
     @State private var editingSet: LiveSet?
@@ -35,12 +35,8 @@ struct LiveExerciseCard: View {
                         isAmrap: live.isAmrap,
                         isLastSet: set.id == live.sets.last?.id,
                         onEdit: { editingSet = set },
-                        onLogged: {
-                            restTimer.start(
-                                seconds: live.item.rest.seconds,
-                                exercise: live.item.display.title
-                            )
-                        }
+                        onLogged: { controller.didLogSetInApp(item: live) },
+                        onChanged: { controller.modelChanged() }
                     )
                     if set.id != live.sets.last?.id { Divider() }
                 }
@@ -98,6 +94,7 @@ struct SetRowView: View {
     let isLastSet: Bool
     var onEdit: () -> Void
     var onLogged: () -> Void
+    var onChanged: () -> Void
 
     @Environment(\.knurledPalette) private var palette
     @State private var entering = false
@@ -133,6 +130,7 @@ struct SetRowView: View {
                         .buttonStyle(.plain)
                         Button {
                             set.logged = false
+                            onChanged()
                         } label: {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.title3)
@@ -153,7 +151,7 @@ struct SetRowView: View {
                         Button("Done") {
                             set.reps = set.prescribed.targetReps
                             set.logged = true
-                            if !isLastSet { onLogged() }
+                            if isLastSet { onChanged() } else { onLogged() }
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -171,7 +169,7 @@ struct SetRowView: View {
                     Button {
                         set.logged = true
                         entering = false
-                        if !isLastSet { onLogged() }
+                        if isLastSet { onChanged() } else { onLogged() }
                     } label: {
                         Text("Save")
                             .font(.callout.weight(.semibold))

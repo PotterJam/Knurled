@@ -1,25 +1,25 @@
 import SwiftUI
 
 struct RestTimerBar: View {
-    let timer: RestTimer
+    let controller: WorkoutLiveController
 
     var body: some View {
-        if timer.isRunning {
+        if controller.isResting {
             HStack(spacing: 10) {
                 Image(systemName: "timer")
                     .foregroundStyle(.tint)
                 Text("Rest")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text(timer.remainingText)
+                Text(controller.remainingText)
                     .font(.title3.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
                 Spacer()
-                Button("−15") { timer.add(-15) }
+                Button("−15") { controller.addRest(-15) }
                     .buttonStyle(.bordered)
-                Button("+15") { timer.add(15) }
+                Button("+15") { controller.addRest(15) }
                     .buttonStyle(.bordered)
-                Button("Skip") { timer.skip() }
+                Button("Skip") { controller.skipRest() }
                     .buttonStyle(.borderedProminent)
             }
             .controlSize(.small)
