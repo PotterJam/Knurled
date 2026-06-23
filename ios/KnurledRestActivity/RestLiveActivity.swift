@@ -58,6 +58,7 @@ struct RestLiveActivity: Widget {
             } else {
                 Button(intent: LogSetIntent()) {
                     Label("Log set", systemImage: "checkmark.circle.fill")
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
                 .tint(.cyan)
@@ -65,11 +66,15 @@ struct RestLiveActivity: Widget {
         case .resting:
             HStack(spacing: 10) {
                 Button(intent: AddRestIntent()) {
-                    Label("30s", systemImage: "plus").frame(maxWidth: .infinity)
+                    Label("30s", systemImage: "plus")
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
                 }
                 .tint(.secondary)
                 Button(intent: SkipRestIntent()) {
-                    Label("Skip", systemImage: "forward.fill").frame(maxWidth: .infinity)
+                    Label("Skip", systemImage: "forward.fill")
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
                 }
                 .tint(.cyan)
             }
@@ -123,6 +128,7 @@ private struct LockScreenView: View {
             } else {
                 Button(intent: LogSetIntent()) {
                     Label("Log set", systemImage: "checkmark.circle.fill")
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
                 .tint(.cyan)
@@ -181,6 +187,7 @@ private struct AmrapControls: View {
             .tint(.secondary)
             Button(intent: LogSetIntent()) {
                 Label("Log \(reps)", systemImage: "checkmark.circle.fill")
+                    .lineLimit(1)
                     .frame(maxWidth: .infinity)
             }
             .tint(.cyan)

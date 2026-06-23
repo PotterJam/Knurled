@@ -77,13 +77,7 @@ enum GitHubChangedFiles {
     }
 
     static func all(in dir: URL) -> [String] {
-        // Resolve symlinks up front so the enumerator's URLs (iOS hands them back under
-        // /private/var while the working dir is /var/…) are rooted at the same place, then
-        // derive each repo-relative path by dropping the base's path components. String-prefix
-        // stripping was fragile here (symlinks + the directory URL's trailing slash) and left
-        // paths absolute, so the initial commit couldn't read any file back.
         let base = dir.resolvingSymlinksInPath()
-        let baseComponentCount = base.pathComponents.count
         guard let enumerator = FileManager.default.enumerator(
             at: base,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -94,11 +88,35 @@ enum GitHubChangedFiles {
         for case let url as URL in enumerator {
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
             else { continue }
-            let relative = url.pathComponents.dropFirst(baseComponentCount).joined(separator: "/")
-            guard !relative.isEmpty, !relative.split(separator: "/").contains(".DS_Store") else { continue }
+            guard let relative = repoRelativePath(for: url, root: base) else { continue }
             paths.append(relative)
         }
         return paths.sorted()
+    }
+
+    static func repoRelativePath(for url: URL, root: URL) -> String? {
+        // The root and enumerated URLs can disagree on the /private/var prefix on iOS. Normalize
+        // that alias before comparing components; otherwise dropping the root component count
+        // leaves the repo directory name in the returned path.
+        let baseComponents = normalizedPathComponents(root)
+        let fileComponents = normalizedPathComponents(url)
+        guard fileComponents.count > baseComponents.count,
+              Array(fileComponents.prefix(baseComponents.count)) == baseComponents
+        else { return nil }
+
+        let relative = fileComponents.dropFirst(baseComponents.count).joined(separator: "/")
+        guard !relative.isEmpty, !relative.split(separator: "/").contains(".DS_Store") else {
+            return nil
+        }
+        return relative
+    }
+
+    private static func normalizedPathComponents(_ url: URL) -> [String] {
+        var components = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        if components.count > 2, components[1] == "private", components[2] == "var" {
+            components.remove(at: 1)
+        }
+        return components
     }
 }
 

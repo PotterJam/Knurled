@@ -35,6 +35,13 @@ import Foundation
         }
     }
 
+    @Test func relativePathNormalizesPrivateVarAlias() throws {
+        let root = URL(fileURLWithPath: "/var/mobile/Containers/Data/Application/app/Library/Application Support/Knurled/repos/PotterJam-gym")
+        let file = URL(fileURLWithPath: "/private/var/mobile/Containers/Data/Application/app/Library/Application Support/Knurled/repos/PotterJam-gym/README.md")
+
+        #expect(GitHubChangedFiles.repoRelativePath(for: file, root: root) == "README.md")
+    }
+
     @Test func commitMessagesFollowTemplates() {
         func event(_ type: String) -> TrainingEvent {
             TrainingEvent(

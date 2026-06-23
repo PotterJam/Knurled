@@ -15,12 +15,16 @@ struct RestTimerBar: View {
                     .font(.title3.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
                 Spacer()
-                Button("−15") { controller.addRest(-15) }
-                    .buttonStyle(.bordered)
-                Button("+15") { controller.addRest(15) }
-                    .buttonStyle(.bordered)
-                Button("Skip") { controller.skipRest() }
-                    .buttonStyle(.borderedProminent)
+                HStack(spacing: 10) {
+                    Button("−15") { controller.addRest(-15) }
+                        .buttonStyle(.bordered)
+                    Button("+15") { controller.addRest(15) }
+                        .buttonStyle(.bordered)
+                    Button("Skip") { controller.skipRest() }
+                        .buttonStyle(.borderedProminent)
+                }
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             }
             .controlSize(.small)
             .padding(.horizontal)
