@@ -7,7 +7,7 @@ use serde_json::json;
 
 fn gzclp_plan() -> String {
     r#"plan "James GZCLP" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.p@1.0.0"
   units kg
 
   schedule next_workout {
@@ -34,7 +34,7 @@ fn gzclp_plan() -> String {
 }
 
 fn compiled_gzclp() -> knurled_core::CompiledPlan {
-    let lock = render_lockfile("gzclp.standard@1.0.0").unwrap();
+    let lock = render_lockfile("gzcl.p@1.0.0").unwrap();
     compile_plan(&gzclp_plan(), &lock, &[]).unwrap()
 }
 
@@ -169,7 +169,7 @@ fn adjusted_today_does_not_progress_future_lane() {
 
 #[test]
 fn patch_can_replace_exercise_without_changing_lane_identity() {
-    let lock = render_lockfile("gzclp.standard@1.0.0").unwrap();
+    let lock = render_lockfile("gzcl.p@1.0.0").unwrap();
     let patch = PatchFile {
         filename: "patches/shoulder.fitspec".into(),
         text: r#"patch "shoulder" {
@@ -196,7 +196,7 @@ fn patch_can_replace_exercise_without_changing_lane_identity() {
 #[test]
 fn rest_policy_is_resolved_from_plan_overrides_before_template_defaults() {
     let plan = r#"plan "James GZCLP" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.p@1.0.0"
   units kg
 
   schedule next_workout {
@@ -227,7 +227,7 @@ fn rest_policy_is_resolved_from_plan_overrides_before_template_defaults() {
   }
 }
 "#;
-    let lock = render_lockfile("gzclp.standard@1.0.0").unwrap();
+    let lock = render_lockfile("gzcl.p@1.0.0").unwrap();
     let compiled = compile_plan(plan, &lock, &[]).unwrap();
     let rendered = render_next(&compiled, &create_initial_state(&compiled)).unwrap();
 

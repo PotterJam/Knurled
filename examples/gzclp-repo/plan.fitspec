@@ -1,5 +1,5 @@
 plan "My GZCLP" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.p@1.0.0"
   units kg
 
   schedule next_workout {

@@ -341,7 +341,7 @@ Example GZCLP plan:
 
 ```fitspec
 plan "James GZCLP" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.p@1.0.0"
   units kg
 
   schedule next_workout {
@@ -446,7 +446,7 @@ Locks template versions, content hashes, and engine compatibility.
 Example:
 
 ```toml
-[templates."gzclp.standard"]
+[templates."gzcl.p"]
 version = "1.0.0"
 source = "builtin"
 content_hash = "sha256:abc123"
@@ -491,8 +491,8 @@ Templates are versioned packages.
 Examples:
 
 ```text
-gzclp.standard@1.0.0
-gzclp.pzero@1.0.0
+gzcl.p@1.0.0
+gzcl.p-zero@1.0.0
 531.basic@1.0.0
 531.beginners@1.0.0
 ```
@@ -508,19 +508,19 @@ Plan config only
 Escape hatch:
 
 ```bash
-fitspec template vendor gzclp.standard
+fitspec template vendor gzcl.p
 ```
 
 This copies the expanded template into:
 
 ```text
-templates/gzclp.standard.fitspec
+templates/gzcl.p.fitspec
 ```
 
 Then the plan can reference:
 
 ```fitspec
-template "./templates/gzclp.standard.fitspec"
+template "./templates/gzcl.p.fitspec"
 ```
 
 Rules:
@@ -913,7 +913,7 @@ Example:
 {
   "type": "rendered_session",
   "schema_version": "0.1",
-  "session_id": "gzclp.a1",
+  "session_id": "gzcl.a1",
   "display_name": "GZCLP - A1",
   "suggested_date": "2026-06-24",
   "plan_hash": "sha256:abc",
@@ -924,7 +924,7 @@ Example:
       "item_id": "a1.t1",
       "slot_id": "a1.t1",
       "progression_lane": "squat.t1",
-      "progression_rule": "gzclp.t1",
+      "progression_rule": "gzcl.t1",
       "exercise": "squat",
       "display": {
         "title": "Squat T1",
@@ -990,7 +990,7 @@ Identity:
   "item_id": "a1.t1",
   "slot_id": "a1.t1",
   "progression_lane": "squat.t1",
-  "progression_rule": "gzclp.t1",
+  "progression_rule": "gzcl.t1",
   "plan_hash": "sha256:abc",
   "rendered_session_hash": "sha256:def"
 }
@@ -1111,7 +1111,7 @@ Completed session event:
 {
   "id": "evt_20260624_1010",
   "type": "session_completed",
-  "program": "gzclp",
+  "program": "gzcl",
   "session_id": "a1",
   "plan_hash": "sha256:abc",
   "template_hash": "sha256:template",
@@ -1146,7 +1146,7 @@ Partial session event:
   "id": "evt_20260624_1045_partial",
   "type": "session_saved",
   "status": "partial",
-  "program": "gzclp",
+  "program": "gzcl",
   "session_id": "a1",
   "plan_hash": "sha256:abc",
   "rendered_session_hash": "sha256:def",
@@ -1316,8 +1316,8 @@ T3
 Minimum templates:
 
 ```text
-gzclp.standard
-gzclp.pzero
+gzcl.p
+gzcl.p-zero
 ```
 
 Do not attempt to support every internet variant in MVP.
@@ -1645,10 +1645,10 @@ If the CLI/app cannot find the locked template version, backtest must fail clear
 Cannot backtest.
 
 Missing template:
-gzclp.standard@1.0.0 sha256:abc123
+gzcl.p@1.0.0 sha256:abc123
 
 Run:
-fitspec template install gzclp.standard@1.0.0
+fitspec template install gzcl.p@1.0.0
 or vendor the template.
 ```
 
@@ -1730,7 +1730,7 @@ fitspec
 ### 29.1 Create repo
 
 ```bash
-fitspec init my-training --template gzclp.standard
+fitspec init my-training --template gzcl.p
 ```
 
 Prompts:
@@ -1817,11 +1817,11 @@ These create explicit log events, not silent state edits.
 
 ```bash
 fitspec template list
-fitspec template show gzclp.standard
-fitspec template explain gzclp.standard
-fitspec template vendor gzclp.standard
-fitspec template upgrade gzclp.standard
-fitspec template diff gzclp.standard@1.0.0 gzclp.standard@1.1.0
+fitspec template show gzcl.p
+fitspec template explain gzcl.p
+fitspec template vendor gzcl.p
+fitspec template upgrade gzcl.p
+fitspec template diff gzcl.p@1.0.0 gzcl.p@1.1.0
 ```
 
 ### 29.7 Git helpers
@@ -1862,7 +1862,7 @@ FitSpec Workbench
 
 Repo: my-training
 Plan: James GZCLP
-Template: gzclp.standard@1.0.0
+Template: gzcl.p@1.0.0
 Status: valid
 
 Next workout:
