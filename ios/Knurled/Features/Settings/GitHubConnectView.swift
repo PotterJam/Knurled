@@ -10,6 +10,7 @@ struct GitHubConnectView: View {
     @State private var newRepoName = "my-training"
     @State private var newRepoTemplate = StarterTemplate.gzclpStandard
     @State private var newRepoPrivate = true
+    @State private var emptyRepoToInitialize: GitHubRepo?
 
     var body: some View {
         NavigationStack {
@@ -28,6 +29,12 @@ struct GitHubConnectView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
+                }
+            }
+            .sheet(item: $emptyRepoToInitialize) { repo in
+                InitializeEmptyRepoView(repo: repo) { template in
+                    try await app.initializeRepository(githubRepo: repo, template: template)
+                    dismiss()
                 }
             }
         }
@@ -188,6 +195,8 @@ struct GitHubConnectView: View {
             do {
                 try await app.connect(repo: repo)
                 dismiss()
+            } catch GitHubError.emptyRepository {
+                emptyRepoToInitialize = repo
             } catch {
                 app.github.errorMessage = error.localizedDescription
             }
@@ -209,6 +218,81 @@ struct GitHubConnectView: View {
                 app.github.errorMessage = error.localizedDescription
             }
             creatingRepo = false
+        }
+    }
+}
+
+/// Sheet shown when the user connects to an existing GitHub repo that has no commits yet.
+/// Lets them pick a starter template and seed the empty repository from the app.
+private struct InitializeEmptyRepoView: View {
+    let repo: GitHubRepo
+    let initialize: (StarterTemplate) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var template = StarterTemplate.gzclpStandard
+    @State private var isInitializing = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("\(repo.fullName) is empty. Choose a starter template and Knurled will build it and make the first commit.")
+                        .font(.subheadline)
+                }
+                Section("Template") {
+                    Picker("Template", selection: $template) {
+                        ForEach(StarterTemplate.allCases) { template in
+                            VStack(alignment: .leading) {
+                                Text(template.title)
+                                Text(template.reference)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .tag(template)
+                        }
+                    }
+
+                    Text(template.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        initializeRepo()
+                    } label: {
+                        HStack {
+                            Label("Initialize repository", systemImage: "plus.circle")
+                            if isInitializing { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(isInitializing)
+                }
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage).font(.footnote).foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Begin repository")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.disabled(isInitializing)
+                }
+            }
+        }
+    }
+
+    private func initializeRepo() {
+        isInitializing = true
+        errorMessage = nil
+        Task {
+            do {
+                try await initialize(template)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isInitializing = false
         }
     }
 }

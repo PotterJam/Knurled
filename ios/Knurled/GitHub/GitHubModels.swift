@@ -27,6 +27,7 @@ enum GitHubError: Error, Sendable, LocalizedError {
     case accessDenied
     case badResponse
     case invalidRepositoryName
+    case emptyRepository
 
     var errorDescription: String? {
         switch self {
@@ -42,7 +43,18 @@ enum GitHubError: Error, Sendable, LocalizedError {
             return "Unexpected response from GitHub."
         case .invalidRepositoryName:
             return "Choose a repository name using letters, numbers, dashes, underscores, or dots."
+        case .emptyRepository:
+            return "This repository is empty. Pick a starter template to initialize it."
         }
+    }
+
+    /// GitHub answers Git Data API reads with 409 "Git Repository is empty." when a repo
+    /// has no commits yet. Detect that so we can offer to initialize the repo instead.
+    static func isEmptyRepository(_ error: Error) -> Bool {
+        if case GitHubError.http(409, let body) = error {
+            return body.localizedCaseInsensitiveContains("empty")
+        }
+        return false
     }
 }
 

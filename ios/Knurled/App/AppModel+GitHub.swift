@@ -98,16 +98,25 @@ enum GitHubChangedFiles {
 
 extension AppModel {
     /// Pulls a GitHub repo into a working copy and makes it the active repo.
+    ///
+    /// Empty repositories (no commits yet) can't be pulled — GitHub's Git Data API answers
+    /// with 409. We surface `GitHubError.emptyRepository` so the caller can offer to seed it
+    /// with a starter template via `initializeRepository(githubRepo:template:)`.
     func connect(repo githubRepo: GitHubRepo) async throws {
         guard let client = github.client() else { throw GitHubError.badResponse }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
         let dir = try repos.workingDirectory(for: slug)
-        let head = try await client.pull(
-            owner: githubRepo.owner,
-            repo: githubRepo.name,
-            branch: githubRepo.defaultBranch,
-            into: dir
-        )
+        let head: String
+        do {
+            head = try await client.pull(
+                owner: githubRepo.owner,
+                repo: githubRepo.name,
+                branch: githubRepo.defaultBranch,
+                into: dir
+            )
+        } catch where GitHubError.isEmptyRepository(error) {
+            throw GitHubError.emptyRepository
+        }
         let active = ActiveRepo(displayName: githubRepo.fullName, url: dir, isSample: false)
         active.remote = GitHubRemote(
             owner: githubRepo.owner,
@@ -132,6 +141,14 @@ extension AppModel {
         guard Self.isValidRepositoryName(name) else { throw GitHubError.invalidRepositoryName }
 
         let githubRepo = try await client.createRepository(name: name, isPrivate: isPrivate)
+        try await initializeRepository(githubRepo: githubRepo, template: template)
+    }
+
+    /// Seeds an existing empty GitHub repository with a starter template: builds the template
+    /// locally, makes the repo's first commit, and makes it the active repo. Shared by the
+    /// create-new flow and the "begin an empty repo" flow.
+    func initializeRepository(githubRepo: GitHubRepo, template: StarterTemplate) async throws {
+        guard let client = github.client() else { throw GitHubError.badResponse }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
         let dir = try repos.workingDirectory(for: slug)
         if FileManager.default.fileExists(atPath: dir.path(percentEncoded: false)) {
