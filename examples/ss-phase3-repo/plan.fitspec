@@ -1,16 +1,16 @@
 plan "My Starting Strength" {
-  template "starting-strength.phase3@1.0.0"
+  template "starting-strength.phase3" version="1.0.0"
   units kg
 
   schedule next_workout {
-    suggested_days mon, wed, fri
+    suggested_days mon wed fri
   }
 
   starts {
-    squat 60kg
-    press 30kg
-    bench 40kg
-    deadlift 80kg
-    power_clean 40kg
+    squat "60kg"
+    press "30kg"
+    bench "40kg"
+    deadlift "80kg"
+    power_clean "40kg"
   }
 }

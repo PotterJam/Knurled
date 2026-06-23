@@ -12,7 +12,7 @@
     "template_version": "1.0.0",
     "units": "kg"
   },
-  "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
+  "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
   "rest": {},
   "schedule": {
     "mode": "next_workout",

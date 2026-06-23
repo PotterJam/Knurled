@@ -11,15 +11,15 @@ fn gzclp_plan() -> String {
   units kg
 
   schedule next_workout {
-    rotation A1, B1, A2, B2
-    suggested_days mon, wed, fri
+    rotation A1 B1 A2 B2
+    suggested_days mon wed fri
   }
 
   starts {
-    squat 80kg
-    bench 55kg
-    press 37.5kg
-    deadlift 100kg
+    squat "80kg"
+    bench "55kg"
+    press "37.5kg"
+    deadlift "100kg"
   }
 
   accessories {
@@ -45,15 +45,15 @@ fn starting_strength_plan(template: &str) -> String {
   units kg
 
   schedule next_workout {{
-    suggested_days mon, wed, fri
+    suggested_days mon wed fri
   }}
 
   starts {{
-    squat 60kg
-    press 30kg
-    bench 40kg
-    deadlift 80kg
-    power_clean 40kg
+    squat "60kg"
+    press "30kg"
+    bench "40kg"
+    deadlift "80kg"
+    power_clean "40kg"
   }}
 }}
 "#
@@ -173,7 +173,7 @@ fn patch_can_replace_exercise_without_changing_lane_identity() {
     let patch = PatchFile {
         filename: "patches/shoulder.fitspec".into(),
         text: r#"patch "shoulder" {
-  replace exercise press with landmine_press where lane matches "press.*"
+  replace-exercise from=press to=landmine_press lane="press.*"
 }
 "#
         .into(),
@@ -200,15 +200,15 @@ fn rest_policy_is_resolved_from_plan_overrides_before_template_defaults() {
   units kg
 
   schedule next_workout {
-    rotation A1, B1, A2, B2
-    suggested_days mon, wed, fri
+    rotation A1 B1 A2 B2
+    suggested_days mon wed fri
   }
 
   starts {
-    squat 80kg
-    bench 55kg
-    press 37.5kg
-    deadlift 100kg
+    squat "80kg"
+    bench "55kg"
+    press "37.5kg"
+    deadlift "100kg"
   }
 
   accessories {
@@ -222,7 +222,7 @@ fn rest_policy_is_resolved_from_plan_overrides_before_template_defaults() {
     default 1 minute
     Tier T3 75 sec
     exercise bench 210 seconds
-    lane squat.t1 4m
+    lane squat.t1 "4m"
     slot A1.T2 5 min
   }
 }
@@ -246,15 +246,15 @@ fn five_three_one_renders_week_one_percentages() {
   units kg
 
   schedule next_workout {
-    rotation squat_day, bench_day, deadlift_day, press_day
-    suggested_days mon, wed, fri, sat
+    rotation squat_day bench_day deadlift_day press_day
+    suggested_days mon wed fri sat
   }
 
   training_maxes {
-    squat 90kg
-    bench 65kg
-    deadlift 110kg
-    press 42.5kg
+    squat "90kg"
+    bench "65kg"
+    deadlift "110kg"
+    press "42.5kg"
   }
 }
 "#;

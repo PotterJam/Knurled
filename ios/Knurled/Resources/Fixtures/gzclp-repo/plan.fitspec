@@ -1,17 +1,17 @@
 plan "My GZCLP" {
-  template "gzcl.gzclp@1.0.0"
+  template "gzcl.gzclp" version="1.0.0"
   units kg
 
   schedule next_workout {
-    rotation A1, B1, A2, B2
-    suggested_days mon, wed, fri
+    rotation A1 B1 A2 B2
+    suggested_days mon wed fri
   }
 
   starts {
-    squat 80kg
-    bench 55kg
-    press 37.5kg
-    deadlift 100kg
+    squat "80kg"
+    bench "55kg"
+    press "37.5kg"
+    deadlift "100kg"
   }
 
   accessories {
@@ -24,23 +24,23 @@ plan "My GZCLP" {
   exercise_options {
     slot "A1.T3" {
       primary lat_pulldown
-      chin_up { label "Chin-up" policy tracking_only }
-      cable_row { label "Cable Row" policy tracking_only }
+      chin_up { label "Chin-up"; policy tracking_only }
+      cable_row { label "Cable Row"; policy tracking_only }
     }
     slot "A2.T3" {
       primary lat_pulldown
-      chin_up { label "Chin-up" policy tracking_only }
-      cable_row { label "Cable Row" policy tracking_only }
+      chin_up { label "Chin-up"; policy tracking_only }
+      cable_row { label "Cable Row"; policy tracking_only }
     }
     slot "B1.T3" {
       primary barbell_row
-      seated_cable_row { label "Seated Cable Row" policy tracking_only }
-      dumbbell_row { label "Dumbbell Row" policy tracking_only }
+      seated_cable_row { label "Seated Cable Row"; policy tracking_only }
+      dumbbell_row { label "Dumbbell Row"; policy tracking_only }
     }
     slot "B2.T3" {
       primary barbell_row
-      seated_cable_row { label "Seated Cable Row" policy tracking_only }
-      dumbbell_row { label "Dumbbell Row" policy tracking_only }
+      seated_cable_row { label "Seated Cable Row"; policy tracking_only }
+      dumbbell_row { label "Dumbbell Row"; policy tracking_only }
     }
   }
 }

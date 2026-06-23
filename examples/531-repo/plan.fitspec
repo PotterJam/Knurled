@@ -1,22 +1,22 @@
 plan "My 5/3/1" {
-  template "531.beginners@1.0.0"
+  template "531.beginners" version="1.0.0"
   units kg
 
   schedule next_workout {
-    rotation squat_day, bench_day, deadlift_day, press_day
-    suggested_days mon, wed, fri, sat
+    rotation squat_day bench_day deadlift_day press_day
+    suggested_days mon wed fri sat
   }
 
   training_maxes {
-    squat 90kg
-    bench 65kg
-    deadlift 110kg
-    press 42.5kg
+    squat "90kg"
+    bench "65kg"
+    deadlift "110kg"
+    press "42.5kg"
   }
 
   assistance {
-    push 50 reps
-    pull 50 reps
-    single_leg_core 50 reps
+    push "50 reps"
+    pull "50 reps"
+    single_leg_core "50 reps"
   }
 }

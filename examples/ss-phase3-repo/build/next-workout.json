@@ -46,10 +46,10 @@
       "exercise": "squat",
       "identity": {
         "item_id": "a_deadlift.squat",
-        "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+        "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "squat.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
+        "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
         "slot_id": "a_deadlift.squat"
       },
       "item_id": "a_deadlift.squat",
@@ -128,10 +128,10 @@
       "exercise": "press",
       "identity": {
         "item_id": "a_deadlift.press",
-        "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+        "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "press.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
+        "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
         "slot_id": "a_deadlift.press"
       },
       "item_id": "a_deadlift.press",
@@ -210,10 +210,10 @@
       "exercise": "deadlift",
       "identity": {
         "item_id": "a_deadlift.deadlift",
-        "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
+        "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "deadlift.linear",
         "progression_rule": "starting_strength.1x5",
-        "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
+        "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
         "slot_id": "a_deadlift.deadlift"
       },
       "item_id": "a_deadlift.deadlift",
@@ -237,8 +237,8 @@
       "slot_id": "a_deadlift.deadlift"
     }
   ],
-  "plan_hash": "sha256:5078cfe5b775c653f39ce207c55bd7dececc79d5c74dc5a4feda00d1cf9ad8d3",
-  "rendered_session_hash": "sha256:af9b35b41957439f5b084aa30266af7fa69aaa7764ba91626c2b9b1eeab644eb",
+  "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
+  "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
   "schema_version": "0.1",
   "session_id": "a_deadlift",
   "suggested_date": null,

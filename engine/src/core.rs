@@ -2,7 +2,7 @@ use regex::Regex;
 use serde_json::json;
 
 use crate::error::{KnurledError, Result};
-use crate::json::{sha256_json, sha256_text};
+use crate::json::sha256_json;
 use crate::model::*;
 use crate::parser::{normalize_exercise, parse_lock, parse_patch, parse_plan};
 use crate::templates::{
@@ -31,11 +31,16 @@ pub fn compile_plan(
         .map(|file| parse_patch(&file.text, file.filename.clone()))
         .collect::<Result<Vec<_>>>()?;
 
+    // Identity hashes the canonical parsed plan, not the raw file bytes, so
+    // reformatting, comments, or whitespace never rewrite a plan's identity —
+    // only a real semantic change does.
+    let plan_hash = sha256_json(&plan)?;
+
     Ok(CompiledPlan {
         kind: "compiled_plan".into(),
         schema_version: SCHEMA_VERSION.into(),
         engine_version: ENGINE_VERSION.into(),
-        plan_hash: sha256_text(plan_text),
+        plan_hash,
         lock_hash: sha256_json(&lock)?,
         template_hash: template_hash(&plan.template)?,
         patch_hash: sha256_json(&patches)?,

@@ -8,7 +8,7 @@ use crate::core::{PatchFile, build_outputs, compile_plan, replay_events, simulat
 use crate::error::{KnurledError, Result};
 use crate::json::pretty_json;
 use crate::model::*;
-use crate::templates::{parse_template_ref, render_lockfile};
+use crate::templates::{TemplateRef, parse_template_ref, render_lockfile};
 
 #[derive(Debug, Clone)]
 pub struct TrainingRepo {
@@ -56,11 +56,11 @@ pub fn init_training_repo(repo_path: impl AsRef<Path>, template: &str) -> Result
     }
 
     let files = if reference.id.starts_with("531.") {
-        initial_531_files(&reference.normalized)?
+        initial_531_files(&reference)?
     } else if reference.id.starts_with("starting-strength.") {
-        initial_starting_strength_files(&reference.normalized)?
+        initial_starting_strength_files(&reference)?
     } else {
-        initial_gzclp_files(&reference.normalized)?
+        initial_gzclp_files(&reference)?
     };
 
     for (relative_path, text) in files {
@@ -316,7 +316,9 @@ fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn initial_gzclp_files(template: &str) -> Result<BTreeMap<String, String>> {
+fn initial_gzclp_files(reference: &TemplateRef) -> Result<BTreeMap<String, String>> {
+    let id = &reference.id;
+    let version = &reference.version;
     Ok(BTreeMap::from([
         (
             "fitspec.toml".into(),
@@ -338,19 +340,19 @@ fn initial_gzclp_files(template: &str) -> Result<BTreeMap<String, String>> {
             "plan.fitspec".into(),
             format!(
                 r#"plan "My GZCLP" {{
-  template "{template}"
+  template "{id}" version="{version}"
   units kg
 
   schedule next_workout {{
-    rotation A1, B1, A2, B2
-    suggested_days mon, wed, fri
+    rotation A1 B1 A2 B2
+    suggested_days mon wed fri
   }}
 
   starts {{
-    squat 80kg
-    bench 55kg
-    press 37.5kg
-    deadlift 100kg
+    squat "80kg"
+    bench "55kg"
+    press "37.5kg"
+    deadlift "100kg"
   }}
 
   accessories {{
@@ -363,7 +365,7 @@ fn initial_gzclp_files(template: &str) -> Result<BTreeMap<String, String>> {
 "#
             ),
         ),
-        ("fitspec.lock".into(), render_lockfile(template)?),
+        ("fitspec.lock".into(), render_lockfile(&reference.normalized)?),
         (
             "README.md".into(),
             "# Knurled Training Repo\n\nCanonical files are `plan.fitspec`, `fitspec.lock`, `patches/*.fitspec`, and `logs/**/*.jsonl`.\nGenerated files live in `state/` and `build/`.\n".into(),
@@ -371,7 +373,9 @@ fn initial_gzclp_files(template: &str) -> Result<BTreeMap<String, String>> {
     ]))
 }
 
-fn initial_531_files(template: &str) -> Result<BTreeMap<String, String>> {
+fn initial_531_files(reference: &TemplateRef) -> Result<BTreeMap<String, String>> {
+    let id = &reference.id;
+    let version = &reference.version;
     Ok(BTreeMap::from([
         (
             "fitspec.toml".into(),
@@ -390,36 +394,38 @@ fn initial_531_files(template: &str) -> Result<BTreeMap<String, String>> {
             "plan.fitspec".into(),
             format!(
                 r#"plan "My 5/3/1" {{
-  template "{template}"
+  template "{id}" version="{version}"
   units kg
 
   schedule next_workout {{
-    rotation squat_day, bench_day, deadlift_day, press_day
-    suggested_days mon, wed, fri, sat
+    rotation squat_day bench_day deadlift_day press_day
+    suggested_days mon wed fri sat
   }}
 
   training_maxes {{
-    squat 90kg
-    bench 65kg
-    deadlift 110kg
-    press 42.5kg
+    squat "90kg"
+    bench "65kg"
+    deadlift "110kg"
+    press "42.5kg"
   }}
 
   assistance {{
-    push 50 reps
-    pull 50 reps
-    single_leg_core 50 reps
+    push "50 reps"
+    pull "50 reps"
+    single_leg_core "50 reps"
   }}
 }}
 "#
             ),
         ),
-        ("fitspec.lock".into(), render_lockfile(template)?),
+        ("fitspec.lock".into(), render_lockfile(&reference.normalized)?),
         ("README.md".into(), "# Knurled 5/3/1 Training Repo\n".into()),
     ]))
 }
 
-fn initial_starting_strength_files(template: &str) -> Result<BTreeMap<String, String>> {
+fn initial_starting_strength_files(reference: &TemplateRef) -> Result<BTreeMap<String, String>> {
+    let id = &reference.id;
+    let version = &reference.version;
     Ok(BTreeMap::from([
         (
             "fitspec.toml".into(),
@@ -438,25 +444,25 @@ fn initial_starting_strength_files(template: &str) -> Result<BTreeMap<String, St
             "plan.fitspec".into(),
             format!(
                 r#"plan "My Starting Strength" {{
-  template "{template}"
+  template "{id}" version="{version}"
   units kg
 
   schedule next_workout {{
-    suggested_days mon, wed, fri
+    suggested_days mon wed fri
   }}
 
   starts {{
-    squat 60kg
-    press 30kg
-    bench 40kg
-    deadlift 80kg
-    power_clean 40kg
+    squat "60kg"
+    press "30kg"
+    bench "40kg"
+    deadlift "80kg"
+    power_clean "40kg"
   }}
 }}
 "#
             ),
         ),
-        ("fitspec.lock".into(), render_lockfile(template)?),
+        ("fitspec.lock".into(), render_lockfile(&reference.normalized)?),
         (
             "README.md".into(),
             "# Knurled Starting Strength Training Repo\n\nStarting Strength phases are built-in engine presets, locked in `fitspec.lock`, not user-authored template files.\n".into(),
