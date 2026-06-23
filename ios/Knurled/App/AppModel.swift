@@ -12,18 +12,25 @@ final class AppModel {
 
     let engine: WorkoutEngine
     let repos: RepoManager
+    let github: GitHubStore
 
     var phase: Phase = .launching
     var activeRepo: ActiveRepo?
     var engineVersion: String?
 
-    init(engine: WorkoutEngine = RustWorkoutEngine(), repos: RepoManager = RepoManager()) {
+    init(
+        engine: WorkoutEngine = RustWorkoutEngine(),
+        repos: RepoManager = RepoManager(),
+        github: GitHubStore = GitHubStore()
+    ) {
         self.engine = engine
         self.repos = repos
+        self.github = github
     }
 
     func bootstrap() async {
         engineVersion = try? await engine.engineVersion()
+        await github.restore()
         await loadSampleRepo()
     }
 

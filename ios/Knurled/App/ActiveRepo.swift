@@ -15,6 +15,8 @@ final class ActiveRepo: Identifiable {
     var events: [TrainingEvent] = []
     var isRefreshing = false
     var loadError: String?
+    var remote: GitHubRemote?
+    var pendingPush = false
 
     init(displayName: String, url: URL, isSample: Bool) {
         self.displayName = displayName

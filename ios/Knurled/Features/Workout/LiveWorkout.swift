@@ -53,9 +53,6 @@ final class LiveItem: Identifiable {
         self.id = item.itemId
         self.item = item
         self.sets = item.prescription.sets.map { LiveSet(prescribed: $0, defaultLoad: $0.load) }
-        if isAmrap {
-            for set in sets.dropLast() { set.logged = true }
-        }
     }
 
     var mode: String { item.executionContract.recommendedInput }

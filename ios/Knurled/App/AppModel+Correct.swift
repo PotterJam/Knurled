@@ -45,5 +45,6 @@ extension AppModel {
         try LogReader().appendEvent(line: line, dir: repo.url, timestamp: timestamp)
         _ = try await engine.build(dir: repo.url, write: true)
         await repo.refresh(engine: engine)
+        await pushIfConnected(repo: repo, message: Self.commitMessage(for: event, timestamp: timestamp))
     }
 }
