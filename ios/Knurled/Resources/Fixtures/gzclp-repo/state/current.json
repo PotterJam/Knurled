@@ -46,7 +46,7 @@
     }
   },
   "last_event_id": null,
-  "program_hash": "sha256:c86bafa0aadf143696eca8a526c2a7a3bbeb1d475b8ee66456cc4d2d09a19106",
+  "program_hash": "sha256:229b4c7d4ed7a3e2d6a8d9d4a4e53ce4f7de6abe8eabafcc853a63ecabe1406e",
   "schema_version": "0.1",
   "sessions": {},
   "type": "state_projection"

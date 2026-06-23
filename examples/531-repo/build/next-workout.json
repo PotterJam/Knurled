@@ -47,10 +47,10 @@
       "exercise": "squat",
       "identity": {
         "item_id": "squat.main",
-        "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
+        "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
         "progression_lane": "squat.main",
         "progression_rule": "531.main",
-        "rendered_session_hash": "sha256:5f407266dc3eff0a324a2ad0fc469b7914e745d07d9acc74f2999b94f48fbfe8",
+        "rendered_session_hash": "sha256:a999c0b86ed2653d9e6c00fabbf496700bb23eef87d0f1a79aa36eb906932b1f",
         "slot_id": "squat.main"
       },
       "item_id": "squat.main",
@@ -89,8 +89,8 @@
       "slot_id": "squat.main"
     }
   ],
-  "plan_hash": "sha256:e5902b6ec208b2f8af20872c9ae01d762a90b745a1892d5ac5c98c2fe200a825",
-  "rendered_session_hash": "sha256:5f407266dc3eff0a324a2ad0fc469b7914e745d07d9acc74f2999b94f48fbfe8",
+  "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
+  "rendered_session_hash": "sha256:a999c0b86ed2653d9e6c00fabbf496700bb23eef87d0f1a79aa36eb906932b1f",
   "schema_version": "0.1",
   "session_id": "squat_day",
   "suggested_date": null,

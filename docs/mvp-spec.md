@@ -339,21 +339,21 @@ Primary user-owned plan file. It should be short and template-driven.
 
 Example GZCLP plan:
 
-```fitspec
+```kdl
 plan "James GZCLP" {
   template "gzclp.standard@1.0.0"
   units kg
 
   schedule next_workout {
-    rotation A1, B1, A2, B2
-    suggested_days mon, wed, fri
+    rotation A1 B1 A2 B2
+    suggested_days mon wed fri
   }
 
   starts {
-    squat 80kg
-    bench 55kg
-    press 37.5kg
-    deadlift 100kg
+    squat "80kg"
+    bench "55kg"
+    press "37.5kg"
+    deadlift "100kg"
   }
 
   accessories {
@@ -367,27 +367,27 @@ plan "James GZCLP" {
 
 Example 5/3/1 plan:
 
-```fitspec
+```kdl
 plan "James 5/3/1" {
   template "531.beginners@1.0.0"
   units kg
 
   schedule next_workout {
-    rotation squat_day, bench_day, deadlift_day, press_day
-    suggested_days mon, wed, fri, sat
+    rotation squat_day bench_day deadlift_day press_day
+    suggested_days mon wed fri sat
   }
 
   training_maxes {
-    squat 90kg
-    bench 65kg
-    deadlift 110kg
-    press 42.5kg
+    squat "90kg"
+    bench "65kg"
+    deadlift "110kg"
+    press "42.5kg"
   }
 
   assistance {
-    push 50 reps
-    pull 50 reps
-    single_leg_core 50 reps
+    push "50 reps"
+    pull "50 reps"
+    single_leg_core "50 reps"
   }
 }
 ```
@@ -398,44 +398,36 @@ Patch files describe explicit future-plan changes. They are preferred for contex
 
 Example shoulder patch:
 
-```fitspec
+```kdl
 patch "shoulder-friendly-pressing" {
   description "Temporarily replace overhead press work"
 
-  active from 2026-06-22
-  expires 2026-07-20
+  active-from "2026-06-22"
+  expires "2026-07-20"
 
-  replace exercise overhead_press
-    with landmine_press
-    where lane matches "press.*"
+  replace-exercise from=overhead_press to=landmine_press lane="press.*"
 
-  cap rpe 8
-    where lane matches "press.*"
+  cap target=rpe value=8 lane="press.*"
 
-  add warmup before press {
-    band_external_rotation 2x15
-    scap_pushup 2x10
+  // aspirational: warmup blocks are not yet modeled
+  add-warmup before=press {
+    band_external_rotation "2x15"
+    scap_pushup "2x10"
   }
 }
 ```
 
 Example running patch:
 
-```fitspec
+```kdl
 patch "running-focus-6w" {
-  active from 2026-06-22
-  expires 2026-08-03
+  active-from "2026-06-22"
+  expires "2026-08-03"
 
-  add conditioning tuesday {
-    easy_run 25min zone2
-  }
+  add-conditioning day=tuesday activity="easy_run 25min zone2"
+  add-conditioning day=saturday activity="strides 6x20sec"
 
-  add conditioning saturday {
-    strides 6x20sec
-  }
-
-  cap lower_body_accessory_sets at 2
-  block hard_intervals within 24h of heavy_squat
+  cap target=lower_body_accessory_sets value=2
 }
 ```
 
@@ -519,7 +511,7 @@ templates/gzclp.standard.fitspec
 
 Then the plan can reference:
 
-```fitspec
+```kdl
 template "./templates/gzclp.standard.fitspec"
 ```
 
@@ -567,7 +559,7 @@ if (completedReps < target) {
 
 Good:
 
-```fitspec
+```kdl
 on fail {
   advance_stage
 }
@@ -708,7 +700,7 @@ shoulder irritated today, but no permanent plan change intended
 
 Recommended plan-level shape:
 
-```fitspec
+```kdl
 exercise_options {
   slot "A1.T2" {
     primary bench_press

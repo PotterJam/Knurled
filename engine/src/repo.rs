@@ -342,15 +342,15 @@ fn initial_gzclp_files(template: &str) -> Result<BTreeMap<String, String>> {
   units kg
 
   schedule next_workout {{
-    rotation A1, B1, A2, B2
-    suggested_days mon, wed, fri
+    rotation A1 B1 A2 B2
+    suggested_days mon wed fri
   }}
 
   starts {{
-    squat 80kg
-    bench 55kg
-    press 37.5kg
-    deadlift 100kg
+    squat "80kg"
+    bench "55kg"
+    press "37.5kg"
+    deadlift "100kg"
   }}
 
   accessories {{
@@ -394,21 +394,21 @@ fn initial_531_files(template: &str) -> Result<BTreeMap<String, String>> {
   units kg
 
   schedule next_workout {{
-    rotation squat_day, bench_day, deadlift_day, press_day
-    suggested_days mon, wed, fri, sat
+    rotation squat_day bench_day deadlift_day press_day
+    suggested_days mon wed fri sat
   }}
 
   training_maxes {{
-    squat 90kg
-    bench 65kg
-    deadlift 110kg
-    press 42.5kg
+    squat "90kg"
+    bench "65kg"
+    deadlift "110kg"
+    press "42.5kg"
   }}
 
   assistance {{
-    push 50 reps
-    pull 50 reps
-    single_leg_core 50 reps
+    push "50 reps"
+    pull "50 reps"
+    single_leg_core "50 reps"
   }}
 }}
 "#
@@ -442,15 +442,15 @@ fn initial_starting_strength_files(template: &str) -> Result<BTreeMap<String, St
   units kg
 
   schedule next_workout {{
-    suggested_days mon, wed, fri
+    suggested_days mon wed fri
   }}
 
   starts {{
-    squat 60kg
-    press 30kg
-    bench 40kg
-    deadlift 80kg
-    power_clean 40kg
+    squat "60kg"
+    press "30kg"
+    bench "40kg"
+    deadlift "80kg"
+    power_clean "40kg"
   }}
 }}
 "#
