@@ -97,7 +97,12 @@ run end-to-end (see below). Until one is set, the app runs on the bundled sample
 
 ## Build & run
 
-Prerequisites: Xcode 16.4+, `xcodegen`, Rust with the iOS targets:
+> **The Rust adapter and the Xcode project are both gitignored build artifacts — a fresh
+> checkout will not compile until you generate them.** Run `build-xcframework.sh` and
+> `xcodegen generate` (in that order) before the first build, or you'll hit
+> `cannot find 'KnurledCore'` / missing-source errors.
+
+Prerequisites: Xcode 16.4+, `xcodegen` (`brew install xcodegen`), Rust with the iOS targets:
 
 ```bash
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
@@ -105,11 +110,21 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 
 ```bash
 cd ios
-./scripts/build-xcframework.sh                                   # → Engine/KnurledCore.xcframework
-xcodegen generate                                                # → Knurled.xcodeproj (gitignored)
+./scripts/build-xcframework.sh                                   # 1. compile Rust core → Engine/KnurledCore.xcframework
+xcodegen generate                                                # 2. generate Knurled.xcodeproj (gitignored)
 xcodebuild -scheme Knurled -destination 'platform=iOS Simulator,name=iPhone 16' build
 xcodebuild -scheme Knurled -destination 'platform=iOS Simulator,name=iPhone 16' test
 ```
+
+**Re-run when things change:**
+
+- Changed anything in `../engine` or `Engine/knurled-ios-ffi`? Re-run
+  `./scripts/build-xcframework.sh`. The xcframework is a *compiled snapshot* of the Rust core —
+  Swift will silently keep using the old engine until you rebuild it (e.g. a stale framework
+  will reject template syntax the current parser accepts).
+- Added, removed, or renamed a Swift source / resource? Re-run `xcodegen generate` so the new
+  file lands in `Knurled.xcodeproj`. The project globs `Knurled/`, but the generated `.pbxproj`
+  is gitignored, so the file is invisible to the build until you regenerate.
 
 The app boots straight onto the bundled `gzclp-repo` sample, so every read/log/skip/correct
 flow is usable in the simulator without GitHub.

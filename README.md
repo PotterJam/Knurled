@@ -39,3 +39,18 @@ cargo run -p knurled-cli -- serve --port 4321
 ```
 
 The MVP command is named `knurled`. It intentionally keeps the FitSpec file model from the spec: `plan.fitspec`, `fitspec.lock`, `patches/*.fitspec`, `logs/**/*.jsonl`, generated `state/current.json`, and generated `build/*.json`.
+
+## Building the iOS app
+
+The iOS app does **not** ship a prebuilt engine. Two artifacts are gitignored and must be
+generated on a fresh checkout, in order, before Xcode will build:
+
+```bash
+cd ios
+./scripts/build-xcframework.sh   # compiles knurled-core (Rust) → Engine/KnurledCore.xcframework
+xcodegen generate                # generates Knurled.xcodeproj from project.yml
+```
+
+Re-run `build-xcframework.sh` after any change to `engine/` or `ios/Engine/knurled-ios-ffi`
+(the framework is a compiled snapshot of the Rust core), and re-run `xcodegen generate` after
+adding or removing source files. See [`ios/README.md`](ios/README.md) for the full workflow.

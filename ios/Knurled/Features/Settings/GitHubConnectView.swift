@@ -116,7 +116,7 @@ struct GitHubConnectView: View {
                 } else {
                     Picker("Repository", selection: selectedRepoBinding) {
                         ForEach(app.github.repos) { repo in
-                            Text(repo.private ? "\(repo.fullName) · Private" : repo.fullName)
+                            Text(repoLabel(repo))
                                 .tag(Optional(repo.id))
                         }
                     }
@@ -126,7 +126,7 @@ struct GitHubConnectView: View {
                         if let repo = selectedRepo { connect(repo) }
                     } label: {
                         HStack {
-                            Label("Connect selected repository", systemImage: "checkmark.circle")
+                            Label(connectButtonTitle, systemImage: "checkmark.circle")
                             if connectingRepo != nil { Spacer(); ProgressView() }
                         }
                     }
@@ -174,6 +174,17 @@ struct GitHubConnectView: View {
         app.github.repos.first { $0.id == selectedRepoID } ?? app.github.repos.first
     }
 
+    private var connectButtonTitle: String {
+        (selectedRepo?.isEmpty ?? false) ? "Initialize selected repository" : "Connect selected repository"
+    }
+
+    private func repoLabel(_ repo: GitHubRepo) -> String {
+        var tags: [String] = []
+        if repo.private { tags.append("Private") }
+        if repo.isEmpty { tags.append("Empty") }
+        return tags.isEmpty ? repo.fullName : "\(repo.fullName) · \(tags.joined(separator: " · "))"
+    }
+
     private var selectedRepoBinding: Binding<GitHubRepo.ID?> {
         Binding(
             get: { selectedRepo?.id },
@@ -190,6 +201,12 @@ struct GitHubConnectView: View {
     }
 
     private func connect(_ repo: GitHubRepo) {
+        // An empty repo can't be pulled — offer to seed it instead of attempting a connect
+        // that would 409. The catch below is a fallback if `size` was stale.
+        if repo.isEmpty {
+            emptyRepoToInitialize = repo
+            return
+        }
         connectingRepo = repo
         Task {
             do {
