@@ -7,7 +7,7 @@ struct RestTimerBar: View {
         if timer.isRunning {
             HStack(spacing: 10) {
                 Image(systemName: "timer")
-                    .foregroundStyle(KnurledTheme.accent)
+                    .foregroundStyle(.tint)
                 Text("Rest")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)

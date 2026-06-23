@@ -17,8 +17,8 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    ENGINE_VERSION, ExecutionInput, RenderedSession, build_outputs, build_repo, read_training_repo,
-    reduce_input, validate_execution_input, validate_repo,
+    ENGINE_VERSION, ExecutionInput, RenderedSession, build_outputs, build_repo, init_training_repo,
+    read_training_repo, reduce_input, validate_execution_input, validate_repo,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -82,6 +82,31 @@ pub extern "C" fn knurled_build_repo(dir: *const c_char, write: c_int) -> *mut c
         };
         match build_repo(dir, write != 0) {
             Ok(outputs) => ok(outputs),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_init_repo(
+    dir: *const c_char,
+    template_ref: *const c_char,
+) -> *mut c_char {
+    guard("knurled_init_repo", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let template_ref = match unsafe { borrow(template_ref) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match init_training_repo(dir, template_ref) {
+            Ok(result) => ok(json!({
+                "root": result.root,
+                "validation": result.validation,
+                "next_workout": result.next_workout,
+            })),
             Err(error) => fail(error),
         }
     })

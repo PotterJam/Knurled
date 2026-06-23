@@ -5,6 +5,11 @@ struct GitHubConnectView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var connectingRepo: GitHubRepo?
+    @State private var selectedRepoID: GitHubRepo.ID?
+    @State private var creatingRepo = false
+    @State private var newRepoName = "my-training"
+    @State private var newRepoTemplate = StarterTemplate.gzclpStandard
+    @State private var newRepoPrivate = true
 
     var body: some View {
         NavigationStack {
@@ -98,33 +103,75 @@ struct GitHubConnectView: View {
                 if app.github.isLoadingRepos {
                     HStack { ProgressView(); Text("Loading repositories…").foregroundStyle(.secondary) }
                 } else if app.github.repos.isEmpty {
+                    Text("No repositories found.")
+                        .foregroundStyle(.secondary)
                     Button("Reload repositories") { Task { await app.github.loadRepos() } }
                 } else {
-                    ForEach(app.github.repos) { repo in
-                        Button {
-                            connect(repo)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(repo.fullName)
-                                    if repo.private {
-                                        Text("Private").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                if connectingRepo == repo {
-                                    ProgressView()
-                                } else if app.activeRepo?.displayName == repo.fullName {
-                                    Image(systemName: "checkmark").foregroundStyle(.tint)
-                                }
-                            }
+                    Picker("Repository", selection: selectedRepoBinding) {
+                        ForEach(app.github.repos) { repo in
+                            Text(repo.private ? "\(repo.fullName) · Private" : repo.fullName)
+                                .tag(Optional(repo.id))
                         }
-                        .disabled(connectingRepo != nil)
+                    }
+                    .pickerStyle(.menu)
+
+                    Button {
+                        if let repo = selectedRepo { connect(repo) }
+                    } label: {
+                        HStack {
+                            Label("Connect selected repository", systemImage: "checkmark.circle")
+                            if connectingRepo != nil { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(connectingRepo != nil || selectedRepo == nil)
+                }
+            }
+            Section("Create starter repository") {
+                TextField("Repository name", text: $newRepoName)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                Picker("Template", selection: $newRepoTemplate) {
+                    ForEach(StarterTemplate.allCases) { template in
+                        VStack(alignment: .leading) {
+                            Text(template.title)
+                            Text(template.reference)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(template)
                     }
                 }
+
+                Toggle("Private repository", isOn: $newRepoPrivate)
+
+                Text(newRepoTemplate.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    createStarterRepo()
+                } label: {
+                    HStack {
+                        Label("Create and connect", systemImage: "plus.circle")
+                        if creatingRepo { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(creatingRepo || newRepoName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             errorSection
         }
+    }
+
+    private var selectedRepo: GitHubRepo? {
+        app.github.repos.first { $0.id == selectedRepoID } ?? app.github.repos.first
+    }
+
+    private var selectedRepoBinding: Binding<GitHubRepo.ID?> {
+        Binding(
+            get: { selectedRepo?.id },
+            set: { selectedRepoID = $0 }
+        )
     }
 
     @ViewBuilder private var errorSection: some View {
@@ -145,6 +192,23 @@ struct GitHubConnectView: View {
                 app.github.errorMessage = error.localizedDescription
             }
             connectingRepo = nil
+        }
+    }
+
+    private func createStarterRepo() {
+        creatingRepo = true
+        Task {
+            do {
+                try await app.createStarterRepository(
+                    name: newRepoName,
+                    template: newRepoTemplate,
+                    isPrivate: newRepoPrivate
+                )
+                dismiss()
+            } catch {
+                app.github.errorMessage = error.localizedDescription
+            }
+            creatingRepo = false
         }
     }
 }
