@@ -34,4 +34,13 @@ import Foundation
         #expect(AppModel.commitMessage(for: event("session_skipped"), timestamp: ts) == "Skip A1 - push forward - 2026-06-24")
         #expect(AppModel.commitMessage(for: event("session_corrected"), timestamp: ts) == "Correct A1 - 2026-06-24")
     }
+
+    @Test func githubCommonHeadersIncludeUserAgent() throws {
+        let url = try #require(URL(string: "https://api.github.com/user"))
+        var request = URLRequest(url: url)
+
+        GitHub.applyCommonHeaders(to: &request)
+
+        #expect(request.value(forHTTPHeaderField: "User-Agent") == GitHub.userAgent)
+    }
 }
