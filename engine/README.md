@@ -60,12 +60,12 @@ engine fallback
 
 This keeps rest configurable for built-in templates, future user-built programs, and contextual plan changes without pushing hidden assumptions into iOS, the workbench, or the CLI.
 
-## Parser Roadmap
+## FitSpec Parser
 
-The current parser is intentionally a short-lived bootstrap parser. It uses simple block extraction and regular expressions because the MVP FitSpec surface is tiny: `plan`, `template`, `schedule`, `starts`, `training_maxes`, `accessories`, simple exercise options, and a few patch forms.
+FitSpec is parsed in `engine/src/parser.rs` with `winnow` parser combinators. The parser is intentionally strict while the language is still pre-production: malformed syntax, unknown plan lines, unsupported patch operations, and missing required `template` or `units` directives fail through the engine `Result` path instead of being converted into defaults.
 
-Do not grow this hand parser into the real FitSpec language.
+The current surface covers `plan`, `template`, `units`, `schedule`, `starts`, `training_maxes`, `accessories`, simple exercise options, rest overrides, lockfile template entries, and the MVP patch operations. The checked-in 5/3/1 `assistance` block is accepted as a known no-op until the model stores it.
 
-When FitSpec becomes something users, the workbench, or LLMs edit heavily, replace `engine/src/parser.rs` with a `winnow` parser. `winnow` is the preferred next step because FitSpec is block-oriented and benefits from Rust-native parser combinators, local parsing functions, precise spans, better diagnostics, and incremental migration from the current parser. A grammar generator such as `lalrpop` may be reasonable later if FitSpec becomes expression-heavy, but `winnow` is the pragmatic forward path for the current language shape.
+The patch language is still intentionally narrow and line-oriented. Multiline patch operations, richer contextual syntax, stronger diagnostics, and a clearer user-authored patch grammar are expected future FitSpec expansion areas; add those by extending the `winnow` grammar and compatibility tests rather than by special-casing individual examples.
 
-Future agents: if you are adding meaningful FitSpec syntax, first consider introducing `winnow` instead of extending regex/block parsing.
+Future agents: add meaningful FitSpec syntax by extending the named `winnow` parsers instead of reintroducing ad hoc regex or block parsing. A grammar generator such as `lalrpop` may be reasonable later if FitSpec becomes expression-heavy, but `winnow` remains the pragmatic path for the current block-oriented language shape.
