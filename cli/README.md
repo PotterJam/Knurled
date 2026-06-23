@@ -3,7 +3,7 @@
 The CLI is a Rust binary that wraps `knurled-core` and operates on a user-owned FitSpec repo.
 
 ```bash
-cargo run -p knurled-cli -- init my-training --template gzcl.p
+cargo run -p knurled-cli -- init my-training --template gzcl.gzclp
 cargo run -p knurled-cli -- validate my-training
 cargo run -p knurled-cli -- build my-training
 cargo run -p knurled-cli -- preview my-training --weeks 4

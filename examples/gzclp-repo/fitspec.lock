@@ -1,5 +1,5 @@
-[templates."gzcl.p"]
+[templates."gzcl.gzclp"]
 version = "1.0.0"
 source = "builtin"
-content_hash = "sha256:d35b90968ec94ee5de3411170c9d76075fc1034c65447d8f84e8ad9567ce68c9"
+content_hash = "sha256:f759b186f5de27cdf86e8846ea8af72e12623fcb5b290d0a4e217dd1971e010c"
 engine_version = "0.1.0"

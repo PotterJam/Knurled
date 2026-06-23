@@ -15,7 +15,7 @@ The `cdylib` target is intentional: the core should be able to grow WASM and Swi
 Implemented in this first pass:
 
 - Minimal FitSpec parser for MVP plan and patch files.
-- Built-in locked templates for `gzcl.p`, `gzcl.p-zero`, `531.basic`, and `531.beginners`.
+- Built-in locked templates for `gzcl.gzclp`, `gzcl.p-zero`, `531.basic`, and `531.beginners`.
 - Canonical JSON IR, rendered session, execution contracts, state projection, validation, simulation, and generated-file checks.
 - GZCLP T1/T2/T3 rendering and reducer coverage.
 - 5/3/1 week rendering and week advancement.
