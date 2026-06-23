@@ -53,7 +53,6 @@ struct ActiveWorkoutView: View {
                 value: Double(workout.completedRequiredCount),
                 total: Double(max(workout.requiredItems.count, 1))
             )
-            .tint(KnurledTheme.accent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
