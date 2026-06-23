@@ -47,9 +47,7 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
 
     for node in body.nodes() {
         match node.name().value() {
-            "template" => {
-                template = Some(parse_template_ref(&node_string_arg(node, "template")?).normalized)
-            }
+            "template" => template = Some(parse_template_directive(node)?),
             "units" => units = Some(parse_units(node)?),
             "schedule" => schedule = parse_schedule(node)?,
             "starts" => starts = normalize_lift_map(parse_pairs(node)?),
@@ -168,6 +166,18 @@ pub fn parse_lock(text: &str) -> Result<Lockfile> {
 // ---------------------------------------------------------------------------
 // Plan sub-parsers
 // ---------------------------------------------------------------------------
+
+/// Accepts both `template "id@version"` and the friendlier
+/// `template "id" version="x"` property form. Both normalize to the same
+/// `id@version` string, so a plan's identity is unaffected by which is used.
+fn parse_template_directive(node: &KdlNode) -> Result<String> {
+    let id = node_string_arg(node, "template")?;
+    let raw = match prop_string(node, "version") {
+        Some(version) if !id.contains('@') => format!("{id}@{version}"),
+        _ => id,
+    };
+    Ok(parse_template_ref(&raw).normalized)
+}
 
 fn parse_units(node: &KdlNode) -> Result<Units> {
     let unit = node_string_arg(node, "units")?;

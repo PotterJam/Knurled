@@ -341,7 +341,7 @@ Example GZCLP plan:
 
 ```kdl
 plan "James GZCLP" {
-  template "gzclp.standard@1.0.0"
+  template "gzclp.standard" version="1.0.0"
   units kg
 
   schedule next_workout {
@@ -369,7 +369,7 @@ Example 5/3/1 plan:
 
 ```kdl
 plan "James 5/3/1" {
-  template "531.beginners@1.0.0"
+  template "531.beginners" version="1.0.0"
   units kg
 
   schedule next_workout {
