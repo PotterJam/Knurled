@@ -25,7 +25,7 @@ enum GitHubError: Error, Sendable, LocalizedError {
     case http(Int, String)
     case expiredToken
     case accessDenied
-    case badResponse
+    case badResponse(String)
     case invalidRepositoryName
     case emptyRepository
 
@@ -39,8 +39,8 @@ enum GitHubError: Error, Sendable, LocalizedError {
             return "The sign-in code expired. Please try again."
         case .accessDenied:
             return "Access was denied during sign-in."
-        case .badResponse:
-            return "Unexpected response from GitHub."
+        case .badResponse(let detail):
+            return "Unexpected response from GitHub. \(detail)"
         case .invalidRepositoryName:
             return "Choose a repository name using letters, numbers, dashes, underscores, or dots."
         case .emptyRepository:

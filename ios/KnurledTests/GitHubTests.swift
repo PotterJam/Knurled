@@ -18,6 +18,23 @@ import Foundation
         #expect(files.contains("logs/2026/06.jsonl"))
     }
 
+    // `all` feeds the initial commit; its paths must be repo-relative and readable back via
+    // `dir.appending(path:)` even when the working dir is a /var symlink (regression: paths
+    // were coming back absolute on device, so the first commit read nothing).
+    @Test func allReturnsReadableRelativePaths() throws {
+        let dir = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let all = GitHubChangedFiles.all(in: dir)
+        #expect(!all.isEmpty)
+        for path in all {
+            #expect(!path.hasPrefix("/"))
+            #expect(FileManager.default.fileExists(
+                atPath: dir.appending(path: path).path(percentEncoded: false)
+            ))
+        }
+    }
+
     @Test func commitMessagesFollowTemplates() {
         func event(_ type: String) -> TrainingEvent {
             TrainingEvent(

@@ -100,9 +100,11 @@ struct GitHubClient: Sendable {
         dir: URL,
         message: String
     ) async throws -> String {
-        guard let firstPath = files.first,
-              let firstData = try? Data(contentsOf: dir.appending(path: firstPath)) else {
-            throw GitHubError.badResponse
+        guard let firstPath = files.first else {
+            throw GitHubError.badResponse("No files to commit (engine produced an empty repo).")
+        }
+        guard let firstData = try? Data(contentsOf: dir.appending(path: firstPath)) else {
+            throw GitHubError.badResponse("Couldn't read \(firstPath) from the working copy.")
         }
 
         _ = try await putContents(
@@ -181,7 +183,7 @@ struct GitHubClient: Sendable {
     @discardableResult
     private func send(_ method: String, _ path: String, body: Data?) async throws -> Data {
         guard let url = URL(string: "https://api.github.com" + path) else {
-            throw GitHubError.badResponse
+            throw GitHubError.badResponse("Invalid request URL for path: \(path)")
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -195,7 +197,9 @@ struct GitHubClient: Sendable {
         }
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw GitHubError.badResponse }
+        guard let http = response as? HTTPURLResponse else {
+            throw GitHubError.badResponse("Non-HTTP response for \(method) \(path).")
+        }
         guard (200..<300).contains(http.statusCode) else {
             throw GitHubError.http(http.statusCode, String(decoding: data, as: UTF8.self))
         }

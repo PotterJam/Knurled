@@ -43,7 +43,7 @@ struct GitHubDeviceFlow: Sendable {
     }
 
     private func post(_ urlString: String, form: [String: String]) async throws -> Data {
-        guard let url = URL(string: urlString) else { throw GitHubError.badResponse }
+        guard let url = URL(string: urlString) else { throw GitHubError.badResponse("Invalid auth URL.") }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         GitHub.applyCommonHeaders(to: &request)
@@ -54,7 +54,7 @@ struct GitHubDeviceFlow: Sendable {
         request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw GitHubError.badResponse }
+        guard let http = response as? HTTPURLResponse else { throw GitHubError.badResponse("Non-HTTP auth response.") }
         guard (200..<300).contains(http.statusCode) else {
             throw GitHubError.http(http.statusCode, String(decoding: data, as: UTF8.self))
         }

@@ -77,8 +77,15 @@ enum GitHubChangedFiles {
     }
 
     static func all(in dir: URL) -> [String] {
+        // Resolve symlinks up front so the enumerator's URLs (iOS hands them back under
+        // /private/var while the working dir is /var/…) are rooted at the same place, then
+        // derive each repo-relative path by dropping the base's path components. String-prefix
+        // stripping was fragile here (symlinks + the directory URL's trailing slash) and left
+        // paths absolute, so the initial commit couldn't read any file back.
+        let base = dir.resolvingSymlinksInPath()
+        let baseComponentCount = base.pathComponents.count
         guard let enumerator = FileManager.default.enumerator(
-            at: dir,
+            at: base,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: []
         ) else { return [] }
@@ -87,9 +94,8 @@ enum GitHubChangedFiles {
         for case let url as URL in enumerator {
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
             else { continue }
-            let relative = url.path(percentEncoded: false)
-                .replacingOccurrences(of: dir.path(percentEncoded: false) + "/", with: "")
-            guard !relative.split(separator: "/").contains(".DS_Store") else { continue }
+            let relative = url.pathComponents.dropFirst(baseComponentCount).joined(separator: "/")
+            guard !relative.isEmpty, !relative.split(separator: "/").contains(".DS_Store") else { continue }
             paths.append(relative)
         }
         return paths.sorted()
@@ -103,7 +109,7 @@ extension AppModel {
     /// with 409. We surface `GitHubError.emptyRepository` so the caller can offer to seed it
     /// with a starter template via `initializeRepository(githubRepo:template:)`.
     func connect(repo githubRepo: GitHubRepo) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse }
+        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
         let dir = try repos.workingDirectory(for: slug)
         let head: String
@@ -136,7 +142,7 @@ extension AppModel {
         template: StarterTemplate,
         isPrivate: Bool = true
     ) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse }
+        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.isValidRepositoryName(name) else { throw GitHubError.invalidRepositoryName }
 
@@ -148,7 +154,7 @@ extension AppModel {
     /// locally, makes the repo's first commit, and makes it the active repo. Shared by the
     /// create-new flow and the "begin an empty repo" flow.
     func initializeRepository(githubRepo: GitHubRepo, template: StarterTemplate) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse }
+        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
         let dir = try repos.workingDirectory(for: slug)
         if FileManager.default.fileExists(atPath: dir.path(percentEncoded: false)) {
