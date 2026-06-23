@@ -21,7 +21,7 @@ struct Args {
 enum Command {
     Init {
         repo: PathBuf,
-        #[arg(long, default_value = "gzclp.standard")]
+        #[arg(long, default_value = knurled_core::DEFAULT_TEMPLATE_ID)]
         template: String,
     },
     Validate {

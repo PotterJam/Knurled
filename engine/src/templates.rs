@@ -7,6 +7,87 @@ use crate::model::{
 
 pub const DEFAULT_TEMPLATE_VERSION: &str = "1.0.0";
 
+/// Metadata describing a built-in template.
+///
+/// `BUILTIN_TEMPLATES` is the single source of truth for template identifiers
+/// and their human-readable names. Renaming a template here propagates
+/// everywhere: engine output, the CLI default, and the iOS app (which only ever
+/// sees names the engine hands it). Change a name in one place, change it
+/// everywhere.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuiltinTemplateInfo {
+    pub id: &'static str,
+    pub version: &'static str,
+    pub display_name: &'static str,
+    pub kind: TemplateKind,
+}
+
+/// Every built-in template the engine knows how to render.
+pub const BUILTIN_TEMPLATES: &[BuiltinTemplateInfo] = &[
+    BuiltinTemplateInfo {
+        id: "gzcl.p",
+        version: DEFAULT_TEMPLATE_VERSION,
+        display_name: "GZCLP",
+        kind: TemplateKind::Gzclp,
+    },
+    BuiltinTemplateInfo {
+        id: "gzcl.p-zero",
+        version: DEFAULT_TEMPLATE_VERSION,
+        display_name: "GZCLP P-Zero",
+        kind: TemplateKind::Gzclp,
+    },
+    BuiltinTemplateInfo {
+        id: "531.basic",
+        version: DEFAULT_TEMPLATE_VERSION,
+        display_name: "5/3/1 Basic",
+        kind: TemplateKind::FiveThreeOne,
+    },
+    BuiltinTemplateInfo {
+        id: "531.beginners",
+        version: DEFAULT_TEMPLATE_VERSION,
+        display_name: "5/3/1 for Beginners",
+        kind: TemplateKind::FiveThreeOne,
+    },
+    BuiltinTemplateInfo {
+        id: "starting-strength.phase1",
+        version: DEFAULT_TEMPLATE_VERSION,
+        display_name: "Starting Strength Phase 1",
+        kind: TemplateKind::StartingStrength,
+    },
+    BuiltinTemplateInfo {
+        id: "starting-strength.phase2",
+        version: DEFAULT_TEMPLATE_VERSION,
+        display_name: "Starting Strength Phase 2",
+        kind: TemplateKind::StartingStrength,
+    },
+    BuiltinTemplateInfo {
+        id: "starting-strength.phase3",
+        version: DEFAULT_TEMPLATE_VERSION,
+        display_name: "Starting Strength Phase 3",
+        kind: TemplateKind::StartingStrength,
+    },
+];
+
+/// The template a fresh repo is seeded with when none is specified.
+pub const DEFAULT_TEMPLATE_ID: &str = "gzcl.p";
+
+/// All built-in templates, for callers (CLI, app) that need to list them.
+pub fn builtin_templates() -> &'static [BuiltinTemplateInfo] {
+    BUILTIN_TEMPLATES
+}
+
+/// Look up a built-in template's metadata by id.
+pub fn builtin_template_info(id: &str) -> Option<&'static BuiltinTemplateInfo> {
+    BUILTIN_TEMPLATES.iter().find(|info| info.id == id)
+}
+
+/// Human-readable display name for a template id, falling back to the id itself.
+pub fn template_display_name(id: &str) -> &str {
+    builtin_template_info(id)
+        .map(|info| info.display_name)
+        .unwrap_or(id)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemplateRef {
     pub id: String,
@@ -30,15 +111,15 @@ pub fn parse_template_ref(input: &str) -> TemplateRef {
 
 pub fn builtin_template(input: &str) -> Result<BuiltinTemplate> {
     let reference = parse_template_ref(input);
-    match (reference.id.as_str(), reference.version.as_str()) {
-        ("gzclp.standard" | "gzclp.pzero", "1.0.0") => Ok(gzclp_template(reference.id)),
-        ("531.basic" | "531.beginners", "1.0.0") => Ok(five_three_one_template(reference.id)),
-        (
-            "starting-strength.phase1" | "starting-strength.phase2" | "starting-strength.phase3",
-            "1.0.0",
-        ) => Ok(starting_strength_template(reference.id)),
-        _ => Err(KnurledError::UnknownTemplate(reference.normalized)),
-    }
+    let kind = builtin_template_info(&reference.id)
+        .filter(|info| info.version == reference.version)
+        .map(|info| info.kind.clone())
+        .ok_or(KnurledError::UnknownTemplate(reference.normalized))?;
+    Ok(match kind {
+        TemplateKind::Gzclp => gzclp_template(reference.id),
+        TemplateKind::FiveThreeOne => five_three_one_template(reference.id),
+        TemplateKind::StartingStrength => starting_strength_template(reference.id),
+    })
 }
 
 pub fn template_hash(input: &str) -> Result<String> {

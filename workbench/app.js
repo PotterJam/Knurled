@@ -1,5 +1,5 @@
 const samplePlan = `plan "James GZCLP" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.p@1.0.0"
   units kg
 
   schedule next_workout {
@@ -111,7 +111,7 @@ function activateTab() {
 
 function parsePlan(text) {
   const name = text.match(/plan\s+"([^"]+)"/)?.[1] || "Untitled Plan";
-  const template = text.match(/template\s+"([^"]+)"/)?.[1] || "gzclp.standard@1.0.0";
+  const template = text.match(/template\s+"([^"]+)"/)?.[1] || "gzcl.p@1.0.0";
   const units = text.match(/\bunits\s+(kg|lb)\b/i)?.[1] || "kg";
   const rotation = parseList(text.match(/rotation\s+([^\n]+)/)?.[1] || "A1, B1, A2, B2");
   const starts = parseBlockMap(text, "starts");
@@ -130,7 +130,7 @@ function parsePlan(text) {
 function validate(model) {
   const errors = [];
   const warnings = [];
-  const gzclp = model.template.startsWith("gzclp.");
+  const gzclp = model.template.startsWith("gzcl.");
 
   if (!model.name) {
     errors.push("Plan name is missing.");
