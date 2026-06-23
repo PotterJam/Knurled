@@ -8,6 +8,7 @@ enum AppTab: Hashable {
 }
 
 struct RootView: View {
+    @Environment(ThemeStore.self) private var theme
     @State private var selection: AppTab = .workout
 
     var body: some View {
@@ -25,10 +26,12 @@ struct RootView: View {
                 SettingsHomeView()
             }
         }
-        .tint(KnurledTheme.accent)
+        .tint(theme.palette.accent)
+        .environment(\.knurledPalette, theme.palette)
     }
 }
 
 #Preview {
     RootView()
+        .environment(ThemeStore())
 }

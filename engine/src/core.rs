@@ -5,7 +5,9 @@ use crate::error::{KnurledError, Result};
 use crate::json::sha256_json;
 use crate::model::*;
 use crate::parser::{normalize_exercise, parse_lock, parse_patch, parse_plan};
-use crate::templates::{builtin_template, lock_entry, parse_template_ref, template_hash};
+use crate::templates::{
+    builtin_template, lock_entry, parse_template_ref, template_display_name, template_hash,
+};
 
 const MAIN_LIFTS: [&str; 4] = ["squat", "bench", "press", "deadlift"];
 
@@ -298,7 +300,7 @@ pub fn reduce_input(
         kind: event_type.into(),
         schema_version: Some(SCHEMA_VERSION.into()),
         program: Some(match compiled.template.kind {
-            TemplateKind::Gzclp => "gzclp".into(),
+            TemplateKind::Gzclp => "gzcl".into(),
             TemplateKind::FiveThreeOne => "531".into(),
             TemplateKind::StartingStrength => "starting_strength".into(),
         }),
@@ -944,7 +946,11 @@ fn render_gzclp_next(compiled: &CompiledPlan, state: &StateProjection) -> Result
             schema_version: SCHEMA_VERSION.into(),
             engine_version: ENGINE_VERSION.into(),
             session_id: session_id.clone(),
-            display_name: format!("GZCLP - {}", session_id.to_ascii_uppercase()),
+            display_name: format!(
+                "{} - {}",
+                template_display_name(&compiled.plan.template_id),
+                session_id.to_ascii_uppercase()
+            ),
             suggested_date: None,
             plan_hash: compiled.plan_hash.clone(),
             template_hash: compiled.template_hash.clone(),
@@ -1286,7 +1292,7 @@ fn rendered_item(
         progression_rule: format!(
             "{}.{}",
             match compiled.template.kind {
-                TemplateKind::Gzclp => "gzclp",
+                TemplateKind::Gzclp => "gzcl",
                 TemplateKind::FiveThreeOne => "531",
                 TemplateKind::StartingStrength => "starting_strength",
             },

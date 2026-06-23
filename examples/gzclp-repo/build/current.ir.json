@@ -7,17 +7,17 @@
   },
   "engine_version": "0.1.0",
   "exercise_options": {},
-  "lock_hash": "sha256:b222aa8c743c1a5813753f0d6755beb7cdb6a50ff8d8556a2c1c8b96321d662e",
+  "lock_hash": "sha256:4e3f4c7a5f8006d56e64b847207197b3af40ea8cc2ffb013bcfa293b143c21eb",
   "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "patches": [],
   "plan": {
     "name": "My GZCLP",
-    "template": "gzclp.standard@1.0.0",
-    "template_id": "gzclp.standard",
+    "template": "gzcl.gzclp@1.0.0",
+    "template_id": "gzcl.gzclp",
     "template_version": "1.0.0",
     "units": "kg"
   },
-  "plan_hash": "sha256:2fae8f45f59ae961edddfa996d092f7431842985938071e0b8edf80e5cdf9194",
+  "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
   "rest": {},
   "schedule": {
     "mode": "next_workout",
@@ -47,7 +47,7 @@
       "a2",
       "b2"
     ],
-    "id": "gzclp.standard",
+    "id": "gzcl.gzclp",
     "increments": {
       "default": 2.5,
       "lower": 5.0,
@@ -173,7 +173,7 @@
     "version": "1.0.0",
     "weeks": []
   },
-  "template_hash": "sha256:7fb133a3013f5ebbf37c649285aa85b220919d7848e4e94696b44979d6eb7371",
+  "template_hash": "sha256:f759b186f5de27cdf86e8846ea8af72e12623fcb5b290d0a4e217dd1971e010c",
   "training_maxes": {},
   "type": "compiled_plan"
 }

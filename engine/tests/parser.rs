@@ -6,7 +6,7 @@ use knurled_core::{
 fn parses_current_plan_fixtures() {
     let gzclp = parse_plan(include_str!("../../examples/gzclp-repo/plan.fitspec")).unwrap();
     assert_eq!(gzclp.name, "My GZCLP");
-    assert_eq!(gzclp.template, "gzclp.standard@1.0.0");
+    assert_eq!(gzclp.template, "gzcl.gzclp@1.0.0");
     assert_eq!(gzclp.units, Units::Kg);
     assert_eq!(gzclp.schedule.rotation, ["a1", "b1", "a2", "b2"]);
     assert_eq!(gzclp.schedule.suggested_days, ["mon", "wed", "fri"]);
@@ -42,7 +42,7 @@ fn parses_current_plan_fixtures() {
 fn exercise_options_parse_same_line_policy_directives() {
     let plan = parse_plan(
         r#"plan "Options" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.gzclp@1.0.0"
   units kg
 
   exercise_options {
@@ -90,7 +90,7 @@ fn malformed_plan_returns_error() {
     assert!(
         parse_plan(
             r#"plan "Missing Units" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.gzclp@1.0.0"
 }
 "#
         )
@@ -99,7 +99,7 @@ fn malformed_plan_returns_error() {
     assert!(
         parse_plan(
             r#"plan "Unknown" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.gzclp@1.0.0"
   units kg
   mystery true
 }
@@ -113,7 +113,7 @@ fn malformed_plan_returns_error() {
 fn rest_policy_accepts_existing_duration_forms() {
     let plan = parse_plan(
         r#"plan "Rest" {
-  template "gzclp.standard@1.0.0"
+  template "gzcl.gzclp@1.0.0"
   units kg
 
   rest {
@@ -140,11 +140,11 @@ fn parses_lockfile_template_entries() {
     let lock = parse_lock(include_str!("../../examples/gzclp-repo/fitspec.lock")).unwrap();
 
     assert_eq!(
-        lock.templates["gzclp.standard"],
+        lock.templates["gzcl.gzclp"],
         LockEntry {
             version: "1.0.0".into(),
             source: "builtin".into(),
-            content_hash: "sha256:7fb133a3013f5ebbf37c649285aa85b220919d7848e4e94696b44979d6eb7371"
+            content_hash: "sha256:f759b186f5de27cdf86e8846ea8af72e12623fcb5b290d0a4e217dd1971e010c"
                 .into(),
             engine_version: "0.1.0".into(),
         }

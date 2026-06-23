@@ -20,4 +20,8 @@ pub use repo::{
     preview_repo, read_training_repo, replay_repo, simulate_repo, validate_repo,
     write_generated_files,
 };
-pub use templates::{builtin_template, lock_entry, render_lockfile, template_hash};
+pub use templates::{
+    BUILTIN_TEMPLATES, BuiltinTemplateInfo, DEFAULT_TEMPLATE_ID, builtin_template,
+    builtin_template_info, builtin_templates, lock_entry, render_lockfile, template_display_name,
+    template_hash,
+};

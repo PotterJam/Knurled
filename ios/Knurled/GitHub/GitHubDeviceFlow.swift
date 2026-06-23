@@ -46,6 +46,7 @@ struct GitHubDeviceFlow: Sendable {
         guard let url = URL(string: urlString) else { throw GitHubError.badResponse }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        GitHub.applyCommonHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         var components = URLComponents()

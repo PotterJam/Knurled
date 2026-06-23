@@ -1,10 +1,22 @@
 import Foundation
 
 enum GitHub {
+    static let userAgent = "Knurled-iOS"
+
+    static func encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        return encoder
+    }
+
     static func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
+    }
+
+    static func applyCommonHeaders(to request: inout URLRequest) {
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     }
 }
 
@@ -14,6 +26,7 @@ enum GitHubError: Error, Sendable, LocalizedError {
     case expiredToken
     case accessDenied
     case badResponse
+    case invalidRepositoryName
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +40,8 @@ enum GitHubError: Error, Sendable, LocalizedError {
             return "Access was denied during sign-in."
         case .badResponse:
             return "Unexpected response from GitHub."
+        case .invalidRepositoryName:
+            return "Choose a repository name using letters, numbers, dashes, underscores, or dots."
         }
     }
 }
@@ -57,6 +72,13 @@ struct GitHubRepo: Codable, Sendable, Identifiable, Hashable {
     let `private`: Bool
 
     var owner: String { String(fullName.split(separator: "/").first ?? "") }
+}
+
+struct GitHubCreateRepoRequest: Encodable {
+    var name: String
+    var description: String
+    var `private`: Bool
+    var autoInit: Bool
 }
 
 struct GitHubRef: Codable, Sendable {

@@ -44,6 +44,9 @@ final class GitHubStore {
             errorMessage = GitHubError.noClientID.errorDescription
             return
         }
+        tokenStore.clear()
+        token = nil
+        repos = []
         errorMessage = nil
         signInTask?.cancel()
         signInTask = Task { await runDeviceFlow(clientID: clientID) }
@@ -88,14 +91,17 @@ final class GitHubStore {
                 deviceCode: code.deviceCode,
                 interval: code.interval
             )
+            let user = try await GitHubClient(token: accessToken).currentUser()
             tokenStore.save(accessToken)
             token = accessToken
-            let user = try await GitHubClient(token: accessToken).currentUser()
             phase = .signedIn(login: user.login)
             await loadRepos()
         } catch is CancellationError {
             // User cancelled; phase already reset by cancelSignIn().
         } catch {
+            tokenStore.clear()
+            token = nil
+            repos = []
             errorMessage = error.localizedDescription
             phase = .signedOut
         }
