@@ -20,14 +20,14 @@ pub fn compile_plan(
     lock_text: &str,
     patch_files: &[PatchFile],
 ) -> Result<CompiledPlan> {
-    let plan = parse_plan(plan_text);
+    let plan = parse_plan(plan_text)?;
     let reference = parse_template_ref(&plan.template);
     let template = builtin_template(&plan.template)?;
-    let lock = parse_lock(lock_text);
+    let lock = parse_lock(lock_text)?;
     let patches = patch_files
         .iter()
         .map(|file| parse_patch(&file.text, file.filename.clone()))
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(CompiledPlan {
         kind: "compiled_plan".into(),

@@ -1,42 +1,47 @@
-use regex::Regex;
+use winnow::Result as ParseResult;
+use winnow::ascii::{space0, space1};
+use winnow::combinator::{delimited, opt, preceded};
+use winnow::error::ContextError;
+use winnow::prelude::*;
+use winnow::token::{take_till, take_while};
 
 // Parser roadmap for humans and future agents:
-// This file is a bootstrap parser for the tiny MVP FitSpec surface. It was kept
-// hand-written to avoid over-designing syntax while the domain model was still
-// moving. Do not grow this into the real language parser. The intended next
-// parser is `winnow`: FitSpec is block-oriented, and winnow gives Rust-native
-// parser combinators, local parsing functions, spans, diagnostics, and an
-// incremental migration path. Use lalrpop only if FitSpec later becomes
-// expression-heavy enough to justify a generated grammar.
+// FitSpec is now parsed with `winnow` rather than the original bootstrap
+// regex/block parser. Keep new syntax as local, named parser functions so the
+// DSL remains readable here. The parser is strict: syntax errors are surfaced
+// through the engine Result path instead of being converted into defaults.
 
+use crate::error::{KnurledError, Result};
 use crate::model::{
     ExerciseAlternative, ExerciseOptions, LockEntry, Lockfile, Map, Patch, PatchOperation, Plan,
     RestPolicy, SCHEMA_VERSION, Schedule, SwapPolicy, Units,
 };
 use crate::templates::parse_template_ref;
 
-pub fn parse_plan(text: &str) -> Plan {
-    let name = first_capture(text, r#"plan\s+"([^"]+)""#).unwrap_or_else(|| "Untitled Plan".into());
-    let template = first_capture(text, r#"template\s+"([^"]+)""#)
+type MarkerParser = fn(&mut &str) -> ParseResult<()>;
+
+pub fn parse_plan(text: &str) -> Result<Plan> {
+    let clean = without_comments(text);
+    let (name, body) = extract_required_named_block(&clean, plan_header, "plan")?;
+    validate_plan_body(&body)?;
+
+    let template = find_unique_line(&body, template_directive, "template")?
         .map(|item| parse_template_ref(&item).normalized)
-        .unwrap_or_else(|| "gzclp.standard@1.0.0".into());
-    let units = match first_capture(text, r"\bunits\s+(kg|lb)\b")
-        .unwrap_or_else(|| "kg".into())
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "lb" => Units::Lb,
-        _ => Units::Kg,
-    };
+        .ok_or_else(|| parse_error("plan is missing required template directive"))?;
+    let units = find_unique_line(&body, units_directive, "units")?
+        .ok_or_else(|| parse_error("plan is missing required units directive"))?;
 
-    let schedule_block = extract_block(text, "schedule next_workout").unwrap_or_default();
-    let starts_block = extract_block(text, "starts").unwrap_or_default();
-    let training_maxes_block = extract_block(text, "training_maxes").unwrap_or_default();
-    let accessories_block = extract_block(text, "accessories").unwrap_or_default();
-    let exercise_options_block = extract_block(text, "exercise_options").unwrap_or_default();
-    let rest_block = extract_block(text, "rest").unwrap_or_default();
+    let schedule_block = extract_optional_unique_block(&body, schedule_marker, "schedule")?;
+    let starts_block = extract_optional_unique_block(&body, starts_marker, "starts")?;
+    let training_maxes_block =
+        extract_optional_unique_block(&body, training_maxes_marker, "training_maxes")?;
+    let accessories_block =
+        extract_optional_unique_block(&body, accessories_marker, "accessories")?;
+    let exercise_options_block =
+        extract_optional_unique_block(&body, exercise_options_marker, "exercise_options")?;
+    let rest_block = extract_optional_unique_block(&body, rest_marker, "rest")?;
 
-    Plan {
+    Ok(Plan {
         kind: "fitspec_plan".into(),
         schema_version: SCHEMA_VERSION.into(),
         name,
@@ -44,94 +49,89 @@ pub fn parse_plan(text: &str) -> Plan {
         units,
         schedule: Schedule {
             mode: "next_workout".into(),
-            rotation: parse_list_line(&schedule_block, "rotation"),
-            suggested_days: parse_list_line(&schedule_block, "suggested_days"),
+            rotation: parse_list_line(&schedule_block, "rotation")?,
+            suggested_days: parse_list_line(&schedule_block, "suggested_days")?,
         },
-        starts: normalize_lift_map(parse_key_value_block(&starts_block)),
-        training_maxes: normalize_lift_map(parse_key_value_block(&training_maxes_block)),
-        accessories: normalize_accessory_map(parse_key_value_block(&accessories_block)),
-        exercise_options: parse_exercise_options(&exercise_options_block),
-        rest: parse_rest_policy(&rest_block),
-    }
+        starts: normalize_lift_map(parse_key_value_block(&starts_block, "starts")?),
+        training_maxes: normalize_lift_map(parse_key_value_block(
+            &training_maxes_block,
+            "training_maxes",
+        )?),
+        accessories: normalize_accessory_map(parse_key_value_block(
+            &accessories_block,
+            "accessories",
+        )?),
+        exercise_options: parse_exercise_options(&exercise_options_block)?,
+        rest: parse_rest_policy(&rest_block)?,
+    })
 }
 
-pub fn parse_lock(text: &str) -> Lockfile {
+pub fn parse_lock(text: &str) -> Result<Lockfile> {
+    let clean = without_comments(text);
     let mut templates = Map::new();
-    let section_re = Regex::new(r#"(?s)\[templates\."([^"]+)"\](.*?)(?:\n\[|$)"#).unwrap();
-    for capture in section_re.captures_iter(text) {
-        let id = capture[1].to_owned();
-        let body = capture.get(2).map(|m| m.as_str()).unwrap_or_default();
-        let pairs = parse_toml_pairs(body);
-        templates.insert(
-            id,
-            LockEntry {
-                version: pairs.get("version").cloned().unwrap_or_default(),
-                source: pairs.get("source").cloned().unwrap_or_default(),
-                content_hash: pairs.get("content_hash").cloned().unwrap_or_default(),
-                engine_version: pairs.get("engine_version").cloned().unwrap_or_default(),
-            },
-        );
-    }
+    let mut current_id: Option<String> = None;
+    let mut current_pairs = Map::new();
 
-    Lockfile {
+    for (index, line) in clean.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(id) = parse_line(line, template_section) {
+            insert_lock_entry(&mut templates, current_id.take(), &current_pairs);
+            current_pairs.clear();
+            current_id = Some(id);
+        } else if current_id.is_some()
+            && let Some((key, value)) = parse_line(line, toml_pair)
+        {
+            current_pairs.insert(key, value);
+        } else {
+            return Err(parse_error(format!(
+                "invalid lockfile syntax at line {}: {line}",
+                index + 1
+            )));
+        }
+    }
+    insert_lock_entry(&mut templates, current_id, &current_pairs);
+
+    Ok(Lockfile {
         kind: "fitspec_lock".into(),
         schema_version: SCHEMA_VERSION.into(),
         templates,
-    }
+    })
 }
 
-pub fn parse_patch(text: &str, filename: impl Into<String>) -> Patch {
+pub fn parse_patch(text: &str, filename: impl Into<String>) -> Result<Patch> {
     let filename = filename.into();
-    let name = first_capture(text, r#"patch\s+"([^"]+)""#)
-        .unwrap_or_else(|| filename.trim_end_matches(".fitspec").to_owned());
-    let description = first_capture(text, r#"description\s+"([^"]+)""#).unwrap_or_default();
-    let active_from = first_capture(text, r"\bactive\s+from\s+([0-9-]+)");
-    let expires = first_capture(text, r"\bexpires\s+([0-9-]+)");
+    let clean = without_comments(text);
+    let (name, body) = extract_required_named_block(&clean, patch_header, "patch")?;
+    let description =
+        find_unique_line(&body, description_directive, "description")?.unwrap_or_default();
+    let active_from = find_unique_line(&body, active_from_directive, "active from")?;
+    let expires = find_unique_line(&body, expires_directive, "expires")?;
     let mut operations = Vec::new();
 
-    let replace_re = Regex::new(
-        r#"^replace\s+exercise\s+([A-Za-z0-9_]+)\s+with\s+([A-Za-z0-9_]+)\s+where\s+lane\s+matches\s+"([^"]+)""#,
-    )
-    .unwrap();
-    let conditioning_re =
-        Regex::new(r#"^add\s+conditioning\s+([A-Za-z]+)\s*\{\s*([^}]+)\s*\}"#).unwrap();
-    let cap_re =
-        Regex::new(r#"^cap\s+(.+?)\s+(?:at\s+)?(.+?)(?:\s+where\s+lane\s+matches\s+"([^"]+)")?$"#)
-            .unwrap();
-
-    for raw in without_comments(text).lines() {
+    for (index, raw) in body.lines().enumerate() {
         let line = raw.trim();
-        if line.is_empty() || line == "{" || line == "}" || line.starts_with("patch ") {
+        if line.is_empty() {
             continue;
         }
-        if let Some(capture) = replace_re.captures(line) {
-            operations.push(PatchOperation::ReplaceExercise {
-                from: normalize_exercise(&capture[1]),
-                to: normalize_exercise(&capture[2]),
-                lane_regex: capture[3].to_owned(),
-            });
-        } else if let Some(capture) = conditioning_re.captures(line) {
-            operations.push(PatchOperation::AddConditioning {
-                day: capture[1].to_ascii_lowercase(),
-                activity: capture[2].trim().to_owned(),
-            });
-        } else if let Some(capture) = cap_re.captures(line).filter(|_| line.starts_with("cap ")) {
-            operations.push(PatchOperation::Cap {
-                target: capture[1].trim().to_owned(),
-                value: capture[2].trim().to_owned(),
-                lane_regex: capture.get(3).map(|m| m.as_str().to_owned()),
-            });
-        } else if matches!(
-            line.split_whitespace().next(),
-            Some("add" | "cap" | "block" | "change" | "enable" | "disable" | "temporary")
-        ) {
-            operations.push(PatchOperation::Raw {
-                text: line.to_owned(),
-            });
+        if parse_line(line, description_directive).is_some()
+            || parse_line(line, active_from_directive).is_some()
+            || parse_line(line, expires_directive).is_some()
+        {
+            continue;
+        } else if let Some(operation) = parse_line(line, patch_operation) {
+            operations.push(operation);
+        } else {
+            return Err(parse_error(format!(
+                "invalid patch syntax in {filename} at line {}: {line}",
+                index + 1
+            )));
         }
     }
 
-    Patch {
+    Ok(Patch {
         kind: "fitspec_patch".into(),
         schema_version: SCHEMA_VERSION.into(),
         name,
@@ -140,15 +140,42 @@ pub fn parse_patch(text: &str, filename: impl Into<String>) -> Patch {
         active_from,
         expires,
         operations,
-    }
+    })
 }
 
-fn first_capture(text: &str, pattern: &str) -> Option<String> {
-    Regex::new(pattern)
-        .ok()?
-        .captures(text)
-        .and_then(|capture| capture.get(1))
-        .map(|capture| capture.as_str().trim().to_owned())
+fn parse_line<T>(line: &str, parser: fn(&mut &str) -> ParseResult<T>) -> Option<T> {
+    let mut input = line.trim();
+    let output = parser(&mut input).ok()?;
+    input.trim().is_empty().then_some(output)
+}
+
+fn find_line<T>(text: &str, parser: fn(&mut &str) -> ParseResult<T>) -> Option<T> {
+    text.lines().find_map(|line| parse_line(line, parser))
+}
+
+fn find_unique_line<T>(
+    text: &str,
+    parser: fn(&mut &str) -> ParseResult<T>,
+    label: &str,
+) -> Result<Option<T>> {
+    let mut found = None;
+    for line in text.lines() {
+        let Some(value) = parse_line(line, parser) else {
+            continue;
+        };
+        if found.is_some() {
+            return Err(parse_error(format!("duplicate {label} directive")));
+        }
+        found = Some(value);
+    }
+    Ok(found)
+}
+
+fn find_in_text<T>(text: &str, parser: fn(&mut &str) -> ParseResult<T>) -> Option<T> {
+    text.char_indices().find_map(|(offset, _)| {
+        let mut input = &text[offset..];
+        parser(&mut input).ok()
+    })
 }
 
 fn without_comments(text: &str) -> String {
@@ -158,10 +185,202 @@ fn without_comments(text: &str) -> String {
         .join("\n")
 }
 
-fn extract_block(text: &str, marker: &str) -> Option<String> {
-    let text = without_comments(text);
-    let marker_index = text.find(marker)?;
-    let open = text[marker_index..].find('{')? + marker_index;
+fn parse_error(message: impl Into<String>) -> KnurledError {
+    KnurledError::Parse(message.into())
+}
+
+fn extract_required_named_block<T>(
+    text: &str,
+    parser: fn(&mut &str) -> ParseResult<T>,
+    label: &str,
+) -> Result<(T, String)> {
+    let start = text
+        .find(|ch: char| !ch.is_whitespace())
+        .ok_or_else(|| parse_error(format!("missing {label} block")))?;
+    let mut input = &text[start..];
+    let name = parser(&mut input).map_err(|_| parse_error(format!("invalid {label} header")))?;
+    let marker_end = text.len().saturating_sub(input.len());
+    let (body, close) = extract_block_at(text, marker_end, label)?;
+    if !text[close + 1..].trim().is_empty() {
+        return Err(parse_error(format!(
+            "unexpected content after closing {label} block"
+        )));
+    }
+    Ok((name, body))
+}
+
+fn plan_header(input: &mut &str) -> ParseResult<String> {
+    quoted_after_keyword(input, "plan")
+}
+
+fn patch_header(input: &mut &str) -> ParseResult<String> {
+    quoted_after_keyword(input, "patch")
+}
+
+fn template_directive(input: &mut &str) -> ParseResult<String> {
+    quoted_after_keyword(input, "template")
+}
+
+fn description_directive(input: &mut &str) -> ParseResult<String> {
+    quoted_after_keyword(input, "description")
+}
+
+fn units_directive(input: &mut &str) -> ParseResult<Units> {
+    keyword_with_space(input, "units")?;
+    let unit = bare_word(input)?;
+    Ok(match unit.to_ascii_lowercase().as_str() {
+        "lb" => Units::Lb,
+        _ => Units::Kg,
+    })
+}
+
+fn active_from_directive(input: &mut &str) -> ParseResult<String> {
+    keyword_with_space(input, "active")?;
+    keyword(input, "from")?;
+    space1.parse_next(input)?;
+    date_token(input)
+}
+
+fn expires_directive(input: &mut &str) -> ParseResult<String> {
+    keyword_with_space(input, "expires")?;
+    date_token(input)
+}
+
+fn quoted_after_keyword(input: &mut &str, word: &'static str) -> ParseResult<String> {
+    keyword_with_space(input, word)?;
+    quoted_string(input)
+}
+
+fn keyword_with_space(input: &mut &str, word: &'static str) -> ParseResult<()> {
+    marker_word(input, word)?;
+    space1.parse_next(input)?;
+    Ok(())
+}
+
+fn keyword(input: &mut &str, mut word: &'static str) -> ParseResult<()> {
+    word.parse_next(input)?;
+    Ok(())
+}
+
+fn quoted_string(input: &mut &str) -> ParseResult<String> {
+    delimited('"', take_till(0.., '"'), '"')
+        .map(str::to_owned)
+        .parse_next(input)
+}
+
+fn date_token(input: &mut &str) -> ParseResult<String> {
+    take_while(1.., |ch: char| ch.is_ascii_digit() || ch == '-')
+        .map(str::to_owned)
+        .parse_next(input)
+}
+
+fn bare_word<'s>(input: &mut &'s str) -> ParseResult<&'s str> {
+    take_while(1.., |ch: char| {
+        !ch.is_whitespace() && ch != '{' && ch != '}' && ch != ','
+    })
+    .parse_next(input)
+}
+
+fn exercise_identifier<'s>(input: &mut &'s str) -> ParseResult<&'s str> {
+    take_while(1.., |ch: char| ch.is_ascii_alphanumeric() || ch == '_').parse_next(input)
+}
+
+fn line_value(input: &mut &str) -> ParseResult<String> {
+    take_till(0.., |ch| ch == '\r' || ch == '\n')
+        .map(|value: &str| value.trim().trim_end_matches(',').trim().to_owned())
+        .parse_next(input)
+}
+
+fn key_value_line(input: &mut &str) -> ParseResult<(String, String)> {
+    space0.parse_next(input)?;
+    let key = bare_word(input)?;
+    space1.parse_next(input)?;
+    let value = line_value(input)?;
+    if value.is_empty() {
+        fail(input)
+    } else {
+        Ok((key.to_owned(), value))
+    }
+}
+
+fn template_section(input: &mut &str) -> ParseResult<String> {
+    space0.parse_next(input)?;
+    '['.parse_next(input)?;
+    "templates.".parse_next(input)?;
+    let id = quoted_string(input)?;
+    ']'.parse_next(input)?;
+    Ok(id)
+}
+
+fn toml_pair(input: &mut &str) -> ParseResult<(String, String)> {
+    space0.parse_next(input)?;
+    let key = take_while(1.., |ch: char| {
+        ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' || ch == '-'
+    })
+    .parse_next(input)?;
+    space0.parse_next(input)?;
+    '='.parse_next(input)?;
+    space0.parse_next(input)?;
+    let value = quoted_string(input)?;
+    Ok((key.to_owned(), value))
+}
+
+fn schedule_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "schedule")?;
+    space1.parse_next(input)?;
+    keyword(input, "next_workout")?;
+    Ok(())
+}
+
+fn starts_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "starts")
+}
+
+fn training_maxes_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "training_maxes")
+}
+
+fn accessories_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "accessories")
+}
+
+fn exercise_options_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "exercise_options")
+}
+
+fn rest_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "rest")
+}
+
+fn assistance_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "assistance")
+}
+
+fn marker_word(input: &mut &str, mut word: &'static str) -> ParseResult<()> {
+    space0.parse_next(input)?;
+    word.parse_next(input)?;
+    Ok(())
+}
+
+fn extract_optional_unique_block(text: &str, marker: MarkerParser, label: &str) -> Result<String> {
+    let matches = find_top_level_marker_ends(text, marker);
+    match matches.as_slice() {
+        [] => Ok(String::new()),
+        [marker_end] => extract_block_at(text, *marker_end, label).map(|(body, _)| body),
+        _ => Err(parse_error(format!("duplicate {label} block"))),
+    }
+}
+
+fn extract_block_at(text: &str, marker_end: usize, label: &str) -> Result<(String, usize)> {
+    let open = text[marker_end..]
+        .find('{')
+        .map(|offset| offset + marker_end)
+        .ok_or_else(|| parse_error(format!("{label} block is missing '{{'")))?;
+    if !text[marker_end..open].trim().is_empty() {
+        return Err(parse_error(format!(
+            "unexpected content before {label} block opening brace"
+        )));
+    }
     let mut depth = 1;
     for (offset, ch) in text[open + 1..].char_indices() {
         match ch {
@@ -170,161 +389,429 @@ fn extract_block(text: &str, marker: &str) -> Option<String> {
                 depth -= 1;
                 if depth == 0 {
                     let close = open + 1 + offset;
-                    return Some(text[open + 1..close].to_owned());
+                    return Ok((text[open + 1..close].to_owned(), close));
                 }
             }
             _ => {}
         }
     }
-    Some(text[open + 1..].to_owned())
+    Err(parse_error(format!(
+        "{label} block is missing closing '}}'"
+    )))
 }
 
-fn parse_list_line(block: &str, key: &str) -> Vec<String> {
-    block
-        .lines()
-        .find_map(|line| {
-            let line = line.trim();
-            line.strip_prefix(key).map(|value| {
-                value
-                    .split([',', ' ', '\t'])
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-            })
-        })
-        .into_iter()
-        .flatten()
-        .map(|item| item.to_ascii_lowercase())
-        .collect()
+fn find_marker_end(text: &str, marker: MarkerParser) -> Option<usize> {
+    text.char_indices()
+        .find_map(|(offset, _)| marker_end_at(text, marker, offset))
 }
 
-fn parse_key_value_block(block: &str) -> Map<String> {
-    block
-        .lines()
-        .filter_map(|line| {
-            let mut parts = line.trim().splitn(2, char::is_whitespace);
-            let key = parts.next()?.trim();
-            let value = parts.next()?.trim().trim_end_matches(',');
-            (!key.is_empty() && !value.is_empty()).then(|| (key.to_owned(), value.to_owned()))
-        })
-        .collect()
+fn marker_end_at(text: &str, marker: MarkerParser, offset: usize) -> Option<usize> {
+    let mut input = &text[offset..];
+    marker(&mut input)
+        .ok()
+        .map(|()| text.len().saturating_sub(input.len()))
 }
 
-fn parse_toml_pairs(block: &str) -> Map<String> {
-    let pair_re = Regex::new(r#"^([A-Za-z0-9_.-]+)\s*=\s*"([^"]*)"\s*$"#).unwrap();
-    block
-        .lines()
-        .filter_map(|line| {
-            let capture = pair_re.captures(line.trim())?;
-            Some((capture[1].to_owned(), capture[2].to_owned()))
-        })
-        .collect()
-}
-
-fn parse_exercise_options(block: &str) -> Map<ExerciseOptions> {
-    let slot_re = Regex::new(r#"(?s)slot\s+"([^"]+)"\s*\{(.*?)\n\s*\}"#).unwrap();
-    let alt_re = Regex::new(r#"(?s)([A-Za-z0-9_]+)\s*\{(.*?)\}"#).unwrap();
-    let mut options = Map::new();
-
-    for slot_capture in slot_re.captures_iter(block) {
-        let slot_id = slot_capture[1].to_ascii_lowercase();
-        let slot_block = slot_capture[2].to_owned();
-        let primary = first_capture(&slot_block, r"\bprimary\s+([A-Za-z0-9_]+)")
-            .map(|item| normalize_exercise(&item))
-            .unwrap_or_default();
-        let alternatives = alt_re
-            .captures_iter(&slot_block)
-            .filter_map(|capture| {
-                let option_id = normalize_exercise(&capture[1]);
-                (option_id != "alternatives").then(|| ExerciseAlternative {
-                    option_id: option_id.clone(),
-                    exercise: option_id,
-                    label: first_capture(&capture[2], r#"label\s+"([^"]+)""#)
-                        .unwrap_or_else(|| capture[1].to_owned()),
-                    policy: match first_capture(&capture[2], r"\bpolicy\s+([A-Za-z0-9_]+)")
-                        .unwrap_or_else(|| "tracking_only".into())
-                        .as_str()
-                    {
-                        "progression_equivalent" => SwapPolicy::ProgressionEquivalent,
-                        _ => SwapPolicy::TrackingOnly,
-                    },
-                })
-            })
-            .collect();
-        options.insert(
-            slot_id,
-            ExerciseOptions {
-                primary,
-                alternatives,
-            },
-        );
+fn find_top_level_marker_ends(text: &str, marker: MarkerParser) -> Vec<usize> {
+    let mut matches = Vec::new();
+    let mut depth: isize = 0;
+    let mut offset = 0;
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if depth == 0 {
+            let line_offset = offset + line.len().saturating_sub(trimmed.len());
+            if let Some(marker_end) = marker_end_at(text, marker, line_offset) {
+                matches.push(marker_end);
+            }
+        }
+        depth += line.chars().filter(|ch| *ch == '{').count() as isize;
+        depth -= line.chars().filter(|ch| *ch == '}').count() as isize;
+        offset += line.len() + 1;
     }
-
-    options
+    matches
 }
 
-fn parse_rest_policy(block: &str) -> RestPolicy {
-    let mut policy = RestPolicy::default();
-
-    let clean = without_comments(block);
-    for raw in clean.lines() {
+fn validate_plan_body(body: &str) -> Result<()> {
+    let mut depth: isize = 0;
+    for (index, raw) in body.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() {
             continue;
         }
+        if depth == 0
+            && parse_line(line, template_directive).is_none()
+            && parse_line(line, units_directive).is_none()
+            && !line_starts_block(line, schedule_marker)
+            && !line_starts_block(line, starts_marker)
+            && !line_starts_block(line, training_maxes_marker)
+            && !line_starts_block(line, accessories_marker)
+            && !line_starts_block(line, exercise_options_marker)
+            && !line_starts_block(line, rest_marker)
+            && !line_starts_block(line, assistance_marker)
+        {
+            return Err(parse_error(format!(
+                "invalid plan syntax at line {}: {line}",
+                index + 1
+            )));
+        }
+        depth += line.chars().filter(|ch| *ch == '{').count() as isize;
+        depth -= line.chars().filter(|ch| *ch == '}').count() as isize;
+        if depth < 0 {
+            return Err(parse_error(format!(
+                "unexpected closing brace in plan at line {}",
+                index + 1
+            )));
+        }
+    }
+    if depth != 0 {
+        return Err(parse_error("plan has an unclosed nested block"));
+    }
+    Ok(())
+}
 
-        let parts = line.split_whitespace().collect::<Vec<_>>();
-        let Some(raw_scope) = parts.first() else {
-            continue;
-        };
-        let scope = raw_scope.to_ascii_lowercase();
+fn line_starts_block(line: &str, marker: MarkerParser) -> bool {
+    let mut input = line;
+    marker(&mut input).is_ok() && input.trim_start().starts_with('{')
+}
 
-        if scope == "default" {
-            if let Some(seconds) = parse_rest_seconds(&parts[1..]) {
-                policy.default_seconds = Some(seconds);
-            }
+fn parse_list_line(block: &str, key: &str) -> Result<Vec<String>> {
+    let mut result = None;
+    for (index, line) in block.lines().enumerate() {
+        if line.trim().is_empty() {
             continue;
         }
-
-        let Some(key) = parts.get(1) else {
-            continue;
+        let Some((line_key, value)) = parse_line(line, key_value_line) else {
+            return Err(parse_error(format!(
+                "invalid schedule syntax at line {}: {}",
+                index + 1,
+                line.trim()
+            )));
         };
-        let rest = parts.get(2..).unwrap_or_default();
-        let Some(seconds) = parse_rest_seconds(rest) else {
-            continue;
-        };
-        let key = normalize_rest_key(&scope, key);
+        if !matches!(line_key.as_str(), "rotation" | "suggested_days") {
+            return Err(parse_error(format!(
+                "unknown schedule directive at line {}: {line_key}",
+                index + 1
+            )));
+        }
+        if line_key == key {
+            if result.is_some() {
+                return Err(parse_error(format!("duplicate schedule {key} directive")));
+            }
+            result = Some(
+                value
+                    .split([',', ' ', '\t'])
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_ascii_lowercase)
+                    .collect(),
+            );
+        }
+    }
+    Ok(result.unwrap_or_default())
+}
 
-        match scope.as_str() {
-            "tier" => {
-                policy.by_tier.insert(key, seconds);
+fn parse_key_value_block(block: &str, label: &str) -> Result<Map<String>> {
+    let mut values = Map::new();
+    for (index, line) in block.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Some((key, value)) = parse_line(line, key_value_line) else {
+            return Err(parse_error(format!(
+                "invalid {label} syntax at line {}: {}",
+                index + 1,
+                line.trim()
+            )));
+        };
+        if values.insert(key.clone(), value).is_some() {
+            return Err(parse_error(format!("duplicate {label} key: {key}")));
+        }
+    }
+    Ok(values)
+}
+
+fn parse_exercise_options(block: &str) -> Result<Map<ExerciseOptions>> {
+    validate_exercise_options_block(block)?;
+    let mut options = Map::new();
+    let mut input = block;
+
+    while let Some((slot_id, slot_block, rest)) = take_next_slot(input) {
+        input = rest;
+        let primary = find_line(&slot_block, primary_directive)
+            .map(|item| normalize_exercise(&item))
+            .unwrap_or_default();
+        let alternatives = parse_alternatives(&slot_block);
+        let slot_id = slot_id.to_ascii_lowercase();
+        if options
+            .insert(
+                slot_id.clone(),
+                ExerciseOptions {
+                    primary,
+                    alternatives,
+                },
+            )
+            .is_some()
+        {
+            return Err(parse_error(format!(
+                "duplicate exercise_options slot: {slot_id}"
+            )));
+        }
+    }
+
+    Ok(options)
+}
+
+fn validate_exercise_options_block(block: &str) -> Result<()> {
+    let mut depth: isize = 0;
+    for (index, raw) in block.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+        match depth {
+            0 if line_starts_slot_block(line) => {}
+            1 if parse_line(line, primary_directive).is_some() => {}
+            1 if line_starts_exercise_block(line) => {}
+            1 if line_starts_block(line, alternatives_marker) => {}
+            2 if parse_line(line, label_directive).is_some() => {}
+            2 if parse_line(line, policy_directive).is_some() => {}
+            _ if line == "}" => {}
+            _ => {
+                return Err(parse_error(format!(
+                    "invalid exercise_options syntax at line {}: {line}",
+                    index + 1
+                )));
             }
-            "slot" => {
-                policy.by_slot.insert(key, seconds);
-            }
-            "lane" => {
-                policy.by_lane.insert(key, seconds);
-            }
-            "exercise" => {
-                policy.by_exercise.insert(key, seconds);
+        }
+        depth += line.chars().filter(|ch| *ch == '{').count() as isize;
+        depth -= line.chars().filter(|ch| *ch == '}').count() as isize;
+        if depth < 0 {
+            return Err(parse_error(format!(
+                "unexpected closing brace in exercise_options at line {}",
+                index + 1
+            )));
+        }
+    }
+    if depth != 0 {
+        return Err(parse_error("exercise_options has an unclosed nested block"));
+    }
+    Ok(())
+}
+
+fn take_next_slot(input: &str) -> Option<(String, String, &str)> {
+    let marker_end = find_marker_end(input, slot_marker)?;
+    let mut header = input[marker_end..].trim_start();
+    let slot_id = quoted_string(&mut header).ok()?;
+    let body_start = input.len().saturating_sub(header.len());
+    let open = input[body_start..].find('{')? + body_start;
+    let close = find_matching_brace(input, open);
+    let body = input[open + 1..close].to_owned();
+    let rest = input.get(close + 1..).unwrap_or_default();
+    Some((slot_id, body, rest))
+}
+
+fn slot_marker(input: &mut &str) -> ParseResult<()> {
+    space0.parse_next(input)?;
+    "slot".parse_next(input)?;
+    space1.parse_next(input)?;
+    Ok(())
+}
+
+fn alternatives_marker(input: &mut &str) -> ParseResult<()> {
+    marker_word(input, "alternatives")
+}
+
+fn primary_directive(input: &mut &str) -> ParseResult<String> {
+    space0.parse_next(input)?;
+    "primary".parse_next(input)?;
+    space1.parse_next(input)?;
+    exercise_identifier.map(str::to_owned).parse_next(input)
+}
+
+fn parse_alternatives(block: &str) -> Vec<ExerciseAlternative> {
+    let mut alternatives = Vec::new();
+    let mut input = block;
+
+    while let Some((option_id, body, rest)) = take_next_alternative(input) {
+        input = rest;
+        if option_id == "alternatives" {
+            alternatives.extend(parse_alternatives(&body));
+            continue;
+        }
+        let exercise = normalize_exercise(&option_id);
+        alternatives.push(ExerciseAlternative {
+            option_id: exercise.clone(),
+            exercise,
+            label: find_in_text(&body, label_directive).unwrap_or(option_id),
+            policy: find_in_text(&body, policy_directive).unwrap_or(SwapPolicy::TrackingOnly),
+        });
+    }
+
+    alternatives
+}
+
+fn take_next_alternative(input: &str) -> Option<(String, String, &str)> {
+    let marker_start = find_exercise_block_start(input)?;
+    let mut header = &input[marker_start..];
+    let option_id = exercise_identifier
+        .map(str::to_owned)
+        .parse_next(&mut header)
+        .ok()?;
+    let consumed = input.len().saturating_sub(header.len());
+    let trimmed = header.trim_start();
+    let open = consumed + header.len().saturating_sub(trimmed.len());
+    if !trimmed.starts_with('{') {
+        return None;
+    }
+    let close = find_matching_brace(input, open);
+    let body = input[open + 1..close].to_owned();
+    let rest = input.get(close + 1..).unwrap_or_default();
+    Some((option_id, body, rest))
+}
+
+fn find_exercise_block_start(input: &str) -> Option<usize> {
+    input.char_indices().find_map(|(offset, _)| {
+        let mut cursor = &input[offset..];
+        exercise_identifier.parse_next(&mut cursor).ok()?;
+        cursor.trim_start().starts_with('{').then_some(offset)
+    })
+}
+
+fn line_starts_exercise_block(line: &str) -> bool {
+    let mut input = line;
+    exercise_identifier.parse_next(&mut input).is_ok() && input.trim_start().starts_with('{')
+}
+
+fn line_starts_slot_block(line: &str) -> bool {
+    let mut input = line;
+    slot_marker(&mut input).is_ok()
+        && quoted_string(&mut input).is_ok()
+        && input.trim_start().starts_with('{')
+}
+
+fn find_matching_brace(input: &str, open: usize) -> usize {
+    let mut depth = 1;
+    for (offset, ch) in input[open + 1..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return open + 1 + offset;
+                }
             }
             _ => {}
         }
     }
-
-    policy
+    input.len()
 }
 
-fn parse_rest_seconds(parts: &[&str]) -> Option<u32> {
-    let value = parts.first()?.trim().to_ascii_lowercase();
-    let unit = parts.get(1).map(|item| item.trim().to_ascii_lowercase());
+fn label_directive(input: &mut &str) -> ParseResult<String> {
+    space0.parse_next(input)?;
+    "label".parse_next(input)?;
+    space1.parse_next(input)?;
+    quoted_string(input)
+}
 
-    if let Some(unit) = unit
-        && let Some(seconds) = parse_rest_seconds_with_unit(&value, &unit)
-    {
-        return Some(seconds);
+fn policy_directive(input: &mut &str) -> ParseResult<SwapPolicy> {
+    space0.parse_next(input)?;
+    "policy".parse_next(input)?;
+    space1.parse_next(input)?;
+    let policy = exercise_identifier(input)?;
+    Ok(match policy {
+        "progression_equivalent" => SwapPolicy::ProgressionEquivalent,
+        _ => SwapPolicy::TrackingOnly,
+    })
+}
+
+fn parse_rest_policy(block: &str) -> Result<RestPolicy> {
+    let mut policy = RestPolicy::default();
+
+    for (index, raw) in block.lines().enumerate() {
+        if raw.trim().is_empty() {
+            continue;
+        };
+        let Some(line) = parse_line(raw, rest_line) else {
+            return Err(parse_error(format!(
+                "invalid rest syntax at line {}: {}",
+                index + 1,
+                raw.trim()
+            )));
+        };
+        match line {
+            RestLine::Default(seconds) => policy.default_seconds = Some(seconds),
+            RestLine::Scoped {
+                scope,
+                key,
+                seconds,
+            } => {
+                let key = normalize_rest_key(&scope, &key);
+                match scope.as_str() {
+                    "tier" => {
+                        policy.by_tier.insert(key, seconds);
+                    }
+                    "slot" => {
+                        policy.by_slot.insert(key, seconds);
+                    }
+                    "lane" => {
+                        policy.by_lane.insert(key, seconds);
+                    }
+                    "exercise" => {
+                        policy.by_exercise.insert(key, seconds);
+                    }
+                    _ => {
+                        return Err(parse_error(format!(
+                            "unknown rest scope at line {}: {scope}",
+                            index + 1
+                        )));
+                    }
+                }
+            }
+        }
     }
 
-    parse_rest_seconds_value(&value)
+    Ok(policy)
+}
+
+enum RestLine {
+    Default(u32),
+    Scoped {
+        scope: String,
+        key: String,
+        seconds: u32,
+    },
+}
+
+fn rest_line(input: &mut &str) -> ParseResult<RestLine> {
+    space0.parse_next(input)?;
+    let scope = bare_word(input)?.to_ascii_lowercase();
+    space1.parse_next(input)?;
+    if scope == "default" {
+        let seconds = rest_seconds(input)?;
+        return Ok(RestLine::Default(seconds));
+    }
+
+    let key = bare_word(input)?.to_owned();
+    space1.parse_next(input)?;
+    let seconds = rest_seconds(input)?;
+    Ok(RestLine::Scoped {
+        scope,
+        key,
+        seconds,
+    })
+}
+
+fn rest_seconds(input: &mut &str) -> ParseResult<u32> {
+    let value = bare_word(input)?.to_ascii_lowercase();
+    let unit = opt(preceded(space1, bare_word)).parse_next(input)?;
+
+    if let Some(unit) = unit
+        && let Some(seconds) = parse_rest_seconds_with_unit(&value, &unit.to_ascii_lowercase())
+    {
+        return Ok(seconds);
+    }
+
+    parse_rest_seconds_value(&value).ok_or_else(ContextError::new)
 }
 
 fn parse_rest_seconds_with_unit(value: &str, unit: &str) -> Option<u32> {
@@ -363,6 +850,115 @@ fn parse_duration_number(value: &str) -> Option<u32> {
     value.trim().parse().ok()
 }
 
+fn patch_operation(input: &mut &str) -> ParseResult<PatchOperation> {
+    let mut attempt = *input;
+    if let Ok(operation) = replace_exercise_operation.parse_next(&mut attempt) {
+        *input = attempt;
+        return Ok(operation);
+    }
+    let mut attempt = *input;
+    if let Ok(operation) = add_conditioning_operation.parse_next(&mut attempt) {
+        *input = attempt;
+        return Ok(operation);
+    }
+    cap_operation(input)
+}
+
+fn replace_exercise_operation(input: &mut &str) -> ParseResult<PatchOperation> {
+    keyword_with_space(input, "replace")?;
+    keyword(input, "exercise")?;
+    space1.parse_next(input)?;
+    let from = exercise_identifier(input)?;
+    space1.parse_next(input)?;
+    keyword(input, "with")?;
+    space1.parse_next(input)?;
+    let to = exercise_identifier(input)?;
+    let lane_regex = where_lane_matches(input)?;
+
+    Ok(PatchOperation::ReplaceExercise {
+        from: normalize_exercise(from),
+        to: normalize_exercise(to),
+        lane_regex,
+    })
+}
+
+fn add_conditioning_operation(input: &mut &str) -> ParseResult<PatchOperation> {
+    keyword_with_space(input, "add")?;
+    keyword(input, "conditioning")?;
+    space1.parse_next(input)?;
+    let day = take_while(1.., |ch: char| ch.is_ascii_alphabetic()).parse_next(input)?;
+    space0.parse_next(input)?;
+    let activity = delimited('{', take_till(0.., '}'), '}')
+        .map(|activity: &str| activity.trim().to_owned())
+        .parse_next(input)?;
+
+    Ok(PatchOperation::AddConditioning {
+        day: day.to_ascii_lowercase(),
+        activity,
+    })
+}
+
+fn cap_operation(input: &mut &str) -> ParseResult<PatchOperation> {
+    keyword_with_space(input, "cap")?;
+    let rest = line_value(input)?;
+    let (rest, lane_regex) = split_where_lane_suffix(&rest);
+    let (target, value) = split_cap_target_value(rest).ok_or_else(ContextError::new)?;
+
+    Ok(PatchOperation::Cap {
+        target,
+        value,
+        lane_regex,
+    })
+}
+
+fn split_where_lane_suffix(value: &str) -> (&str, Option<String>) {
+    for (index, _) in value.match_indices(" where") {
+        let mut suffix = &value[index..];
+        if let Ok(lane_regex) = where_lane_matches(&mut suffix)
+            && suffix.trim().is_empty()
+        {
+            return (value[..index].trim(), Some(lane_regex));
+        }
+    }
+    (value.trim(), None)
+}
+
+fn where_lane_matches(input: &mut &str) -> ParseResult<String> {
+    space1.parse_next(input)?;
+    keyword(input, "where")?;
+    space1.parse_next(input)?;
+    keyword(input, "lane")?;
+    space1.parse_next(input)?;
+    keyword(input, "matches")?;
+    space1.parse_next(input)?;
+    quoted_string(input)
+}
+
+fn split_cap_target_value(rest: &str) -> Option<(String, String)> {
+    let (target, value) = rest.trim().split_once(char::is_whitespace)?;
+    let value = value
+        .trim()
+        .strip_prefix("at ")
+        .unwrap_or(value.trim())
+        .trim();
+    (!target.is_empty() && !value.is_empty()).then(|| (target.to_owned(), value.to_owned()))
+}
+
+fn insert_lock_entry(templates: &mut Map<LockEntry>, id: Option<String>, pairs: &Map<String>) {
+    let Some(id) = id else {
+        return;
+    };
+    templates.insert(
+        id,
+        LockEntry {
+            version: pairs.get("version").cloned().unwrap_or_default(),
+            source: pairs.get("source").cloned().unwrap_or_default(),
+            content_hash: pairs.get("content_hash").cloned().unwrap_or_default(),
+            engine_version: pairs.get("engine_version").cloned().unwrap_or_default(),
+        },
+    );
+}
+
 fn normalize_rest_key(scope: &str, key: &str) -> String {
     match scope {
         "tier" | "slot" | "lane" => key.to_ascii_lowercase(),
@@ -392,4 +988,8 @@ pub fn normalize_exercise(value: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join("_")
+}
+
+fn fail<T>(_input: &mut &str) -> ParseResult<T> {
+    Err(ContextError::new())
 }

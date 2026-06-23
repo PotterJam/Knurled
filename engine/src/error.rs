@@ -32,6 +32,9 @@ pub enum KnurledError {
     #[error("unknown built-in template: {0}")]
     UnknownTemplate(String),
 
+    #[error("FitSpec parse error: {0}")]
+    Parse(String),
+
     #[error("invalid execution input: {0}")]
     InvalidExecutionInput(String),
 }
