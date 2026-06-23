@@ -34,7 +34,7 @@ import Foundation
                 )
             }
         )
-        let outcome = try await engine.reduce(dir: dir, input: input)
+        let outcome = try await engine.reduce(dir: dir, session: session, input: input)
         try await app.commit(outcome: outcome, in: repo, timestamp: "2026-06-24T11:00:00Z")
         #expect(repo.state?.lanes["bench.t2"]?.load == "47.5kg")
 

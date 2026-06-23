@@ -43,7 +43,7 @@ import Foundation
             completedAt: "2026-06-24T11:00:00Z",
             inputs: passingInputs(session, override: override)
         )
-        return try await engine.reduce(dir: dir, input: input)
+        return try await engine.reduce(dir: dir, session: session, input: input)
     }
 
     private func result(_ outcome: ReductionOutcome, slot: String) -> ExerciseResult? {

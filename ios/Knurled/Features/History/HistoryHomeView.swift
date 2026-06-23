@@ -32,18 +32,39 @@ struct HistoryHomeView: View {
             )
         } else {
             List(items) { item in
-                if item.isCorrectable, let repo = app.activeRepo {
-                    NavigationLink {
-                        HistoryDetailView(repo: repo, event: item.event)
-                    } label: {
-                        HistoryRow(item: item)
-                    }
-                } else {
-                    HistoryRow(item: item)
-                }
+                row(for: item)
             }
             .listStyle(.plain)
         }
+    }
+
+    @ViewBuilder private func row(for item: HistoryItem) -> some View {
+        if let repo = app.activeRepo, let session = continuableSession(for: item, in: repo) {
+            NavigationLink {
+                ActiveWorkoutView(repo: repo, session: session, resuming: item.event)
+            } label: {
+                HistoryRow(item: item)
+            }
+        } else if item.isCorrectable, let repo = app.activeRepo {
+            NavigationLink {
+                HistoryDetailView(repo: repo, event: item.event)
+            } label: {
+                HistoryRow(item: item)
+            }
+        } else {
+            HistoryRow(item: item)
+        }
+    }
+
+    /// A saved partial can be continued only while the current next workout still matches the
+    /// snapshot it was logged against (the cursor doesn't move on a partial). If the plan has
+    /// since changed, it falls back to correction instead.
+    private func continuableSession(for item: HistoryItem, in repo: ActiveRepo) -> RenderedSession? {
+        guard item.event.type == "session_saved", item.canContinue,
+              let session = repo.nextWorkout,
+              session.renderedSessionHash == item.event.renderedSessionHash
+        else { return nil }
+        return session
     }
 
     private var filteredItems: [HistoryItem] {

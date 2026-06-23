@@ -33,10 +33,15 @@ struct HistoryItem: Identifiable, Hashable {
 enum HistoryBuilder {
     static func items(from events: [TrainingEvent]) -> [HistoryItem] {
         let corrected = Set(events.compactMap(\.correctsEventId))
-        return events.compactMap { item(from: $0, corrected: corrected) }.reversed()
+        let continued = Set(events.compactMap(\.continuesEventId))
+        return events.compactMap { item(from: $0, corrected: corrected, continued: continued) }.reversed()
     }
 
-    private static func item(from event: TrainingEvent, corrected: Set<String>) -> HistoryItem? {
+    private static func item(
+        from event: TrainingEvent,
+        corrected: Set<String>,
+        continued: Set<String>
+    ) -> HistoryItem? {
         let title = (event.sessionId ?? "Session").uppercased()
         let date = WorkoutFormat.relativeDay(
             fromISO: event.completedAt ?? event.savedAt ?? event.startedAt
@@ -44,7 +49,7 @@ enum HistoryBuilder {
         let editedSuffix = corrected.contains(event.id) ? " · edited" : ""
 
         switch event.type {
-        case "session_completed":
+        case "session_completed", "session_continued":
             return HistoryItem(
                 id: event.id, title: title, detail: date + editedSuffix,
                 status: "Complete", statusStyle: .ok, kind: .workout, canContinue: true,
@@ -52,10 +57,12 @@ enum HistoryBuilder {
             )
         case "session_saved":
             let logged = event.results.count
+            let wasContinued = continued.contains(event.id)
             return HistoryItem(
-                id: event.id, title: title, detail: "\(date) · \(logged) logged" + editedSuffix,
-                status: (event.status ?? "partial").capitalized,
-                statusStyle: .warn, kind: .workout, canContinue: true,
+                id: event.id, title: title,
+                detail: "\(date) · \(logged) logged" + editedSuffix + (wasContinued ? " · continued" : ""),
+                status: wasContinued ? "Continued" : (event.status ?? "partial").capitalized,
+                statusStyle: wasContinued ? .ok : .warn, kind: .workout, canContinue: !wasContinued,
                 event: event
             )
         case "session_skipped":

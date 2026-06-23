@@ -1,6 +1,6 @@
 import Foundation
 
-struct GitHubRemote: Sendable, Hashable {
+struct GitHubRemote: Codable, Sendable, Hashable {
     let owner: String
     let name: String
     let branch: String
@@ -52,6 +52,7 @@ extension AppModel {
         await active.refresh(engine: engine)
         activeRepo = active
         phase = .ready
+        persistSelection()
     }
 
     /// Pulls the latest remote state into the active GitHub repo and rebuilds (spec §27).

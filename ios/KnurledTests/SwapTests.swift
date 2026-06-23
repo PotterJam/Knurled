@@ -47,7 +47,7 @@ import Foundation
             completedAt: "2026-06-24T11:00:00Z",
             inputs: inputs
         )
-        let outcome = try await engine.reduce(dir: dir, input: input)
+        let outcome = try await engine.reduce(dir: dir, session: session, input: input)
 
         let result = try #require(outcome.result.event?.results.first { $0.slotId == "a1.t3" })
         #expect(result.performedExercise == "chin_up")

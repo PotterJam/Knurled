@@ -10,8 +10,8 @@ struct ActiveWorkoutView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
 
-    init(repo: ActiveRepo, session: RenderedSession) {
-        _workout = State(initialValue: LiveWorkout(repo: repo, session: session))
+    init(repo: ActiveRepo, session: RenderedSession, resuming: TrainingEvent? = nil) {
+        _workout = State(initialValue: LiveWorkout(repo: repo, session: session, resuming: resuming))
         _restTimer = State(initialValue: RestTimer(workoutName: session.displayName))
     }
 
@@ -90,7 +90,7 @@ struct ActiveWorkoutView: View {
         let input = workout.executionInput(status: ExecutionStatus.partial, timestamp: timestamp)
         guard !input.inputs.isEmpty else { dismiss(); return }
         do {
-            let outcome = try await app.engine.reduce(dir: workout.repo.url, input: input)
+            let outcome = try await app.engine.reduce(dir: workout.repo.url, session: workout.session, input: input)
             try await app.commit(outcome: outcome, in: workout.repo, timestamp: timestamp)
             dismiss()
         } catch {

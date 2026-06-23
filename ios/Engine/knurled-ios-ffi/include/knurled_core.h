@@ -19,9 +19,10 @@ char *knurled_validate_repo(const char *dir);
 /* write != 0 regenerates state/ and build/ on disk. -> build outputs */
 char *knurled_build_repo(const char *dir, int write);
 
-/* Reduces an execution_input against the repo's current rendered session.
+/* Reduces an execution_input against the rendered session snapshot captured when the
+ * workout started (passed as JSON), not the repo's current next workout.
  * -> reduction result (validation, event, effects, new_state, next_workout) */
-char *knurled_reduce_input(const char *dir, const char *execution_input_json);
+char *knurled_reduce_input(const char *dir, const char *rendered_session_json, const char *execution_input_json);
 
 /* -> execution_input_validation */
 char *knurled_validate_execution_input(const char *dir, const char *execution_input_json);

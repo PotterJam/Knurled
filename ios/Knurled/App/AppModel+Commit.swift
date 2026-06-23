@@ -13,16 +13,41 @@ extension AppModel {
     func commit(
         outcome: ReductionOutcome,
         in repo: ActiveRepo,
-        timestamp: String
+        timestamp: String,
+        continuesEventId: String? = nil
     ) async throws -> ReductionResult {
-        guard outcome.result.validation.isValid, let line = outcome.eventLine else {
+        guard outcome.result.validation.isValid, let baseLine = outcome.eventLine else {
             throw CommitError.noEvent
         }
-        try LogReader().appendEvent(line: line, dir: repo.url, timestamp: timestamp)
-        _ = try await engine.build(dir: repo.url, write: true)
-        await repo.refresh(engine: engine)
-        await pushIfConnected(repo: repo, message: Self.commitMessage(for: outcome.result.event, timestamp: timestamp))
+        let line: String
+        let message: String
+        if let continuesEventId {
+            line = try Self.rewriteAsContinued(baseLine, continuesEventId: continuesEventId, timestamp: timestamp)
+            let session = (outcome.result.event?.sessionId ?? "session").uppercased()
+            message = "Continue \(session) - \(String(timestamp.prefix(10)))"
+        } else {
+            line = baseLine
+            message = Self.commitMessage(for: outcome.result.event, timestamp: timestamp)
+        }
+        try await record(eventLine: line, in: repo, timestamp: timestamp, message: message)
         return outcome.result
+    }
+
+    /// Relabels the engine's `session_completed` as a `session_continued` linked to the saved
+    /// partial it finishes. The engine replays both the same way (apply effects, advance cursor)
+    /// but History can then show them as one workout (§19).
+    private static func rewriteAsContinued(
+        _ line: String,
+        continuesEventId: String,
+        timestamp: String
+    ) throws -> String {
+        var event = try KnurledCoding.decoder().decode(TrainingEvent.self, from: Data(line.utf8))
+        event.type = "session_continued"
+        event.continuesEventId = continuesEventId
+        if let session = event.sessionId {
+            event.id = EventID.make(type: "session_continued", session: session, timestamp: timestamp)
+        }
+        return try EventEncoding.line(event)
     }
 
     /// Per-action commit message templates (spec §28).
