@@ -30,17 +30,17 @@ Rest is engine output, not player logic. Clients should render the resolved `Ren
 
 Built-in programs provide default rest policies, and plans can override them with a generic `rest` block:
 
-```fitspec
+```kdl
 rest {
-  default 120s
-  tier t1 180s
-  exercise bench 210s
-  lane squat.t1 240s
-  slot a1.t2 300s
+  default 120
+  tier t1 180
+  exercise bench "210s"
+  lane squat.t1 "4:00"
+  slot a1.t2 5 min
 }
 ```
 
-Durations currently accept whole seconds (`180`, `180s`, `180 sec`), whole minutes (`3m`, `3 min`), and `mm:ss`.
+Durations accept whole seconds (`180`, `"180s"`, `180 sec`), whole minutes (`"3m"`, `3 min`), and `mm:ss` (`"4:30"`). Bare numbers are unquoted; any form that starts with a digit and carries a suffix (`"180s"`, `"3m"`, `"4:30"`) must be quoted because KDL reads a bare digit-leading token as a number.
 
 Resolution order is:
 
@@ -62,10 +62,15 @@ This keeps rest configurable for built-in templates, future user-built programs,
 
 ## FitSpec Parser
 
-FitSpec is parsed in `engine/src/parser.rs` with `winnow` parser combinators. The parser is intentionally strict while the language is still pre-production: malformed syntax, unknown plan lines, unsupported patch operations, and missing required `template` or `units` directives fail through the engine `Result` path instead of being converted into defaults.
+FitSpec is a [KDL](https://kdl.dev) dialect: every construct is a KDL node with arguments, properties, and an optional `{ … }` block. Parsing in `engine/src/parser.rs` is two-phase:
 
-The current surface covers `plan`, `template`, `units`, `schedule`, `starts`, `training_maxes`, `accessories`, simple exercise options, rest overrides, lockfile template entries, and the MVP patch operations. The checked-in 5/3/1 `assistance` block is accepted as a known no-op until the model stores it.
+1. The `kdl` crate owns tokenizing, brace matching, strings, numbers, comments, and line-numbered syntax errors, producing a `KdlDocument`.
+2. A single walk over that document (`parse_plan`, `parse_patch`) interprets known nodes into the typed model and rejects the rest.
 
-The patch language is still intentionally narrow and line-oriented. Multiline patch operations, richer contextual syntax, stronger diagnostics, and a clearer user-authored patch grammar are expected future FitSpec expansion areas; add those by extending the `winnow` grammar and compatibility tests rather than by special-casing individual examples.
+Lockfiles are TOML and decode straight through `serde` (`toml` crate). The parser stays intentionally strict while the language is pre-production: malformed syntax, unknown plan directives, unsupported patch operations, and missing required `template`/`units` fail through the engine `Result` path instead of becoming defaults.
 
-Future agents: add meaningful FitSpec syntax by extending the named `winnow` parsers instead of reintroducing ad hoc regex or block parsing. A grammar generator such as `lalrpop` may be reasonable later if FitSpec becomes expression-heavy, but `winnow` remains the pragmatic path for the current block-oriented language shape.
+The current surface covers `plan`, `template`, `units`, `schedule`, `starts`, `training_maxes`, `accessories`, exercise options, rest overrides, lockfile template entries, and the MVP patch operations (`replace-exercise`, `add-conditioning`, `cap`). The checked-in 5/3/1 `assistance` block is accepted as a known no-op until the model stores it.
+
+A few authoring notes that fall out of KDL: list items are whitespace-separated (`rotation A1 B1 A2 B2`, no commas); values that start with a digit must be quoted (`squat "80kg"`); and multiple child nodes on one line need a `;` separator (`label "DB Bench"; policy tracking_only`).
+
+Future agents: extend FitSpec by adding a match arm to the phase-two walk, not a bespoke sub-parser, and keep the model shapes stable — they feed the identity hashes and every client. The patch surface is deliberately narrow; richer contextual operations are a natural expansion area, expressed as new nodes/properties rather than prose.

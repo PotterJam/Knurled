@@ -3,14 +3,14 @@ plan "My Starting Strength" {
   units kg
 
   schedule next_workout {
-    suggested_days mon, wed, fri
+    suggested_days mon wed fri
   }
 
   starts {
-    squat 60kg
-    press 30kg
-    bench 40kg
-    deadlift 80kg
-    power_clean 40kg
+    squat "60kg"
+    press "30kg"
+    bench "40kg"
+    deadlift "80kg"
+    power_clean "40kg"
   }
 }

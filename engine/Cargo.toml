@@ -11,9 +11,10 @@ name = "knurled_core"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+kdl = "6.5.0"
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
-winnow.workspace = true
+toml = "1.1.2"
