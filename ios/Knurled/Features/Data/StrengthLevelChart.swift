@@ -23,6 +23,10 @@ struct StrengthLevelChart: View {
         return max(1.0, (padded * 2).rounded(.up) / 2)
     }
 
+    private var visibleLevels: [StrengthLevel] {
+        StrengthLevel.allCases.filter { Double($0.value) <= maxY }
+    }
+
     private var xDomain: ClosedRange<Int> {
         let maxWorkout = data.workoutIndexes.max() ?? 1
         return maxWorkout > 1 ? 1...maxWorkout : 0...2
@@ -46,11 +50,11 @@ struct StrengthLevelChart: View {
                 .foregroundStyle(.secondary)
 
             Chart {
-                ForEach(StrengthLevel.allCases) { lvl in
+                ForEach(visibleLevels) { lvl in
                     RuleMark(y: .value("Level", lvl.value))
                         .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
                         .foregroundStyle(Color.secondary.opacity(0.35))
-                        .annotation(position: .top, alignment: .leading) {
+                        .annotation(position: .overlay, alignment: .leading) {
                             Text(lvl.title)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
@@ -81,7 +85,7 @@ struct StrengthLevelChart: View {
             }
             .chartYScale(domain: 0...maxY)
             .chartYAxis {
-                AxisMarks(values: StrengthLevel.allCases.map(\.value))
+                AxisMarks(values: visibleLevels.map(\.value))
             }
             .chartForegroundStyleScale(
                 domain: data.lifts.map(\.title),
@@ -89,6 +93,7 @@ struct StrengthLevelChart: View {
             )
             .chartLegend(position: .bottom)
             .frame(height: 280)
+            .clipped()
         }
     }
 }

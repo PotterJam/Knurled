@@ -54,7 +54,7 @@ struct RestLiveActivity: Widget {
         switch state.phase {
         case .ready:
             if state.isWarmup {
-                WarmupControls()
+                WarmupControls(advanceTitle: state.warmupAdvanceTitle)
             } else if state.isAmrap {
                 AmrapControls(reps: state.amrapReps)
             } else {
@@ -126,7 +126,7 @@ private struct LockScreenView: View {
                 Spacer()
             }
             if state.isWarmup {
-                WarmupControls()
+                WarmupControls(advanceTitle: state.warmupAdvanceTitle)
             } else if state.isAmrap {
                 AmrapControls(reps: state.amrapReps)
             } else {
@@ -171,13 +171,15 @@ private struct LockScreenView: View {
     }
 }
 
-/// A warmup ramp set: log it, or skip the rest of the warmups for this exercise and jump
-/// straight to the working sets. Warmups never start a rest countdown.
+/// A warmup ramp set: log it, or move past this guidance-only set. Warmups never start
+/// a rest countdown.
 private struct WarmupControls: View {
+    let advanceTitle: String
+
     var body: some View {
         HStack(spacing: 10) {
             Button(intent: SkipWarmupIntent()) {
-                Label("Skip warmups", systemImage: "forward.fill")
+                Label(advanceTitle, systemImage: "forward.fill")
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
             }

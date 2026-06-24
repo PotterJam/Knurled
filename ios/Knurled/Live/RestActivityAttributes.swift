@@ -29,6 +29,9 @@ struct RestActivityAttributes: ActivityAttributes {
         var setProgress: String {
             "\(isWarmup ? "Warmup" : "Set") \(setNumber) of \(totalSets)"
         }
+        var warmupAdvanceTitle: String {
+            setNumber < totalSets ? "Next warm-up" : "Start sets"
+        }
         var exerciseProgress: String { "Exercise \(exerciseIndex) of \(totalExercises)" }
         var loadReps: String {
             let reps = isAmrap ? "\(targetReps)+ reps" : "\(targetReps) reps"

@@ -75,45 +75,31 @@ struct LiveExerciseCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
                 Spacer()
-                if live.warmupsSkipped {
-                    Button {
-                        controller.setWarmupsSkipped(live, false)
-                    } label: {
-                        Label("Undo", systemImage: "arrow.uturn.backward")
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                } else {
-                    Button {
-                        controller.setWarmupsSkipped(live, true)
-                    } label: {
-                        Text("Skip warm-up")
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                }
             }
 
-            if live.warmupsSkipped {
-                Text("Skipped").font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(live.warmups) { set in
-                    SetRowView(
-                        set: set,
-                        isAmrap: false,
-                        isLastSet: set.id == live.warmups.last?.id,
-                        isCurrent: controller.isCurrent(set),
-                        isWarmup: true,
-                        onEdit: { editingSet = set },
-                        onLogged: { controller.didLogSetInApp(item: live, wasWarmup: true) },
-                        onChanged: { controller.modelChanged() }
-                    )
-                    if set.id != live.warmups.last?.id { Divider() }
-                }
+            ForEach(live.warmups) { set in
+                SetRowView(
+                    set: set,
+                    isAmrap: false,
+                    isLastSet: set.id == live.warmups.last?.id,
+                    isCurrent: controller.isCurrent(set),
+                    isWarmup: true,
+                    canStartHere: canStartWarmup(at: set),
+                    onEdit: { editingSet = set },
+                    onLogged: { controller.didLogSetInApp(item: live, wasWarmup: true) },
+                    onChanged: { controller.modelChanged() },
+                    onAdvanceWarmup: { controller.advanceCurrentWarmup() },
+                    onStartHere: { controller.startWarmups(at: set, in: live) }
+                )
+                if set.id != live.warmups.last?.id { Divider() }
             }
 
             Divider().padding(.vertical, 2)
         }
+    }
+
+    private func canStartWarmup(at set: LiveSet) -> Bool {
+        isCurrentExercise && set.isWarmup && !set.logged && !controller.isCurrent(set)
     }
 
     @ViewBuilder private var footer: some View {
@@ -190,9 +176,12 @@ struct SetRowView: View {
     /// is always obvious which set is current.
     let isCurrent: Bool
     var isWarmup: Bool = false
+    var canStartHere: Bool = false
     var onEdit: () -> Void
     var onLogged: () -> Void
     var onChanged: () -> Void
+    var onAdvanceWarmup: (() -> Void)?
+    var onStartHere: (() -> Void)?
 
     @Environment(\.knurledPalette) private var palette
     @State private var entering = false
@@ -223,7 +212,21 @@ struct SetRowView: View {
                     }
                 }
                 Spacer()
-                if set.logged {
+                if set.bypassed {
+                    if canStartHere {
+                        Button {
+                            onStartHere?()
+                        } label: {
+                            Label("Start here", systemImage: "play.fill")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    } else {
+                        Label("Passed", systemImage: "arrow.forward.circle")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                } else if set.logged {
                     HStack(spacing: 10) {
                         Button(action: onEdit) {
                             Text("\(set.reps)").font(.body.monospaced().weight(.semibold))
@@ -240,6 +243,30 @@ struct SetRowView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Undo set")
                     }
+                } else if isWarmup && isCurrent {
+                    HStack(spacing: 8) {
+                        Button(isLastSet ? "Start sets" : "Next") {
+                            onAdvanceWarmup?()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        Button("Done") {
+                            set.reps = set.prescribed.targetReps
+                            set.logged = true
+                            onLogged()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                        .controlSize(.small)
+                    }
+                } else if isWarmup && canStartHere {
+                    Button {
+                        onStartHere?()
+                    } label: {
+                        Label("Start here", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 } else if isCurrent && !isEntering {
                     HStack(spacing: 8) {
                         Button("Missed") {
@@ -287,6 +314,7 @@ struct SetRowView: View {
 
     /// Logged and current rows are full strength; sets still ahead are dimmed.
     private var rowOpacity: Double {
+        if set.bypassed { return 0.35 }
         if set.logged || isCurrent { return 1 }
         return 0.45
     }

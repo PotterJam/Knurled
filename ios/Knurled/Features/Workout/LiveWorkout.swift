@@ -26,6 +26,9 @@ final class LiveSet: Identifiable {
     var reps: Int
     var load: String?
     var logged: Bool
+    /// Warmups are guidance-only, so a user can advance past an early ramp set without
+    /// recording it as performed. Bypassed warmups are ignored by the active cursor.
+    var bypassed: Bool
 
     init(prescribed: PrescribedSet, defaultLoad: String?, isWarmup: Bool = false) {
         self.id = prescribed.set
@@ -34,6 +37,7 @@ final class LiveSet: Identifiable {
         self.reps = prescribed.targetReps
         self.load = defaultLoad ?? prescribed.load
         self.logged = false
+        self.bypassed = false
     }
 
     var isAdjusted: Bool {
@@ -57,9 +61,6 @@ final class LiveItem: Identifiable {
     /// (so the next set everywhere becomes the one after it) and is excluded from the inputs
     /// sent to the engine. A skipped *required* exercise keeps the finish a partial (§24).
     var skipped: Bool = false
-    /// When true the warmup ramp is skipped for this exercise: the cursor jumps straight to the
-    /// first working set. Working sets and progression are unaffected (warmups never feed them).
-    var warmupsSkipped: Bool = false
 
     init(item: RenderedItem) {
         self.id = item.itemId
@@ -194,7 +195,10 @@ final class LiveWorkout: Identifiable {
             // working sets has clearly been warmed up — mark its ramp done so resuming doesn't
             // drop the cursor back onto warmups.
             if item.anyLogged {
-                for warmup in item.warmups { warmup.logged = true }
+                for warmup in item.warmups {
+                    warmup.logged = true
+                    warmup.bypassed = false
+                }
             }
         }
     }

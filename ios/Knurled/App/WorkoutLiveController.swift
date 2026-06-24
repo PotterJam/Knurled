@@ -47,10 +47,8 @@ final class WorkoutLiveController {
     var currentTarget: (item: LiveItem, set: LiveSet)? {
         guard let workout else { return nil }
         for item in workout.items where !item.skipped {
-            if !item.warmupsSkipped {
-                for set in item.warmups where !set.logged {
-                    return (item, set)
-                }
+            for set in item.warmups where !set.logged && !set.bypassed {
+                return (item, set)
             }
             for set in item.sets where !set.logged {
                 return (item, set)
@@ -99,18 +97,31 @@ final class WorkoutLiveController {
         afterLog(item: item, wasWarmup: set.isWarmup)
     }
 
-    /// Skip the entire warmup ramp for the exercise the cursor is currently on (fired from the
-    /// Live Activity, which only knows about the current exercise).
-    func skipWarmups() {
-        guard let item = currentTarget?.item else { return }
-        setWarmupsSkipped(item, true)
+    /// Advance past the current warmup without recording it as performed. Warmups are
+    /// guidance-only, so this moves the cursor through the ramp without touching progression.
+    func advanceCurrentWarmup() {
+        guard let (_, set) = currentTarget, set.isWarmup else { return }
+        set.logged = false
+        set.bypassed = true
+        syncAmrap()
+        stopRest()
+        updateActivity()
     }
 
-    /// Skip or restore the warmup ramp for a specific exercise (the in-app toggle).
-    func setWarmupsSkipped(_ item: LiveItem, _ skipped: Bool) {
-        item.warmupsSkipped = skipped
+    /// Jump into the warmup ramp at a later set, marking earlier warmups as bypassed rather than
+    /// logged. Later warmups stay available if the user wants only the top of the ramp.
+    func startWarmups(at selected: LiveSet, in item: LiveItem) {
+        guard selected.isWarmup else { return }
+        for warmup in item.warmups {
+            if warmup.id < selected.id && !warmup.logged {
+                warmup.logged = false
+                warmup.bypassed = true
+            } else {
+                warmup.bypassed = false
+            }
+        }
         syncAmrap()
-        if currentTarget == nil { stopRest() }
+        stopRest()
         updateActivity()
     }
 

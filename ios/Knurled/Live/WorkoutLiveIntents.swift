@@ -17,11 +17,11 @@ struct LogSetIntent: LiveActivityIntent {
 }
 
 struct SkipWarmupIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Skip warmups"
+    static let title: LocalizedStringResource = "Next warm-up"
 
     func perform() async throws -> some IntentResult {
         #if KNURLED_APP
-        await WorkoutLiveController.shared.skipWarmups()
+        await WorkoutLiveController.shared.advanceCurrentWarmup()
         #endif
         return .result()
     }
