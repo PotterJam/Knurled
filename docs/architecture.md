@@ -41,6 +41,9 @@ This Rust implementation covers the executable MVP spine:
 - Runtime swap metadata with tracking-only policy support.
 - Exercise replacement patches.
 - Replay, partial/continuation handling, state adjustment events, simulation, generated-file freshness, and backtest report plumbing.
-- Static workbench shell using the supplied Knurled logo.
+- Static workbench running the real engine in-browser via WASM (`workbench/engine-wasm/`,
+  committed glue in `workbench/engine/pkg/`): engine-backed validation, build, simulation,
+  history import, a drag-and-drop program builder, and GitHub PAT read/write.
 
-The next risky areas are richer patch semantics, full correction-event folding, GitHub API write flows in the static workbench, and generated WASM/Swift adapter packages.
+The next risky areas are richer patch semantics, full correction-event folding, OAuth/GitHub
+App auth for the workbench (PAT read/write exists today), and generated Swift adapter packages.

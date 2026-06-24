@@ -1,0 +1,54 @@
+[
+  { "id": "back_squat", "label": "Back Squat", "pattern": "squat", "muscles": ["quads", "glutes"] },
+  { "id": "front_squat", "label": "Front Squat", "pattern": "squat", "muscles": ["quads"] },
+  { "id": "goblet_squat", "label": "Goblet Squat", "pattern": "squat", "muscles": ["quads"] },
+  { "id": "leg_press", "label": "Leg Press", "pattern": "squat", "muscles": ["quads", "glutes"] },
+  { "id": "bulgarian_split_squat", "label": "Bulgarian Split Squat", "pattern": "squat", "muscles": ["quads", "glutes"] },
+  { "id": "hack_squat", "label": "Hack Squat", "pattern": "squat", "muscles": ["quads"] },
+
+  { "id": "deadlift", "label": "Deadlift", "pattern": "hinge", "muscles": ["hamstrings", "glutes", "back"] },
+  { "id": "romanian_deadlift", "label": "Romanian Deadlift", "pattern": "hinge", "muscles": ["hamstrings", "glutes"] },
+  { "id": "good_morning", "label": "Good Morning", "pattern": "hinge", "muscles": ["hamstrings", "back"] },
+  { "id": "hip_thrust", "label": "Hip Thrust", "pattern": "hinge", "muscles": ["glutes"] },
+  { "id": "back_extension", "label": "Back Extension", "pattern": "hinge", "muscles": ["lower_back", "glutes"] },
+
+  { "id": "bench_press", "label": "Bench Press", "pattern": "horizontal_push", "muscles": ["chest", "triceps"] },
+  { "id": "incline_bench_press", "label": "Incline Bench Press", "pattern": "horizontal_push", "muscles": ["chest", "shoulders"] },
+  { "id": "dumbbell_bench_press", "label": "DB Bench Press", "pattern": "horizontal_push", "muscles": ["chest", "triceps"] },
+  { "id": "machine_chest_press", "label": "Machine Chest Press", "pattern": "horizontal_push", "muscles": ["chest"] },
+  { "id": "push_up", "label": "Push-up", "pattern": "horizontal_push", "muscles": ["chest", "triceps"] },
+  { "id": "dip", "label": "Dip", "pattern": "horizontal_push", "muscles": ["chest", "triceps"] },
+
+  { "id": "overhead_press", "label": "Overhead Press", "pattern": "vertical_push", "muscles": ["shoulders", "triceps"] },
+  { "id": "push_press", "label": "Push Press", "pattern": "vertical_push", "muscles": ["shoulders", "triceps"] },
+  { "id": "seated_db_press", "label": "Seated DB Press", "pattern": "vertical_push", "muscles": ["shoulders"] },
+  { "id": "incline_db_press", "label": "Incline DB Press", "pattern": "vertical_push", "muscles": ["shoulders", "chest"] },
+  { "id": "lateral_raise", "label": "Lateral Raise", "pattern": "vertical_push", "muscles": ["shoulders"] },
+
+  { "id": "barbell_row", "label": "Barbell Row", "pattern": "horizontal_pull", "muscles": ["back", "biceps"] },
+  { "id": "pendlay_row", "label": "Pendlay Row", "pattern": "horizontal_pull", "muscles": ["back"] },
+  { "id": "dumbbell_row", "label": "DB Row", "pattern": "horizontal_pull", "muscles": ["back", "biceps"] },
+  { "id": "cable_row", "label": "Cable Row", "pattern": "horizontal_pull", "muscles": ["back"] },
+  { "id": "chest_supported_row", "label": "Chest-Supported Row", "pattern": "horizontal_pull", "muscles": ["back"] },
+
+  { "id": "pull_up", "label": "Pull-up", "pattern": "vertical_pull", "muscles": ["back", "biceps"] },
+  { "id": "chin_up", "label": "Chin-up", "pattern": "vertical_pull", "muscles": ["back", "biceps"] },
+  { "id": "lat_pulldown", "label": "Lat Pulldown", "pattern": "vertical_pull", "muscles": ["back", "biceps"] },
+  { "id": "neutral_grip_pulldown", "label": "Neutral-Grip Pulldown", "pattern": "vertical_pull", "muscles": ["back"] },
+
+  { "id": "barbell_curl", "label": "Barbell Curl", "pattern": "arms", "muscles": ["biceps"] },
+  { "id": "dumbbell_curl", "label": "DB Curl", "pattern": "arms", "muscles": ["biceps"] },
+  { "id": "tricep_pushdown", "label": "Tricep Pushdown", "pattern": "arms", "muscles": ["triceps"] },
+  { "id": "skullcrusher", "label": "Skullcrusher", "pattern": "arms", "muscles": ["triceps"] },
+  { "id": "face_pull", "label": "Face Pull", "pattern": "arms", "muscles": ["rear_delts", "back"] },
+
+  { "id": "plank", "label": "Plank", "pattern": "core", "muscles": ["core"] },
+  { "id": "hanging_leg_raise", "label": "Hanging Leg Raise", "pattern": "core", "muscles": ["core"] },
+  { "id": "ab_wheel", "label": "Ab Wheel", "pattern": "core", "muscles": ["core"] },
+  { "id": "cable_crunch", "label": "Cable Crunch", "pattern": "core", "muscles": ["core"] },
+
+  { "id": "zone2_run", "label": "Zone-2 Run", "pattern": "conditioning", "muscles": ["cardio"] },
+  { "id": "easy_run", "label": "Easy Run", "pattern": "conditioning", "muscles": ["cardio"] },
+  { "id": "row_erg", "label": "Row Erg", "pattern": "conditioning", "muscles": ["cardio"] },
+  { "id": "assault_bike", "label": "Assault Bike", "pattern": "conditioning", "muscles": ["cardio"] }
+]

@@ -55,3 +55,27 @@ xcodegen generate                # generates Knurled.xcodeproj from project.yml
 Re-run `build-xcframework.sh` after any change to `engine/` or `ios/Engine/knurled-ios-ffi`
 (the framework is a compiled snapshot of the Rust core), and re-run `xcodegen generate` after
 adding or removing source files. See [`ios/README.md`](ios/README.md) for the full workflow.
+
+## Building the workbench
+
+The workbench is a **static, buildless site** that runs the real Rust engine in the
+browser via WebAssembly — it never reimplements progression logic in JS. The WASM
+artifacts in `workbench/engine/pkg/` are committed, so simply serving the `workbench/`
+directory (GitHub Pages, Cloudflare Pages, `knurled serve`, or any static host) works
+with no build step.
+
+Re-generate the engine WASM after any change to `engine/` or `workbench/engine-wasm/`:
+
+```bash
+rustup target add wasm32-unknown-unknown   # once
+cargo install wasm-bindgen-cli             # once (version pinned in engine-wasm/Cargo.toml)
+bash workbench/scripts/build-wasm.sh       # regenerates workbench/engine/pkg/ (commit the output)
+
+cargo run -p knurled-cli -- serve --port 4321   # or: serve workbench/ with any static server
+```
+
+`workbench/engine-wasm/` is a standalone wasm-bindgen crate (kept out of the root Cargo
+workspace, like the iOS FFI crate) that marshals the engine's in-memory functions —
+`compile_plan`, `build_outputs`, `simulate`, `history_import_events_from_str` — to the
+browser. The front-end (`workbench/src/`) is the only TypeScript-free, framework-free UI
+layer; all validation, build, simulation, and history import run in the engine.
