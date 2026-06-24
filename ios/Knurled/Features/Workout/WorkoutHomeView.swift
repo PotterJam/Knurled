@@ -91,6 +91,22 @@ struct NextWorkoutView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let plan = repo.plan {
+                NavigationLink {
+                    PlanOverviewView(repo: repo, plan: plan)
+                        .navigationTitle("Plan")
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(plan.plan.name)
+                            .font(.subheadline.weight(.semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(Color.accentColor)
+                }
+                .accessibilityHint("Opens the plan overview")
+            }
+
             Text(session.displayName)
                 .font(.title2.bold())
 

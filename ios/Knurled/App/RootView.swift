@@ -3,7 +3,7 @@ import SwiftUI
 enum AppTab: Hashable {
     case workout
     case history
-    case plan
+    case data
     case settings
 }
 
@@ -19,8 +19,8 @@ struct RootView: View {
             Tab("History", systemImage: "clock.arrow.circlepath", value: AppTab.history) {
                 HistoryHomeView()
             }
-            Tab("Plan", systemImage: "list.bullet.rectangle", value: AppTab.plan) {
-                PlanHomeView()
+            Tab("Data", systemImage: "chart.xyaxis.line", value: AppTab.data) {
+                DataHomeView()
             }
             Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
                 SettingsHomeView()
