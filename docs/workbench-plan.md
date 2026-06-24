@@ -165,36 +165,26 @@ Nothing else is correct until the workbench runs the real engine.
 
 ### Phase 4 — GitHub / self-host workflows
 
-The workbench is served by `knurled serve` — a **local Rust process** — so the
-browser page is not the right place to do GitHub auth. A static page would have
-to implement an OAuth/device flow and store a token client-side; the local
-server can instead lean on the tools the user is already authenticated with.
-This splits cleanly by deployment mode:
+The workbench stays a **pure static site** — no backend, no `serve`-side API.
+The engine runs in the browser via WASM (Phase 0) and GitHub is reached
+directly from the page over the REST API. This keeps hosting trivial (any
+static host, GitHub Pages, a `file://` open) and matches the MVP promise of a
+"static/self-hostable editing workbench".
 
-- **Local-serve mode (primary).** Extend the `serve` HTTP handler in
-  `cli/src/main.rs` (today a dumb static file server) with a small JSON API and
-  drive GitHub through the user's existing CLI auth:
-  - **Local repo** that `serve` is pointed at → plain `git` for commit/push of
-    canonical + regenerated `state/`/`build/` files. No auth dance at all.
-  - **Remote browse / load / PR creation** → the `gh` CLI (`gh api`,
-    `gh repo`, `gh pr create`). It is already authenticated, so the workbench
-    never sees or stores a token. This is the pragmatic answer to the "GitHub
-    API write flows" called out in `architecture.md` — far less to build than
-    browser-side OAuth, and nothing secret lives in the page.
-  - Detect availability and degrade gracefully: probe `gh auth status` / `git`
-    on startup and disable the relevant UI (with a clear reason) when missing,
-    rather than failing mid-action.
-- **Pure-static hosting (fallback).** When the workbench is hosted as plain
-  static files with no backend, fall back to the GitHub REST API from the
-  browser (device-flow auth or a user-supplied PAT). Same UI, different
-  transport behind one client interface, so most of the app is unaware which
-  path is in use.
-- Package the workbench + WASM for static self-hosting (the MVP promise of a
-  "static/self-hostable editing workbench"), with a documented build step.
-
-Keep the GitHub layer behind a single abstraction (e.g. a `RepoBackend` with
-`list`/`read`/`commit`/`open_pr`) so `gh`-backed and REST-backed implementations
-are interchangeable and the rest of the workbench depends on neither directly.
+- **Auth in the browser.** Use GitHub's OAuth device flow, or accept a
+  user-supplied fine-grained PAT, and keep the token only in the page
+  (in-memory + optional `localStorage`, never committed). No server ever holds
+  a secret because there is no server.
+- **Load a repo** from GitHub: read `plan.fitspec`, `fitspec.lock`,
+  `patches/*.fitspec`, and `logs/**` via the contents API.
+- **Write back** canonical edits plus regenerated `state/`/`build/` files as a
+  commit, and optionally open a PR — all through REST from the browser.
+- Keep it behind a single `RepoBackend` interface (`list`/`read`/`commit`/
+  `open_pr`) so the GitHub REST implementation is swappable later if needed, but
+  ship just that one implementation.
+- `knurled serve` stays a plain static file server for local preview only (it
+  still needs `application/wasm` added — see Phase 0); it is not on the GitHub
+  path.
 
 ### Cross-cutting
 
