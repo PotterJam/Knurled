@@ -48,6 +48,10 @@ final class LiveItem: Identifiable {
     var performedExercise: String?
     var swapLabel: String?
     var swapPolicy: SwapPolicy?
+    /// When true the exercise is skipped for this session: it drops out of the active cursor
+    /// (so the next set everywhere becomes the one after it) and is excluded from the inputs
+    /// sent to the engine. A skipped *required* exercise keeps the finish a partial (§24).
+    var skipped: Bool = false
 
     init(item: RenderedItem) {
         self.id = item.itemId
@@ -59,7 +63,7 @@ final class LiveItem: Identifiable {
     var isAmrap: Bool { item.executionContract.recommendedInput == InputMode.amrapFinalSet }
     var required: Bool { item.executionContract.requiredForCompletion }
     var prescribedLoad: String? { item.prescription.sets.first?.load }
-    var isComplete: Bool { sets.allSatisfy(\.logged) }
+    var isComplete: Bool { !skipped && sets.allSatisfy(\.logged) }
     var anyLogged: Bool { sets.contains(where: \.logged) }
     var isAdjusted: Bool { sets.contains(where: \.isAdjusted) }
     var loggedCount: Int { sets.filter(\.logged).count }
@@ -194,8 +198,8 @@ final class LiveWorkout: Identifiable {
     func executionInput(status: String, timestamp: String) -> ExecutionInput {
         let isComplete = status == ExecutionStatus.complete
         let inputs = isComplete
-            ? items.map { $0.itemInput() }
-            : items.filter(\.anyLogged).map { $0.partialInput() }
+            ? items.filter { !$0.skipped }.map { $0.itemInput() }
+            : items.filter { $0.anyLogged && !$0.skipped }.map { $0.partialInput() }
         return ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
             status: status,
