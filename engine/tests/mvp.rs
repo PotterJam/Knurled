@@ -510,6 +510,7 @@ fn actual(set: u32, load: &str, reps: u32) -> knurled_core::ActualSet {
         set,
         load: Some(load.into()),
         reps,
+        metrics: Default::default(),
     }
 }
 

@@ -455,6 +455,12 @@ pub struct ActualSet {
     pub set: u32,
     pub load: Option<String>,
     pub reps: u32,
+    /// Open, units-explicit measured metrics for the set (ADR 0001): e.g. `rpe`, `rir`,
+    /// later velocity. Tier 0 of the autoregulation plan records these losslessly; the engine
+    /// passes them through replay without acting on them. Omitted from JSON when empty so
+    /// existing logs and hashes are byte-identical.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub metrics: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

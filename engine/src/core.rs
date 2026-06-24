@@ -708,6 +708,7 @@ pub fn synthetic_execution_input(
                             } else {
                                 set.target_reps
                             },
+                            metrics: Default::default(),
                         })
                         .collect(),
                     load: None,
@@ -1530,6 +1531,7 @@ fn actual_sets_for(item: &RenderedItem, input: &ItemInput) -> Result<Vec<ActualS
                     } else {
                         set.target_reps
                     },
+                    metrics: Default::default(),
                 })
                 .collect())
         }
@@ -1542,6 +1544,7 @@ fn actual_sets_for(item: &RenderedItem, input: &ItemInput) -> Result<Vec<ActualS
                 set: set.set,
                 load: set.load.clone(),
                 reps: set.target_reps,
+                metrics: Default::default(),
             })
             .collect()),
     }
