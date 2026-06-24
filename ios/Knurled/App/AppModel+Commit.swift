@@ -14,15 +14,15 @@ extension AppModel {
         outcome: ReductionOutcome,
         in repo: ActiveRepo,
         timestamp: String,
-        continuesEventId: String? = nil
+        continuesFrom savedEvent: TrainingEvent? = nil
     ) async throws -> ReductionResult {
         guard outcome.result.validation.isValid, let baseLine = outcome.eventLine else {
             throw CommitError.noEvent
         }
         let line: String
         let message: String
-        if let continuesEventId {
-            line = try Self.rewriteAsContinued(baseLine, continuesEventId: continuesEventId, timestamp: timestamp)
+        if let savedEvent {
+            line = try Self.rewriteAsContinued(baseLine, savedEvent: savedEvent, timestamp: timestamp)
             let session = (outcome.result.event?.sessionId ?? "session").uppercased()
             let date = String(timestamp.prefix(10))
             message = outcome.result.event?.type == "session_completed"
@@ -45,18 +45,38 @@ extension AppModel {
     /// drops the superseded partial out of the resumable set and out of History.
     private static func rewriteAsContinued(
         _ line: String,
-        continuesEventId: String,
+        savedEvent: TrainingEvent,
         timestamp: String
     ) throws -> String {
         var event = try KnurledCoding.decoder().decode(TrainingEvent.self, from: Data(line.utf8))
         if event.type == "session_completed" {
             event.type = "session_continued"
+            event.resultsAdded = resultsAddedByContinuation(
+                fullResults: event.results,
+                savedResults: savedEvent.workoutResults
+            )
+            event.results = []
         }
-        event.continuesEventId = continuesEventId
+        event.continuesEventId = savedEvent.id
         if let session = event.sessionId {
             event.id = EventID.make(type: event.type, session: session, timestamp: timestamp)
         }
         return try EventEncoding.line(event)
+    }
+
+    private static func resultsAddedByContinuation(
+        fullResults: [ExerciseResult],
+        savedResults: [ExerciseResult]
+    ) -> [ExerciseResult] {
+        fullResults.compactMap { result in
+            guard let saved = savedResults.first(where: { $0.slotId == result.slotId }) else {
+                return result
+            }
+            var delta = result
+            let savedSets = Set(saved.actual.map(\.set))
+            delta.actual = result.actual.filter { !savedSets.contains($0.set) }
+            return delta.actual.isEmpty ? nil : delta
+        }
     }
 
     /// Per-action commit message templates (spec §28).

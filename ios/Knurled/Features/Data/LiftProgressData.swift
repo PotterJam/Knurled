@@ -47,7 +47,7 @@ struct LiftProgressData {
 
             var e1RMsByLift: [CoreLift: Double] = [:]
 
-            for result in event.results {
+            for result in event.workoutResults {
                 guard let lift = lift(from: result),
                       let top = topSet(result.actual, units: units) else { continue }
                 let e1rm = OneRepMax.epley(loadKg: top.loadKg, reps: top.reps)

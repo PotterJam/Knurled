@@ -610,31 +610,49 @@ pub struct TrainingEvent {
     pub id: String,
     #[serde(rename = "type")]
     pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub schema_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub program: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub template_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub rendered_session_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub engine_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub saved_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub results: Vec<ExerciseResult>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub results_added: Vec<ExerciseResult>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<Effect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub continues_event_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub corrects_event_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub policy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lane: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub change: Option<StateChange>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<CursorChange>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changes: Vec<CorrectionChange>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub change_kind: Option<String>,
@@ -647,17 +665,23 @@ pub struct TrainingEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExerciseResult {
     pub slot_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub progression_lane: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub progression_rule: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub prescribed_exercise: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub performed_exercise: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub swap_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub swap_policy: Option<SwapPolicy>,
     pub prescribed: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actual: Vec<ActualSet>,
     pub outcome: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<Effect>,
 }
 

@@ -27,7 +27,7 @@ struct HistoryItem: Identifiable, Hashable {
     let event: TrainingEvent
 
     /// Only completed/saved sessions carry editable per-set results (§20).
-    var isCorrectable: Bool { kind == .workout && !event.results.isEmpty }
+    var isCorrectable: Bool { kind == .workout && !event.workoutResults.isEmpty }
 }
 
 enum HistoryBuilder {
@@ -72,7 +72,7 @@ enum HistoryBuilder {
             // A partial that's since been continued is superseded by its continuation; that
             // continuation is the canonical row, so drop the partial instead of showing both (§19).
             if continued.contains(event.id) { return nil }
-            let logged = event.results.count
+            let logged = event.workoutResults.count
             return HistoryItem(
                 id: event.id, title: title,
                 detail: "\(date) · \(logged) logged" + editedSuffix,

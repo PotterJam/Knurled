@@ -7,6 +7,7 @@ struct WorkoutHomeView: View {
         NavigationStack {
             content
                 .navigationTitle("Workout")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -73,6 +74,18 @@ struct NextWorkoutView: View {
             SkipWorkoutSheet(repo: repo, session: session)
         }
         .toolbar {
+            if let plan = repo.plan {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        PlanOverviewView(repo: repo, plan: plan)
+                            .navigationTitle("Plan")
+                    } label: {
+                        Label(plan.plan.name, systemImage: "doc.text")
+                    }
+                    .accessibilityHint("Opens the plan overview")
+                }
+            }
+
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { isSyncing = true; await app.sync(); isSyncing = false }
@@ -91,22 +104,6 @@ struct NextWorkoutView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let plan = repo.plan {
-                NavigationLink {
-                    PlanOverviewView(repo: repo, plan: plan)
-                        .navigationTitle("Plan")
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(plan.plan.name)
-                            .font(.subheadline.weight(.semibold))
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .foregroundStyle(Color.accentColor)
-                }
-                .accessibilityHint("Opens the plan overview")
-            }
-
             Text(session.displayName)
                 .font(.title2.bold())
 

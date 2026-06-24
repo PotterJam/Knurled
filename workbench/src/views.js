@@ -574,9 +574,37 @@ function forwardFill(arr) {
 // --------------------------------------------------------------------------
 // History import
 // --------------------------------------------------------------------------
+function mergeEvents(existing, incoming) {
+  const merged = [...(existing || [])];
+  const seen = new Set(merged.map((event) => event.id).filter(Boolean));
+  let added = 0;
+  for (const event of incoming || []) {
+    if (event.id && seen.has(event.id)) continue;
+    if (event.id) seen.add(event.id);
+    merged.push(event);
+    added++;
+  }
+  return { events: merged, added };
+}
+
 export function history(root, ctx) {
+  const historyNotice = ctx.state.ui?.historyNotice;
   root.innerHTML = `
     <div class="stack">
+      ${
+        historyNotice
+          ? `<div class="card">
+              <div class="card-head">
+                <h3>${esc(historyNotice.title)}</h3>
+                <div class="row">
+                  <button id="hist-commit">Commit imported data</button>
+                  <button class="ghost" id="hist-backtest">Review backtest</button>
+                </div>
+              </div>
+              <p class="msg ${historyNotice.kind}">${esc(historyNotice.message)}</p>
+            </div>`
+          : ""
+      }
       <div class="card">
         <div class="card-head"><h3>Import history</h3></div>
         <p class="muted small">Paste or drop a CSV/TSV export (e.g. Hevy). The engine parses it — nothing is reimplemented here.</p>
@@ -589,6 +617,9 @@ export function history(root, ctx) {
       </div>
       <div id="hist-out"></div>
     </div>`;
+
+  root.querySelector("#hist-commit")?.addEventListener("click", () => ctx.setView("git"));
+  root.querySelector("#hist-backtest")?.addEventListener("click", () => ctx.setView("backtest"));
 
   const text = root.querySelector("#hist-text");
   const drop = root.querySelector("#drop");
@@ -639,8 +670,18 @@ export function history(root, ctx) {
         </div>
       </div>`;
     out.querySelector("#hist-accept").addEventListener("click", () => {
-      ctx.setState({ events: [...ctx.state.events, ...draft.events] });
-      ctx.setView("backtest");
+      const merged = mergeEvents(ctx.state.events, draft.events);
+      const historyNotice = {
+        kind: "ok",
+        title: "Import added",
+        message:
+          merged.added === draft.events.length
+            ? `Added ${merged.added} imported session event${merged.added === 1 ? "" : "s"} to plan data.`
+            : `Added ${merged.added} new session event${merged.added === 1 ? "" : "s"}; skipped ${
+                draft.events.length - merged.added
+              } duplicate${draft.events.length - merged.added === 1 ? "" : "s"}.`,
+      };
+      ctx.setState({ events: merged.events, ui: { ...ctx.state.ui, historyNotice } });
     });
   });
 }
@@ -715,32 +756,38 @@ export function git(root, ctx) {
       </div>
     </div>`;
 
-  const save = () =>
-    ctx.setState({
-      github: {
-        token: root.querySelector("#g-token").value.trim(),
-        repo: root.querySelector("#g-repo").value.trim(),
-        branch: root.querySelector("#g-branch").value.trim() || "main",
-      },
-    });
-  root.querySelectorAll("#g-token, #g-repo, #g-branch").forEach((el) => el.addEventListener("change", save));
+  const formGithub = () => ({
+    token: root.querySelector("#g-token").value.trim(),
+    repo: root.querySelector("#g-repo").value.trim(),
+    branch: root.querySelector("#g-branch").value.trim() || "main",
+  });
+  const commitButton = root.querySelector("#g-commit");
+  const updateCommitState = () => {
+    const next = formGithub();
+    commitButton.disabled = !(next.token && next.repo && ctx.result?.validation?.status === "valid");
+  };
+  const save = () => ctx.setState({ github: formGithub() });
+  root.querySelectorAll("#g-token, #g-repo, #g-branch").forEach((el) => {
+    el.addEventListener("input", updateCommitState);
+    el.addEventListener("change", save);
+  });
   const status = root.querySelector("#g-status");
 
   root.querySelector("#g-connect").addEventListener("click", async () => {
-    save();
+    const nextGithub = formGithub();
     status.innerHTML = `<p class="muted">Connecting…</p>`;
     try {
-      await ctx.github.connect();
-      git(root, ctx);
+      await ctx.github.connect(nextGithub);
+      ctx.setState({ github: nextGithub });
     } catch (e) {
       status.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`;
     }
   });
   root.querySelector("#g-load").addEventListener("click", async () => {
-    save();
+    const nextGithub = formGithub();
     status.innerHTML = `<p class="muted">Loading repo…</p>`;
     try {
-      await ctx.github.load();
+      await ctx.github.load(nextGithub);
       ctx.setView("editor");
     } catch (e) {
       status.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`;
@@ -754,9 +801,10 @@ export function git(root, ctx) {
       status.innerHTML = `<p class="msg bad">Plan is not valid — fix validation before committing.</p>`;
       return;
     }
+    const nextGithub = formGithub();
     status.innerHTML = `<p class="muted">Committing…</p>`;
     try {
-      const res = await ctx.github.commit();
+      const res = await ctx.github.commit(nextGithub);
       if (res.skipped) {
         status.innerHTML = `<p class="msg ok">${esc(res.message || "No changes to commit.")}</p>`;
       } else {

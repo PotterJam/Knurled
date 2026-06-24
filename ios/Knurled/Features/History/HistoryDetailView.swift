@@ -19,7 +19,7 @@ struct HistoryDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(Array(event.results.enumerated()), id: \.offset) { _, result in
+            ForEach(Array(event.workoutResults.enumerated()), id: \.offset) { _, result in
                 Section {
                     ForEach(Array(result.actual.enumerated()), id: \.offset) { index, set in
                         repsRow(slot: result.slotId, index: index, set: set)
@@ -93,7 +93,7 @@ struct HistoryDetailView: View {
     }
 
     private var pendingChanges: [CorrectionChange] {
-        event.results.flatMap { result in
+        event.workoutResults.flatMap { result in
             result.actual.enumerated().compactMap { index, set -> CorrectionChange? in
                 let key = "\(result.slotId)#\(index)"
                 let base = effectiveReps(slot: result.slotId, index: index, original: set.reps)

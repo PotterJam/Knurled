@@ -37,6 +37,7 @@ const defaults = () => ({
   repoLabel: "Static workbench",
   theme: "sage",
   github: { token: "", repo: "", branch: "main" },
+  ui: { historyNotice: null },
 });
 
 let state = load();
@@ -73,7 +74,15 @@ export function setState(patch) {
 }
 
 export function resetPlan() {
-  setState({ planText: SAMPLE_PLAN, patches: [], events: [] });
+  const next = defaults();
+  setState({
+    planText: next.planText,
+    lock: next.lock,
+    patches: next.patches,
+    events: next.events,
+    repoLabel: next.repoLabel,
+    ui: next.ui,
+  });
 }
 
 export function subscribe(fn) {

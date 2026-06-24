@@ -102,11 +102,13 @@ import Foundation
             }
         )
         let full = try await engine.reduce(dir: dir, session: again, input: fullInput)
-        try await app.commit(outcome: full, in: repo, timestamp: "2026-06-24T11:00:00Z", continuesEventId: saved.id)
+        try await app.commit(outcome: full, in: repo, timestamp: "2026-06-24T11:00:00Z", continuesFrom: saved)
 
         let events = LogReader().events(dir: dir)
         let continued = try #require(events.first { $0.type == "session_continued" })
         #expect(continued.continuesEventId == saved.id)
+        #expect(continued.results.isEmpty)
+        #expect(continued.resultsAdded.count == 3)
         #expect(repo.state?.cursor.nextSession == "b1")
 
         // The partial and its continuation are one workout: History shows a single complete A1
@@ -157,7 +159,7 @@ import Foundation
         )
         let second = try await engine.reduce(dir: dir, session: resumed, input: secondInput)
         try await app.commit(
-            outcome: second, in: repo, timestamp: "2026-06-24T10:40:00Z", continuesEventId: original.id
+            outcome: second, in: repo, timestamp: "2026-06-24T10:40:00Z", continuesFrom: original
         )
 
         // Both saves are on the log, but the re-save stays a partial that links to the original.

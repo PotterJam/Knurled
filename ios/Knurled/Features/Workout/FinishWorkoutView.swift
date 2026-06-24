@@ -120,7 +120,7 @@ struct FinishWorkoutView: View {
                 outcome: outcome,
                 in: workout.repo,
                 timestamp: timestamp,
-                continuesEventId: workout.continuesEventId
+                continuesFrom: workout.continuesFrom
             )
             onCommitted()
             dismiss()

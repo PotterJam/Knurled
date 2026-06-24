@@ -176,14 +176,14 @@ final class LiveWorkout: Identifiable {
     let repo: ActiveRepo
     let session: RenderedSession
     let startedAt: String
-    let continuesEventId: String?
+    let continuesFrom: TrainingEvent?
     var items: [LiveItem]
 
     init(repo: ActiveRepo, session: RenderedSession, resuming saved: TrainingEvent? = nil) {
         self.repo = repo
         self.session = session
         self.startedAt = saved?.startedAt ?? Self.timestamp()
-        self.continuesEventId = saved?.id
+        self.continuesFrom = saved
         self.items = session.items.map { LiveItem(item: $0) }
         if let saved { prefill(from: saved) }
     }
@@ -191,7 +191,7 @@ final class LiveWorkout: Identifiable {
     /// Restores the sets already logged in a saved partial so the user continues exactly where
     /// they left off (§16/§19).
     private func prefill(from saved: TrainingEvent) {
-        for result in saved.results {
+        for result in saved.workoutResults {
             guard let item = items.first(where: { $0.id == result.slotId }) else { continue }
             if let performed = result.performedExercise, performed != item.item.exercise {
                 item.performedExercise = performed

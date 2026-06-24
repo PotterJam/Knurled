@@ -77,16 +77,20 @@ function buildContext(state) {
     simulate: (weeks, strategy) => engine.simulate(state.planText, lock, state.patches, state.events, weeks, strategy),
     importHistory: (text, source) => engine.importHistory(text, source, "auto"),
     github: {
-      connect: async () => {
-        githubUser = await github.whoami(state.github.token);
+      connect: async (config = state.github) => {
+        githubUser = await github.whoami(config.token);
+        return githubUser;
       },
-      load: async () => {
-        const loaded = await github.loadRepo(state.github.token, state.github.repo, state.github.branch);
-        setState(loaded);
+      load: async (config = state.github) => {
+        const githubConfig = { ...state.github, ...config };
+        const loaded = await github.loadRepo(githubConfig.token, githubConfig.repo, githubConfig.branch);
+        setState({ ...loaded, github: githubConfig, ui: { ...state.ui, historyNotice: null } });
       },
-      commit: async () => {
-        const plan = buildCommitPlan({ state, result, lock, templateRef: templateRef(state.planText) });
-        return github.commitFiles(state.github.token, state.github.repo, state.github.branch, plan);
+      commit: async (config = state.github) => {
+        const githubConfig = { ...state.github, ...config };
+        const commitState = { ...state, github: githubConfig };
+        const plan = buildCommitPlan({ state: commitState, result, lock, templateRef: templateRef(state.planText) });
+        return github.commitFiles(githubConfig.token, githubConfig.repo, githubConfig.branch, plan);
       },
     },
   };

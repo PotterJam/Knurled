@@ -574,6 +574,7 @@ fn apply_correction_changes(
         let Some(result) = target
             .results
             .iter_mut()
+            .chain(target.results_added.iter_mut())
             .find(|result| result.slot_id == slot_id)
         else {
             continue;
@@ -586,17 +587,13 @@ fn apply_correction_changes(
     target.effects = target
         .results
         .iter()
+        .chain(target.results_added.iter())
         .flat_map(|result| result.effects.clone())
         .collect();
 }
 
 fn recompute_result(compiled: &CompiledPlan, result: &mut ExerciseResult) {
-    let prescribed_sets = result
-        .prescribed
-        .get("sets")
-        .cloned()
-        .and_then(|value| serde_json::from_value::<Vec<PrescribedSet>>(value).ok())
-        .unwrap_or_default();
+    let prescribed_sets = prescribed_sets_from_log(&result.prescribed);
     let adjusted_today = result.actual.iter().any(|actual| {
         prescribed_sets
             .first()
@@ -1905,11 +1902,77 @@ fn reduce_item(
         ),
         swap_reason: input.swap_reason.clone(),
         swap_policy: input.swap_policy.clone(),
-        prescribed: json!({ "sets": item.prescription.sets }),
+        prescribed: compact_prescribed(&item.prescription.sets),
         actual,
         outcome,
         effects,
     })
+}
+
+fn compact_prescribed(sets: &[PrescribedSet]) -> serde_json::Value {
+    let same_load = sets
+        .first()
+        .map(|first| sets.iter().all(|set| set.load == first.load))
+        .unwrap_or(true);
+    let no_percentages = sets.iter().all(|set| set.percentage.is_none());
+
+    if same_load && no_percentages {
+        let reps = sets
+            .iter()
+            .map(|set| {
+                if set.amrap {
+                    json!(format!("{}+", set.target_reps))
+                } else {
+                    json!(set.target_reps)
+                }
+            })
+            .collect::<Vec<_>>();
+        if let Some(load) = sets.first().and_then(|set| set.load.clone()) {
+            json!({ "load": load, "reps": reps })
+        } else {
+            json!({ "reps": reps })
+        }
+    } else {
+        json!({ "sets": sets })
+    }
+}
+
+fn prescribed_sets_from_log(value: &serde_json::Value) -> Vec<PrescribedSet> {
+    if let Some(sets) = value
+        .get("sets")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Vec<PrescribedSet>>(value).ok())
+    {
+        return sets;
+    }
+
+    let load = value
+        .get("load")
+        .and_then(|value| value.as_str())
+        .map(str::to_owned);
+    value
+        .get("reps")
+        .and_then(|value| value.as_array())
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter_map(|(index, reps)| {
+            let (target_reps, amrap) = if let Some(number) = reps.as_u64() {
+                (u32::try_from(number).ok()?, false)
+            } else {
+                let text = reps.as_str()?;
+                let target = text.strip_suffix('+').unwrap_or(text);
+                (target.parse::<u32>().ok()?, text.ends_with('+'))
+            };
+            Some(PrescribedSet {
+                set: u32::try_from(index + 1).ok()?,
+                load: load.clone(),
+                target_reps,
+                amrap,
+                percentage: None,
+            })
+        })
+        .collect()
 }
 
 fn actual_sets_for(item: &RenderedItem, input: &ItemInput) -> Result<Vec<ActualSet>> {
