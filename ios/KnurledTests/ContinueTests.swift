@@ -4,6 +4,54 @@ import Foundation
 
 @MainActor
 @Suite struct ContinueTests {
+    @Test func incompleteWorkoutFinishInputIsResumablePartial() async throws {
+        let dir = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = RustWorkoutEngine()
+        let repo = ActiveRepo(displayName: "Test", url: dir, isSample: true)
+        let session = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
+        let workout = LiveWorkout(repo: repo, session: session)
+
+        let bench = try #require(workout.items.first { $0.id == "a1.t2" })
+        bench.sets[0].logged = true
+
+        let input = workout.finishInput(timestamp: "2026-06-24T10:20:00Z")
+
+        #expect(workout.canFinish)
+        #expect(!workout.allRequiredComplete)
+        #expect(workout.finishStatus == ExecutionStatus.partial)
+        #expect(input.status == ExecutionStatus.partial)
+        #expect(input.completedAt == nil)
+        #expect(input.savedAt == "2026-06-24T10:20:00Z")
+        #expect(input.inputs.map(\.itemId) == ["a1.t2"])
+        #expect(input.inputs.first?.sets.map(\.set) == [1])
+    }
+
+    @Test func completeWorkoutFinishInputStillCompletes() async throws {
+        let dir = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = RustWorkoutEngine()
+        let repo = ActiveRepo(displayName: "Test", url: dir, isSample: true)
+        let session = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
+        let workout = LiveWorkout(repo: repo, session: session)
+
+        for item in workout.requiredItems {
+            for set in item.sets {
+                set.logged = true
+            }
+        }
+
+        let input = workout.finishInput(timestamp: "2026-06-24T11:00:00Z")
+
+        #expect(workout.canFinish)
+        #expect(workout.allRequiredComplete)
+        #expect(workout.finishStatus == ExecutionStatus.complete)
+        #expect(input.status == ExecutionStatus.complete)
+        #expect(input.completedAt == "2026-06-24T11:00:00Z")
+        #expect(input.savedAt == nil)
+        #expect(input.inputs.count == session.items.count)
+    }
+
     // §16/§19/§31 — a partial save keeps in-progress sets without advancing the cursor, and
     // continuing finishes the same snapshot as a linked session_continued.
     @Test func partialSavePreservesSetsThenContinueCompletes() async throws {

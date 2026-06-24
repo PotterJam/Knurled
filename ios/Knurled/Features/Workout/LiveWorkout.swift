@@ -182,6 +182,14 @@ final class LiveWorkout: Identifiable {
     var completedRequiredCount: Int { requiredItems.filter(\.isComplete).count }
     var allRequiredComplete: Bool { requiredItems.allSatisfy(\.isComplete) }
     var anyLogged: Bool { items.contains(where: \.anyLogged) }
+    var canFinish: Bool { anyLogged }
+    var finishStatus: String {
+        allRequiredComplete ? ExecutionStatus.complete : ExecutionStatus.partial
+    }
+
+    func finishInput(timestamp: String) -> ExecutionInput {
+        executionInput(status: finishStatus, timestamp: timestamp)
+    }
 
     func executionInput(status: String, timestamp: String) -> ExecutionInput {
         let isComplete = status == ExecutionStatus.complete

@@ -76,7 +76,7 @@ struct ActiveWorkoutView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!workout.allRequiredComplete || isSaving)
+            .disabled(!workout.canFinish || isSaving)
         }
         .controlSize(.large)
         .padding()

@@ -17,12 +17,16 @@ struct FinishWorkoutView: View {
     @State private var phase: Phase = .computing
     @State private var timestamp = LiveWorkout.timestamp()
 
+    private var isComplete: Bool {
+        workout.finishStatus == ExecutionStatus.complete
+    }
+
     var body: some View {
         NavigationStack {
             Group {
                 switch phase {
                 case .computing:
-                    ProgressView("Calculating effects…")
+                    ProgressView(isComplete ? "Calculating effects…" : "Preparing save…")
                 case .preview(let outcome):
                     previewContent(outcome)
                 case .submitting:
@@ -35,13 +39,13 @@ struct FinishWorkoutView: View {
                     }
                 }
             }
-            .navigationTitle("\(workout.session.displayName) Complete")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
             }
+            .navigationTitle(isComplete ? "\(workout.session.displayName) Complete" : "Save Partial")
             .task { await compute() }
         }
     }
@@ -49,18 +53,27 @@ struct FinishWorkoutView: View {
     private func previewContent(_ outcome: ReductionOutcome) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: KnurledTheme.Spacing.l) {
-                VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
-                    Text("Effects").font(.headline)
-                    ForEach(Array((outcome.result.event?.results ?? []).enumerated()), id: \.offset) { _, result in
-                        EffectResultRow(result: result, title: title(forSlot: result.slotId))
+                if isComplete {
+                    VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
+                        Text("Effects").font(.headline)
+                        ForEach(Array((outcome.result.event?.results ?? []).enumerated()), id: \.offset) { _, result in
+                            EffectResultRow(result: result, title: title(forSlot: result.slotId))
+                        }
+                        if (outcome.result.event?.results ?? []).isEmpty {
+                            Text("No progression changes.").foregroundStyle(.secondary)
+                        }
                     }
-                    if (outcome.result.event?.results ?? []).isEmpty {
-                        Text("No progression changes.").foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
+                        Text("Saved Work").font(.headline)
+                        ForEach(Array((outcome.result.event?.results ?? []).enumerated()), id: \.offset) { _, result in
+                            SavedResultRow(result: result, title: title(forSlot: result.slotId))
+                        }
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Next").font(.headline)
+                    Text(isComplete ? "Next" : "Resume").font(.headline)
                     Text(outcome.result.nextWorkout.displayName)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -69,7 +82,7 @@ struct FinishWorkoutView: View {
                 Button {
                     Task { await submit(outcome) }
                 } label: {
-                    Label("Submit Workout", systemImage: "arrow.up.circle.fill")
+                    Label(isComplete ? "Submit Workout" : "Save Partial", systemImage: "arrow.up.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -86,7 +99,7 @@ struct FinishWorkoutView: View {
 
     private func compute() async {
         guard case .computing = phase else { return }
-        let input = workout.executionInput(status: ExecutionStatus.complete, timestamp: timestamp)
+        let input = workout.finishInput(timestamp: timestamp)
         do {
             let outcome = try await app.engine.reduce(dir: workout.repo.url, session: workout.session, input: input)
             if outcome.result.validation.isValid {
@@ -107,12 +120,31 @@ struct FinishWorkoutView: View {
                 outcome: outcome,
                 in: workout.repo,
                 timestamp: timestamp,
-                continuesEventId: workout.continuesEventId
+                continuesEventId: isComplete ? workout.continuesEventId : nil
             )
             onCommitted()
             dismiss()
         } catch {
             phase = .failed(error.localizedDescription)
+        }
+    }
+}
+
+struct SavedResultRow: View {
+    let result: ExerciseResult
+    let title: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "tray.and.arrow.down.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.medium))
+                Text("\(result.actual.count) \(result.actual.count == 1 ? "set" : "sets") logged")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
         }
     }
 }
