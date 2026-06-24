@@ -3,9 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use knurled_core::{
     CorrectionChange, Effect, HistoryImportOptions, PatchFile, PlanChangeRef, RestSource,
-    StateChange, TrainingEvent, compile_plan, create_initial_state, history_import_events_from_str,
-    import_history_repo, init_training_repo, reduce_input, render_lockfile, render_next,
-    replay_events, simulate, synthetic_execution_input,
+    StateChange, TrainingEvent, build_outputs, compile_plan, create_initial_state,
+    history_import_events_from_str, import_history_repo, init_training_repo, reduce_input,
+    render_lockfile, render_next, replay_events, simulate, synthetic_execution_input,
 };
 use serde_json::json;
 
@@ -609,6 +609,59 @@ fn continuation_event_advances_cursor_after_partial_save() {
 
     assert_eq!(state.cursor.next_session, "b1");
     assert_eq!(state.lanes["squat.t1"].load.as_deref(), Some("82.5kg"));
+}
+
+#[test]
+fn partial_save_advances_cursor_to_next_workout() {
+    let compiled = compiled_gzclp();
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+    let mut input = synthetic_execution_input(&rendered, "all-pass", 0);
+    input.status = "partial".into();
+
+    let result = reduce_input(&compiled, &state, &rendered, &input).unwrap();
+
+    // Submitting a partial moves the program on to the next workout (B1), rather than re-serving A1.
+    assert_eq!(result.new_state.cursor.next_session, "b1");
+    assert_eq!(result.next_workout.session_id, "b1");
+}
+
+#[test]
+fn saved_partial_advances_cursor_yet_stays_resumable() {
+    let compiled = compiled_gzclp();
+    let a1 = render_next(&compiled, &create_initial_state(&compiled)).unwrap();
+    let saved = TrainingEvent {
+        id: "evt_partial".into(),
+        kind: "session_saved".into(),
+        session_id: Some("a1".into()),
+        status: Some("partial".into()),
+        rendered_session_hash: Some(a1.rendered_session_hash.clone()),
+        ..empty_event()
+    };
+
+    let outputs = build_outputs(&compiled, std::slice::from_ref(&saved)).unwrap();
+
+    // Cursor has moved to B1, but A1 is re-rendered as a resumable session for History.
+    assert_eq!(outputs.state.cursor.next_session, "b1");
+    assert_eq!(outputs.next_workout.as_ref().unwrap().session_id, "b1");
+    assert_eq!(outputs.resumable_sessions.len(), 1);
+    assert_eq!(outputs.resumable_sessions[0].session_id, "a1");
+    assert_eq!(
+        outputs.resumable_sessions[0].rendered_session_hash,
+        a1.rendered_session_hash
+    );
+
+    // Once continued, A1 is no longer offered as resumable and the cursor stays put.
+    let continued = TrainingEvent {
+        id: "evt_continue".into(),
+        kind: "session_continued".into(),
+        session_id: Some("a1".into()),
+        continues_event_id: Some("evt_partial".into()),
+        ..empty_event()
+    };
+    let after = build_outputs(&compiled, &[saved, continued]).unwrap();
+    assert_eq!(after.state.cursor.next_session, "b1");
+    assert!(after.resumable_sessions.is_empty());
 }
 
 #[test]

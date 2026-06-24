@@ -193,6 +193,20 @@ pub fn render_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
     }
 }
 
+/// Renders a specific session by id against the current state, independent of where the cursor
+/// currently points. A partial save advances the cursor to the next workout, so the snapshot a
+/// saved partial was logged against is no longer the "next" one — this lets the app re-render it
+/// to be resumed from history (§16/§19).
+pub fn render_session(
+    compiled: &CompiledPlan,
+    state: &StateProjection,
+    session_id: &str,
+) -> Result<RenderedSession> {
+    let mut scratch = state.clone();
+    scratch.cursor.next_session = session_id.to_ascii_lowercase();
+    render_next(compiled, &scratch)
+}
+
 pub fn validate_execution_input(
     rendered_session: &RenderedSession,
     input: &ExecutionInput,
@@ -274,7 +288,15 @@ pub fn reduce_input(
     }
 
     apply_effects(&mut new_state, &effects);
-    if input.status == "complete" {
+    // Advance to the next workout whenever the cursor is still sitting on the session being
+    // submitted — for a complete *or* a partial save (§16). Guarding on the cursor keeps this
+    // idempotent: continuing a saved partial (whose save already advanced the cursor) does not
+    // advance a second time.
+    if new_state
+        .cursor
+        .next_session
+        .eq_ignore_ascii_case(&rendered_session.session_id)
+    {
         advance_cursor(
             &mut new_state,
             &compiled.schedule.rotation,
@@ -370,6 +392,12 @@ pub fn replay_events(compiled: &CompiledPlan, events: &[TrainingEvent]) -> State
             }
             "session_saved" => {
                 if let Some(session_id) = &event.session_id {
+                    // A partial save moves the program on to the next workout; the saved snapshot
+                    // stays resumable from history (§16/§19). Guard on the cursor so repeated saves
+                    // of the same session don't advance more than once.
+                    if state.cursor.next_session.eq_ignore_ascii_case(session_id) {
+                        advance_cursor(&mut state, &compiled.schedule.rotation, session_id);
+                    }
                     state.sessions.insert(
                         format!("{}_{}", session_id, event.id),
                         SessionState {
@@ -383,7 +411,12 @@ pub fn replay_events(compiled: &CompiledPlan, events: &[TrainingEvent]) -> State
             "session_continued" => {
                 apply_effects(&mut state, &event.effects);
                 if let Some(session_id) = &event.session_id {
-                    advance_cursor(&mut state, &compiled.schedule.rotation, session_id);
+                    // The partial this continues already advanced the cursor; only advance here if
+                    // the cursor is somehow still on this session (e.g. a continue with no prior
+                    // save in the log).
+                    if state.cursor.next_session.eq_ignore_ascii_case(session_id) {
+                        advance_cursor(&mut state, &compiled.schedule.rotation, session_id);
+                    }
                     state.sessions.insert(
                         format!("{}_{}", session_id, event.id),
                         SessionState {
@@ -620,6 +653,11 @@ pub fn build_outputs(compiled: &CompiledPlan, events: &[TrainingEvent]) -> Resul
     } else {
         None
     };
+    let resumable_sessions = if validation.status == ValidationStatus::Valid {
+        resumable_sessions(compiled, &state, events)
+    } else {
+        Vec::new()
+    };
     let mut ir = serde_json::to_value(compiled)?;
     if let Some(object) = ir.as_object_mut() {
         object.remove("lock");
@@ -628,8 +666,48 @@ pub fn build_outputs(compiled: &CompiledPlan, events: &[TrainingEvent]) -> Resul
         state,
         ir,
         next_workout,
+        resumable_sessions,
         validation,
     })
+}
+
+/// Re-renders each saved partial that has not yet been continued, so the app can resume it from
+/// history after the cursor has moved on (§16/§19). One entry per session id (most recent save
+/// wins); a render is only included when it still matches the snapshot the partial was logged
+/// against, otherwise the plan has changed underneath it and it falls back to correction.
+fn resumable_sessions(
+    compiled: &CompiledPlan,
+    state: &StateProjection,
+    events: &[TrainingEvent],
+) -> Vec<RenderedSession> {
+    let continued: Vec<&str> = events
+        .iter()
+        .filter_map(|event| event.continues_event_id.as_deref())
+        .collect();
+
+    let mut sessions = Vec::new();
+    let mut seen = Vec::new();
+    for event in events.iter().rev() {
+        if event.kind != "session_saved" || continued.contains(&event.id.as_str()) {
+            continue;
+        }
+        let Some(session_id) = &event.session_id else {
+            continue;
+        };
+        if seen.iter().any(|id: &String| id == session_id) {
+            continue;
+        }
+        seen.push(session_id.clone());
+        if let Ok(rendered) = render_session(compiled, state, session_id)
+            && event
+                .rendered_session_hash
+                .as_deref()
+                .is_none_or(|hash| hash == rendered.rendered_session_hash)
+        {
+            sessions.push(rendered);
+        }
+    }
+    sessions
 }
 
 pub fn simulate(

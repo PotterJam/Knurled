@@ -1271,8 +1271,9 @@ Example:
 Rules:
 
 ```text
-Partial sessions do not advance the cursor.
+Partial sessions advance the cursor to the next workout but stay resumable from history.
 Completed sessions advance the cursor.
+Continuing a saved partial does not advance the cursor again (the save already did).
 Correction events rebuild the projected session result.
 State adjustment events update lanes/cursor explicitly.
 Generated state must match replayed logs.
@@ -2281,9 +2282,11 @@ Then training maxes increase according to template
 
 ```text
 Given A1 saved partial with squat only
+Then cursor advances to the next workout (B1)
+And A1 stays resumable from history
 When continued later with bench and row
 Then projected session is complete
-And cursor advances only after completion
+And cursor does not advance again
 ```
 
 ### 37.8 Correction event

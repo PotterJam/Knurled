@@ -22,6 +22,11 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(BuildOutputs.self, from: raw)
     }
 
+    func renderSession(dir: URL, sessionId: String) throws -> RenderedSession {
+        let raw = try call(dir: dir, json: sessionId) { knurled_render_session($0, $1) }
+        return try decode(RenderedSession.self, from: raw)
+    }
+
     func validateInput(dir: URL, input: ExecutionInput) throws -> ExecutionInputValidation {
         let json = try encode(input)
         let raw = try call(dir: dir, json: json) { knurled_validate_execution_input($0, $1) }

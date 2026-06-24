@@ -27,6 +27,10 @@ char *knurled_init_repo(const char *dir, const char *template_ref);
  * -> reduction result (validation, event, effects, new_state, next_workout) */
 char *knurled_reduce_input(const char *dir, const char *rendered_session_json, const char *execution_input_json);
 
+/* Re-renders a specific session by id against the repo's current state, ignoring the cursor,
+ * so a saved partial can be resumed from history after the cursor has advanced. -> rendered session */
+char *knurled_render_session(const char *dir, const char *session_id);
+
 /* -> execution_input_validation */
 char *knurled_validate_execution_input(const char *dir, const char *execution_input_json);
 
