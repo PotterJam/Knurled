@@ -44,6 +44,14 @@ Named mechanisms are scheme features, not primitives: **AMRAP** = a flagged set;
 a backoff group `@ set(1)`/`@ set(2)`; **BBB** = `5×10 @ 0.5·tm`; **double progression** =
 `rep_range` + `range_top → increase_load`.
 
+**Warmups are a scheme concern, not a sequencing one.** Shipped ahead of this DSL as scoped plan
+configuration with per-program engine defaults ([ADR 0006](0006-warmup-sets-and-equipment-rounding.md));
+when authoring lands they fold in as a sixth, optional facet of **Scheme** — a ramp of set-groups
+below the working set — so a user-authored template can carry its own warmup ramp. **Equipment
+rounding is deliberately *not* an axis:** the available plates/dumbbells are a property of the
+lifter's gym, not the program, so it stays a plan-level post-computation layer applied over any
+template's output, keeping this vocabulary free of equipment concerns.
+
 ### Coverage
 
 | Program | basis | sequence | trigger → effect |

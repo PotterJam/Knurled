@@ -50,7 +50,7 @@
         "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
         "progression_lane": "squat.main",
         "progression_rule": "531.main",
-        "rendered_session_hash": "sha256:a999c0b86ed2653d9e6c00fabbf496700bb23eef87d0f1a79aa36eb906932b1f",
+        "rendered_session_hash": "sha256:dd9f286ecb9322c225a6364a732e1be16604011acf90f154340e9360149ebdd8",
         "slot_id": "squat.main"
       },
       "item_id": "squat.main",
@@ -77,6 +77,29 @@
             "set": 3,
             "target_reps": 5
           }
+        ],
+        "warmups": [
+          {
+            "amrap": false,
+            "load": "35kg",
+            "percentage": 40,
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "45kg",
+            "percentage": 50,
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "55kg",
+            "percentage": 60,
+            "set": 3,
+            "target_reps": 3
+          }
         ]
       },
       "progression_lane": "squat.main",
@@ -90,7 +113,7 @@
     }
   ],
   "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
-  "rendered_session_hash": "sha256:a999c0b86ed2653d9e6c00fabbf496700bb23eef87d0f1a79aa36eb906932b1f",
+  "rendered_session_hash": "sha256:dd9f286ecb9322c225a6364a732e1be16604011acf90f154340e9360149ebdd8",
   "schema_version": "0.1",
   "session_id": "squat_day",
   "suggested_date": null,

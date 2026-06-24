@@ -19,8 +19,9 @@ use serde::Deserialize;
 
 use crate::error::{KnurledError, Result};
 use crate::model::{
-    ExerciseAlternative, ExerciseOptions, LockEntry, Lockfile, Map, Patch, PatchOperation, Plan,
-    RestPolicy, SCHEMA_VERSION, Schedule, SwapPolicy, Units,
+    EquipmentProfile, ExerciseAlternative, ExerciseOptions, Implement, LockEntry, Lockfile, Map,
+    Patch, PatchOperation, Plan, RestPolicy, RoundingMode, SCHEMA_VERSION, Schedule, SwapPolicy,
+    Units, WarmupBasis, WarmupPolicy, WarmupScheme, WarmupStep,
 };
 use crate::templates::parse_template_ref;
 
@@ -44,6 +45,8 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
     let mut accessories = Map::new();
     let mut exercise_options = Map::new();
     let mut rest = RestPolicy::default();
+    let mut warmup = WarmupPolicy::default();
+    let mut equipment = None;
 
     for node in body.nodes() {
         match node.name().value() {
@@ -55,6 +58,8 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
             "accessories" => accessories = normalize_accessory_map(parse_pairs(node)?),
             "exercise_options" => exercise_options = parse_exercise_options(node)?,
             "rest" => rest = parse_rest(node)?,
+            "warmup" => warmup = parse_warmup(node)?,
+            "equipment" => equipment = Some(parse_equipment(node)?),
             // `assistance` is a documented future construct (spec §11) that the
             // MVP templates do not yet consume: accept it, but ignore it.
             "assistance" => {}
@@ -75,6 +80,8 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
         accessories,
         exercise_options,
         rest,
+        warmup,
+        equipment,
     })
 }
 
@@ -346,6 +353,178 @@ fn parse_rest(node: &KdlNode) -> Result<RestPolicy> {
     Ok(policy)
 }
 
+fn parse_warmup(node: &KdlNode) -> Result<WarmupPolicy> {
+    let mut policy = WarmupPolicy::default();
+    if let Some(body) = node.children() {
+        for line in body.nodes() {
+            let scope = line.name().value().to_ascii_lowercase();
+            if scope == "default" {
+                policy.default = Some(parse_warmup_scheme(line)?);
+                continue;
+            }
+
+            let key = node_string_arg(line, &format!("warmup {scope}"))?;
+            let key = normalize_rest_key(&scope, &key);
+            let scheme = parse_warmup_scheme(line)?;
+            let existing = match scope.as_str() {
+                "tier" => policy.by_tier.insert(key.clone(), scheme),
+                "slot" => policy.by_slot.insert(key.clone(), scheme),
+                "lane" => policy.by_lane.insert(key.clone(), scheme),
+                "exercise" => policy.by_exercise.insert(key.clone(), scheme),
+                other => return Err(parse_error(format!("unknown warmup scope: {other}"))),
+            };
+            if existing.is_some() {
+                return Err(parse_error(format!("duplicate warmup {scope}: {key}")));
+            }
+        }
+    }
+    Ok(policy)
+}
+
+fn parse_warmup_scheme(node: &KdlNode) -> Result<WarmupScheme> {
+    let mut scheme = WarmupScheme::default();
+    if let Some(body) = node.children() {
+        for line in body.nodes() {
+            match line.name().value() {
+                "empty_bar" => {
+                    let args = positional_strings(line);
+                    scheme.empty_bar_sets = args
+                        .first()
+                        .and_then(|value| value.parse().ok())
+                        .ok_or_else(|| parse_error("warmup empty_bar needs a set count"))?;
+                    scheme.empty_bar_reps = args
+                        .get(1)
+                        .and_then(|value| value.parse().ok())
+                        .ok_or_else(|| parse_error("warmup empty_bar needs a rep count"))?;
+                }
+                "ramp" => {
+                    if let Some(steps) = line.children() {
+                        for step in steps.nodes() {
+                            scheme.ramp.push(parse_warmup_step(step)?);
+                        }
+                    }
+                }
+                "basis" => scheme.basis = parse_warmup_basis(&node_string_arg(line, "basis")?)?,
+                other => return Err(parse_error(format!("unknown warmup directive: {other}"))),
+            }
+        }
+    }
+    Ok(scheme)
+}
+
+/// A ramp step is `step <percentage> <reps>`, e.g. `step 65 3`. Reps may also
+/// be given as `reps=`, and the percentage as `pct=`, for readability.
+fn parse_warmup_step(node: &KdlNode) -> Result<WarmupStep> {
+    if node.name().value() != "step" {
+        return Err(parse_error(format!(
+            "expected a `step` in warmup ramp, found `{}`",
+            node.name().value()
+        )));
+    }
+    let args = positional_strings(node);
+    let percentage = args
+        .first()
+        .and_then(|value| value.parse().ok())
+        .or_else(|| prop_string(node, "pct").and_then(|value| value.parse().ok()))
+        .ok_or_else(|| parse_error("warmup step needs a percentage"))?;
+    let reps = args
+        .get(1)
+        .and_then(|value| value.parse().ok())
+        .or_else(|| prop_string(node, "reps").and_then(|value| value.parse().ok()))
+        .ok_or_else(|| parse_error("warmup step needs a rep count"))?;
+    Ok(WarmupStep { percentage, reps })
+}
+
+fn parse_warmup_basis(value: &str) -> Result<WarmupBasis> {
+    Ok(match value.to_ascii_lowercase().as_str() {
+        "top_set" => WarmupBasis::TopSet,
+        "working_weight" => WarmupBasis::WorkingWeight,
+        "training_max" => WarmupBasis::TrainingMax,
+        other => return Err(parse_error(format!("unknown warmup basis: {other}"))),
+    })
+}
+
+fn parse_equipment(node: &KdlNode) -> Result<EquipmentProfile> {
+    let mut profile = EquipmentProfile::default();
+    if let Some(body) = node.children() {
+        for line in body.nodes() {
+            match line.name().value() {
+                "bar" => {
+                    let args = positional_strings(line);
+                    let key = args
+                        .first()
+                        .map(|key| normalize_exercise(key))
+                        .ok_or_else(|| {
+                            parse_error("equipment bar needs an exercise or `default`")
+                        })?;
+                    let weight = args
+                        .get(1)
+                        .and_then(|value| parse_number(value))
+                        .ok_or_else(|| parse_error("equipment bar needs a weight"))?;
+                    profile.bars.insert(key, weight);
+                }
+                "plates" => profile.plate_pairs = parse_number_list(line, "plates")?,
+                "dumbbells" => profile.dumbbells = parse_number_list(line, "dumbbells")?,
+                "rounding" => {
+                    profile.rounding = parse_rounding(&node_string_arg(line, "rounding")?)?
+                }
+                "implement" => {
+                    let args = positional_strings(line);
+                    let exercise = args
+                        .first()
+                        .map(|value| normalize_exercise(value))
+                        .ok_or_else(|| parse_error("equipment implement needs an exercise"))?;
+                    let implement = args
+                        .get(1)
+                        .ok_or_else(|| parse_error("equipment implement needs barbell|dumbbell"))?;
+                    profile
+                        .implements
+                        .insert(exercise, parse_implement(implement)?);
+                }
+                other => return Err(parse_error(format!("unknown equipment directive: {other}"))),
+            }
+        }
+    }
+    Ok(profile)
+}
+
+fn parse_number_list(node: &KdlNode, label: &str) -> Result<Vec<f64>> {
+    let values: Vec<f64> = positional_strings(node)
+        .iter()
+        .filter_map(|value| parse_number(value))
+        .collect();
+    if values.is_empty() {
+        return Err(parse_error(format!(
+            "equipment {label} needs at least one value"
+        )));
+    }
+    Ok(values)
+}
+
+fn parse_number(value: &str) -> Option<f64> {
+    value
+        .trim()
+        .parse()
+        .ok()
+        .filter(|number: &f64| number.is_finite())
+}
+
+fn parse_rounding(value: &str) -> Result<RoundingMode> {
+    Ok(match value.to_ascii_lowercase().as_str() {
+        "nearest" => RoundingMode::Nearest,
+        "down" => RoundingMode::Down,
+        other => return Err(parse_error(format!("unknown rounding mode: {other}"))),
+    })
+}
+
+fn parse_implement(value: &str) -> Result<Implement> {
+    Ok(match value.to_ascii_lowercase().as_str() {
+        "barbell" => Implement::Barbell,
+        "dumbbell" => Implement::Dumbbell,
+        other => return Err(parse_error(format!("unknown implement: {other}"))),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Patch sub-parsers
 // ---------------------------------------------------------------------------
@@ -479,7 +658,9 @@ fn single_top_node<'a>(doc: &'a KdlDocument, name: &str) -> Result<&'a KdlNode> 
             "expected a `{name}` block, found `{}`",
             node.name().value()
         ))),
-        _ => Err(parse_error(format!("expected a single top-level {name} block"))),
+        _ => Err(parse_error(format!(
+            "expected a single top-level {name} block"
+        ))),
     }
 }
 

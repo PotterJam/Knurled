@@ -409,7 +409,9 @@ patch "shoulder-friendly-pressing" {
 
   cap target=rpe value=8 lane="press.*"
 
-  // aspirational: warmup blocks are not yet modeled
+  // Plan-level `warmup { … }` is now modeled (see docs/LANGUAGE.md, ADR 0006).
+  // A patch-level `add-warmup` that layers a date-bounded warmup change is
+  // still aspirational and not yet parsed.
   add-warmup before=press {
     band_external_rotation "2x15"
     scap_pushup "2x10"
@@ -579,6 +581,8 @@ schedule
 starts
 training_maxes
 accessories
+warmup          # implemented — scoped warmup (ramp-up) sets; see docs/LANGUAGE.md and ADR 0006
+equipment       # implemented — plates/dumbbells/bars driving load rounding; ADR 0006
 substitutions
 overrides
 active patches

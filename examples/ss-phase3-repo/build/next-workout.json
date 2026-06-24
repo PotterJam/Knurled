@@ -49,7 +49,7 @@
         "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "squat.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
+        "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
         "slot_id": "a_deadlift.squat"
       },
       "item_id": "a_deadlift.squat",
@@ -72,6 +72,41 @@
             "load": "60kg",
             "set": 3,
             "target_reps": 5
+          }
+        ],
+        "warmups": [
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "27.5kg",
+            "percentage": 45,
+            "set": 3,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "40kg",
+            "percentage": 65,
+            "set": 4,
+            "target_reps": 3
+          },
+          {
+            "amrap": false,
+            "load": "50kg",
+            "percentage": 85,
+            "set": 5,
+            "target_reps": 2
           }
         ]
       },
@@ -131,7 +166,7 @@
         "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "press.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
+        "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
         "slot_id": "a_deadlift.press"
       },
       "item_id": "a_deadlift.press",
@@ -154,6 +189,41 @@
             "load": "30kg",
             "set": 3,
             "target_reps": 5
+          }
+        ],
+        "warmups": [
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "12.5kg",
+            "percentage": 45,
+            "set": 3,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "20kg",
+            "percentage": 65,
+            "set": 4,
+            "target_reps": 3
+          },
+          {
+            "amrap": false,
+            "load": "25kg",
+            "percentage": 85,
+            "set": 5,
+            "target_reps": 2
           }
         ]
       },
@@ -213,7 +283,7 @@
         "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "deadlift.linear",
         "progression_rule": "starting_strength.1x5",
-        "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
+        "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
         "slot_id": "a_deadlift.deadlift"
       },
       "item_id": "a_deadlift.deadlift",
@@ -224,6 +294,41 @@
             "load": "80kg",
             "set": 1,
             "target_reps": 5
+          }
+        ],
+        "warmups": [
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "35kg",
+            "percentage": 45,
+            "set": 3,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "52.5kg",
+            "percentage": 65,
+            "set": 4,
+            "target_reps": 3
+          },
+          {
+            "amrap": false,
+            "load": "67.5kg",
+            "percentage": 85,
+            "set": 5,
+            "target_reps": 2
           }
         ]
       },
@@ -238,7 +343,7 @@
     }
   ],
   "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
-  "rendered_session_hash": "sha256:f2d0991d18369c238ac224708a0a51d1b1523a4e79cebafbd9792f8d05bbecc7",
+  "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
   "schema_version": "0.1",
   "session_id": "a_deadlift",
   "suggested_date": null,
