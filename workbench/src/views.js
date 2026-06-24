@@ -606,13 +606,21 @@ export function history(root, ctx) {
       <div class="card">
         <div class="card-head"><h4>Parsed ${draft.events.length} session events · ${draft.imported_sets} sets from ${draft.input_rows} rows</h4>
           <button id="hist-accept">Add to plan data</button></div>
-        <div class="timeline">
+        <div class="timeline import-preview">
           ${draft.events
             .slice(0, 40)
-            .map(
-              (ev) =>
-                `<div class="tl-row"><strong>${esc(ev.session_id || ev.id)}</strong><span class="muted small">${esc(ev.completed_at || "")}</span></div>`,
-            )
+            .map((ev) => {
+              const setCount = (ev.results || []).reduce((sum, result) => sum + (result.actual || []).length, 0);
+              const exerciseCount = (ev.results || []).length;
+              const date = (ev.completed_at || "").replace("T00:00:00Z", "");
+              return `<div class="import-row">
+                <div>
+                  <strong>${esc(ev.reason || ev.session_id || ev.id)}</strong>
+                  <span class="muted small">${esc(date)}</span>
+                </div>
+                <span class="muted small">${exerciseCount} exercises · ${setCount} sets</span>
+              </div>`;
+            })
             .join("")}
         </div>
       </div>`;

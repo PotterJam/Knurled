@@ -142,7 +142,29 @@ label { display: grid; gap: 5px; font-weight: 600; font-size: 12px; color: var(-
   top: 0;
   height: 100vh;
 }
-.brand-mark { width: 32px; height: 32px; object-fit: contain; margin: 2px 0 0 6px; opacity: 0.95; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 6px;
+  color: #f7f8fa;
+  text-decoration: none;
+}
+.brand:hover { color: #fff; }
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+.brand-name {
+  color: #f7f8fa;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1;
+}
 .rail nav { display: grid; gap: 2px; }
 .nav-item {
   background: transparent;
@@ -336,6 +358,29 @@ textarea#raw, #hist-text { min-height: 420px; resize: vertical; font: 13px/1.6 u
 .tl-row { display: grid; grid-template-columns: 28px 1fr auto; gap: var(--s-s); padding: 8px 10px; border-radius: var(--radius-ctrl); align-items: center; }
 .tl-row:nth-child(odd) { background: var(--surface); }
 .tl-n { color: var(--muted); font-weight: 700; }
+.import-preview { gap: 4px; }
+.import-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s-m);
+  padding: 10px 12px;
+  border-radius: var(--radius-ctrl);
+  align-items: center;
+}
+.import-row:nth-child(odd) { background: var(--surface); }
+.import-row div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-s);
+  min-width: 0;
+}
+.import-row strong,
+.import-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-s); }
 .kv div { background: var(--surface); padding: 11px 13px; border-radius: var(--radius-ctrl); }
 .kv span { display: block; color: var(--muted); font-size: 11px; font-weight: 600; margin-bottom: 3px; }
@@ -358,7 +403,9 @@ textarea#raw, #hist-text { min-height: 420px; resize: vertical; font: 13px/1.6 u
 @media (max-width: 920px) {
   .app-shell { grid-template-columns: 1fr; }
   .rail { flex-direction: row; align-items: center; gap: var(--s-s); padding: 8px 14px; position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rail-line); background: var(--rail); }
-  .brand-mark { width: 28px; height: 28px; margin: 0 8px 0 2px; }
+  .brand { padding: 0 2px; }
+  .brand-mark { width: 28px; height: 28px; }
+  .brand-name { font-size: 14px; }
   .rail nav { display: flex; flex-wrap: wrap; }
   main { padding: var(--s-m) var(--s-m) 40px; }
   .status-strip, .builder, .sessions, .grid2, .kv { grid-template-columns: 1fr; }

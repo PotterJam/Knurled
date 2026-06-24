@@ -155,7 +155,10 @@ function renderShell() {
   const app = document.querySelector("#app");
   app.innerHTML = `
     <aside class="rail">
-      <img class="brand-mark" src="./public/knurled-logo.png" alt="Knurled">
+      <a class="brand" href="#overview" aria-label="Knurled Workbench home">
+        <img class="brand-mark" src="./public/app-icon.png" alt="">
+        <span class="brand-name">Knurled</span>
+      </a>
       <nav aria-label="Workbench sections">
         ${NAV.map(
           ([id, label]) =>
@@ -181,6 +184,11 @@ function renderShell() {
       renderShell();
     }),
   );
+  app.querySelector(".brand").addEventListener("click", (event) => {
+    event.preventDefault();
+    currentView = "overview";
+    renderShell();
+  });
   app.querySelector("#reset").addEventListener("click", () => resetPlan());
   app.querySelector("#commit-top").addEventListener("click", () => {
     currentView = "git";
