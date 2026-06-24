@@ -7,6 +7,10 @@ struct LiveExerciseCard: View {
     @State private var showSwap = false
     @State private var editingSet: LiveSet?
 
+    @Environment(\.knurledPalette) private var palette
+
+    private var isCurrentExercise: Bool { controller.isCurrentExercise(live) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
@@ -28,43 +32,82 @@ struct LiveExerciseCard: View {
                 .foregroundStyle(.orange)
             }
 
-            VStack(spacing: 6) {
-                ForEach(live.sets) { set in
-                    SetRowView(
-                        set: set,
-                        isAmrap: live.isAmrap,
-                        isLastSet: set.id == live.sets.last?.id,
-                        onEdit: { editingSet = set },
-                        onLogged: { controller.didLogSetInApp(item: live) },
-                        onChanged: { controller.modelChanged() }
-                    )
-                    if set.id != live.sets.last?.id { Divider() }
-                }
-            }
-
-            HStack(spacing: 16) {
-                Button { showAdjust = true } label: {
-                    Label("Adjust today", systemImage: "slider.horizontal.3")
-                }
-                .buttonStyle(.borderless)
-                if live.canSwap {
-                    Button { showSwap = true } label: {
-                        Label("Swap", systemImage: "arrow.triangle.2.circlepath")
+            if live.skipped {
+                skippedBody
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(live.sets) { set in
+                        SetRowView(
+                            set: set,
+                            isAmrap: live.isAmrap,
+                            isLastSet: set.id == live.sets.last?.id,
+                            isCurrent: controller.isCurrent(item: live, set: set),
+                            onEdit: { editingSet = set },
+                            onLogged: { controller.didLogSetInApp(item: live) },
+                            onChanged: { controller.modelChanged() }
+                        )
+                        if set.id != live.sets.last?.id { Divider() }
                     }
-                    .buttonStyle(.borderless)
                 }
-                Spacer()
-                if live.isComplete {
-                    Label("Done", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.tint)
-                }
+
+                footer
             }
-            .font(.footnote)
         }
         .knurledCard()
+        .opacity(live.skipped ? 0.55 : (isCurrentExercise ? 1 : 0.7))
+        .overlay {
+            if isCurrentExercise {
+                RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
+                    .strokeBorder(palette.accent, lineWidth: 2)
+            }
+        }
         .sheet(isPresented: $showAdjust) { AdjustTodaySheet(live: live) }
         .sheet(isPresented: $showSwap) { SwapExerciseSheet(live: live) }
         .sheet(item: $editingSet) { set in SetDetailSheet(set: set) }
+    }
+
+    @ViewBuilder private var footer: some View {
+        HStack(spacing: 16) {
+            Button { showAdjust = true } label: {
+                Label("Adjust today", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(.borderless)
+            if live.canSwap {
+                Button { showSwap = true } label: {
+                    Label("Swap", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.borderless)
+            }
+            Spacer()
+            if live.isComplete {
+                Label("Done", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.tint)
+            } else {
+                Button(role: .destructive) {
+                    controller.setSkipped(live, true)
+                } label: {
+                    Label("Skip", systemImage: "forward.end")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .font(.footnote)
+    }
+
+    private var skippedBody: some View {
+        HStack(spacing: 12) {
+            Label("Skipped", systemImage: "forward.end.fill")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+                controller.setSkipped(live, false)
+            } label: {
+                Label("Undo", systemImage: "arrow.uturn.backward")
+            }
+            .buttonStyle(.borderless)
+            .font(.footnote)
+        }
     }
 
     private var swapPolicyText: String {
@@ -92,6 +135,10 @@ struct SetRowView: View {
     let set: LiveSet
     let isAmrap: Bool
     let isLastSet: Bool
+    /// The single active set across the whole workout. Only this row shows the Done/Missed
+    /// (or AMRAP) controls; logged rows show their result and upcoming rows are dimmed, so it
+    /// is always obvious which set is current.
+    let isCurrent: Bool
     var onEdit: () -> Void
     var onLogged: () -> Void
     var onChanged: () -> Void
@@ -100,7 +147,7 @@ struct SetRowView: View {
     @State private var entering = false
 
     private var isAmrapFinal: Bool { isAmrap && isLastSet }
-    private var isEntering: Bool { isAmrapFinal || entering }
+    private var isEntering: Bool { isCurrent && (isAmrapFinal || entering) }
 
     private var setTitle: String {
         if isAmrapFinal {
@@ -114,7 +161,9 @@ struct SetRowView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(setTitle).font(.subheadline)
+                    Text(setTitle)
+                        .font(.subheadline)
+                        .fontWeight(isCurrent && !set.logged ? .semibold : .regular)
                     if let load = set.load {
                         Text(load + (set.isAdjusted ? " · today" : ""))
                             .font(.caption)
@@ -139,7 +188,7 @@ struct SetRowView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Undo set")
                     }
-                } else if !isEntering {
+                } else if isCurrent && !isEntering {
                     HStack(spacing: 8) {
                         Button("Missed") {
                             set.reps = set.prescribed.targetReps
@@ -181,6 +230,13 @@ struct SetRowView: View {
             }
         }
         .padding(.vertical, 2)
+        .opacity(rowOpacity)
+    }
+
+    /// Logged and current rows are full strength; sets still ahead are dimmed.
+    private var rowOpacity: Double {
+        if set.logged || isCurrent { return 1 }
+        return 0.45
     }
 }
 

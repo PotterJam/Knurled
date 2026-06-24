@@ -40,15 +40,29 @@ final class WorkoutLiveController {
 
     // MARK: - Cursor
 
-    /// The next set the user should perform: the first unlogged set in item/set order.
+    /// The next set the user should perform: the first unlogged set in item/set order,
+    /// skipping over any exercise the user has marked skipped. This single cursor drives both
+    /// the in-app card highlighting and the Live Activity, so the "current set" is the same
+    /// everywhere and advances together.
     var currentTarget: (item: LiveItem, set: LiveSet)? {
         guard let workout else { return nil }
-        for item in workout.items {
+        for item in workout.items where !item.skipped {
             for set in item.sets where !set.logged {
                 return (item, set)
             }
         }
         return nil
+    }
+
+    /// Whether `set` within `item` is the single active set across the whole workout.
+    func isCurrent(item: LiveItem, set: LiveSet) -> Bool {
+        guard let target = currentTarget else { return false }
+        return target.item.id == item.id && target.set.id == set.id
+    }
+
+    /// Whether `item` holds the current set (the exercise the user is on right now).
+    func isCurrentExercise(_ item: LiveItem) -> Bool {
+        currentTarget?.item.id == item.id
     }
 
     private func isAmrapTarget(_ item: LiveItem, _ set: LiveSet) -> Bool {
@@ -114,6 +128,15 @@ final class WorkoutLiveController {
     /// Called after any other in-app set change (undo, missed, edit) to keep the activity fresh.
     func modelChanged() {
         syncAmrap()
+        updateActivity()
+    }
+
+    /// Skip or un-skip an exercise. Skipping advances the cursor past it (so the next set, in
+    /// the app and the Live Activity, becomes the one after); un-skipping brings it back.
+    func setSkipped(_ item: LiveItem, _ skipped: Bool) {
+        item.skipped = skipped
+        syncAmrap()
+        if currentTarget == nil { stopRest() }
         updateActivity()
     }
 
