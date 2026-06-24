@@ -17,6 +17,17 @@ const titleCase = (v) => String(v).split(/[_\s]+/).map((p) => p.charAt(0).toUppe
 
 const PALETTE = ["#618FEB", "#8CB587", "#D4A350", "#A378EB", "#cf6d6d", "#46b1a8"];
 
+function importSetSummary(set) {
+  return [set.load, set.reps ? `${set.reps} reps` : ""].filter(Boolean).join(" x ");
+}
+
+function importExerciseSummary(result) {
+  const name = titleCase(result.performed_exercise || result.slot_id || "Exercise");
+  const sets = (result.actual || []).slice(0, 4).map(importSetSummary).filter(Boolean);
+  const more = (result.actual || []).length > sets.length ? ` +${result.actual.length - sets.length} sets` : "";
+  return `${name}: ${sets.join(", ")}${more}`;
+}
+
 // --------------------------------------------------------------------------
 // Overview
 // --------------------------------------------------------------------------
@@ -613,12 +624,15 @@ export function history(root, ctx) {
               const setCount = (ev.results || []).reduce((sum, result) => sum + (result.actual || []).length, 0);
               const exerciseCount = (ev.results || []).length;
               const date = (ev.completed_at || "").replace("T00:00:00Z", "");
+              const detail = (ev.results || []).slice(0, 4).map(importExerciseSummary).join(" · ");
+              const more = (ev.results || []).length > 4 ? ` · +${ev.results.length - 4} exercises` : "";
               return `<div class="import-row">
-                <div>
+                <div class="import-main">
                   <strong>${esc(ev.reason || ev.session_id || ev.id)}</strong>
                   <span class="muted small">${esc(date)}</span>
                 </div>
                 <span class="muted small">${exerciseCount} exercises · ${setCount} sets</span>
+                <span class="import-detail">${esc(detail + more)}</span>
               </div>`;
             })
             .join("")}
@@ -684,7 +698,7 @@ export function git(root, ctx) {
       </div>
       <div class="card">
         <div class="card-head"><h3>Commit</h3><button id="g-commit" ${g.token && g.repo ? "" : "disabled"}>Commit changes</button></div>
-        <p class="muted small">Writes plan.fitspec, regenerated fitspec.lock, build/*.json and active patches. Blocked unless valid.</p>
+        <p class="muted small">Writes plan.fitspec, regenerated fitspec.lock, build/*.json, active patches, and imported logs. Blocked unless valid.</p>
         <div id="g-status"></div>
       </div>
       <div class="card">

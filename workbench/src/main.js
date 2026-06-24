@@ -4,6 +4,7 @@ import { initEngine, engine } from "../engine/index.js";
 import { getState, setState, subscribe, resetPlan } from "./store.js";
 import { VIEWS } from "./views.js";
 import * as github from "./github.js";
+import { importedEventFiles } from "./commit.mjs";
 
 const NAV = [
   ["overview", "Overview"],
@@ -94,6 +95,7 @@ function buildContext(state) {
           ...state.patches
             .filter((p) => p.active !== false)
             .map((p) => ({ path: `patches/${p.filename}`, text: p.text })),
+          ...importedEventFiles(state.events),
         ];
         const msg = `Update ${templateRef(state.planText).split("@")[0]} plan via workbench`;
         return github.commitFiles(state.github.token, state.github.repo, state.github.branch, files, msg);
@@ -171,7 +173,7 @@ function renderShell() {
         <div><h1>Knurled</h1><p>${escapeHtml(state.repoLabel)}</p></div>
         <div class="actions">
           <button class="ghost" id="reset">Reset</button>
-          <button id="commit-top" data-view="git">Commit</button>
+          <button id="commit-top" data-view="git">GitHub</button>
         </div>
       </header>
       <section class="status-strip">${renderStatusStrip(ctx)}</section>

@@ -368,7 +368,7 @@ textarea#raw, #hist-text { min-height: 420px; resize: vertical; font: 13px/1.6 u
   align-items: center;
 }
 .import-row:nth-child(odd) { background: var(--surface); }
-.import-row div {
+.import-main {
   display: flex;
   align-items: baseline;
   gap: var(--s-s);
@@ -380,6 +380,11 @@ textarea#raw, #hist-text { min-height: 420px; resize: vertical; font: 13px/1.6 u
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.import-detail {
+  grid-column: 1 / -1;
+  color: var(--ink-soft);
+  font: 12px ui-monospace, Menlo, monospace;
 }
 .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-s); }
 .kv div { background: var(--surface); padding: 11px 13px; border-radius: var(--radius-ctrl); }
