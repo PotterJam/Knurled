@@ -1,4 +1,10 @@
 {
+  "name": "knurled-workbench",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.mjs",
+    "deploy:workbench": "npx wrangler pages deploy .",
+    "deploy:workbench:preview": "npx wrangler pages deploy . --branch preview"
+  }
 }
