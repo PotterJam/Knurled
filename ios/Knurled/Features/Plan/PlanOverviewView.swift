@@ -1,26 +1,7 @@
 import SwiftUI
 
-struct PlanHomeView: View {
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if let repo = app.activeRepo, let plan = repo.plan {
-                    PlanOverviewView(repo: repo, plan: plan)
-                } else {
-                    ContentUnavailableView(
-                        "No Plan",
-                        systemImage: "list.bullet.rectangle",
-                        description: Text("Connect a repository to see your program.")
-                    )
-                }
-            }
-            .navigationTitle("Plan")
-        }
-    }
-}
-
+/// The program overview, reached by tapping the program name on the Workout tab.
+/// Pushed onto the caller's navigation stack (it does not create its own).
 struct PlanOverviewView: View {
     let repo: ActiveRepo
     let plan: PlanIR
