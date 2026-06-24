@@ -55,16 +55,18 @@ enum CoreLift: String, CaseIterable, Identifiable, Sendable {
 /// Named strength tiers. Numeric `value` doubles as the y-position of the shared
 /// level line on the chart, so every lift at "Novice" sits on the same line.
 enum StrengthLevel: Int, CaseIterable, Identifiable, Sendable {
-    case novice = 1
-    case intermediate = 2
-    case advanced = 3
-    case elite = 4
+    case beginner = 1
+    case novice = 2
+    case intermediate = 3
+    case advanced = 4
+    case elite = 5
 
     var id: Int { rawValue }
     var value: Double { Double(rawValue) }
 
     var title: String {
         switch self {
+        case .beginner: "Beginner"
         case .novice: "Novice"
         case .intermediate: "Intermediate"
         case .advanced: "Advanced"
@@ -77,9 +79,13 @@ enum StrengthLevel: Int, CaseIterable, Identifiable, Sendable {
 /// general standards (load ÷ body weight), tunable in one place. Flipping `sex`
 /// swaps the entire table, which re-maps every lift line on the chart at once.
 ///
-/// Order within each array matches `StrengthLevel.allCases`:
-/// `[novice, intermediate, advanced, elite]`.
+/// Order within each array matches the measured `StrengthLevel` thresholds:
+/// `[beginner, novice, intermediate, advanced]`. `Elite` is the next chart
+/// tier above the existing top threshold, reached by the same extrapolation
+/// logic that already handled values beyond the top standard.
 enum StrengthStandards {
+    private static let measuredThresholdCount = 4
+
     private static let table: [Sex: [CoreLift: [Double]]] = [
         .male: [
             .squat:    [1.25, 1.5, 2.25, 2.75],
@@ -105,7 +111,7 @@ enum StrengthStandards {
     /// it extrapolates along the last segment's slope.
     static func levelValue(ratio: Double, lift: CoreLift, sex: Sex) -> Double {
         let t = multiples(for: lift, sex: sex)
-        guard t.count == StrengthLevel.allCases.count, ratio > 0 else { return 0 }
+        guard t.count == measuredThresholdCount, ratio > 0 else { return 0 }
 
         if ratio <= t[0] { return ratio / t[0] }
 

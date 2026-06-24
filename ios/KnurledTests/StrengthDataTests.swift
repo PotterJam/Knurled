@@ -33,13 +33,24 @@ import Foundation
 
     // MARK: - Level mapping
 
-    @Test func noviceThresholdLandsOnLevelOne() {
-        // Male squat novice multiple is 1.25 → ratio 1.25 maps to level 1.0.
+    @Test func strengthLevelLabelsKeepExistingThresholdValues() {
+        #expect(StrengthLevel.allCases.map(\.title) == [
+            "Beginner",
+            "Novice",
+            "Intermediate",
+            "Advanced",
+            "Elite",
+        ])
+        #expect(StrengthLevel.allCases.map(\.value) == [1, 2, 3, 4, 5])
+    }
+
+    @Test func beginnerThresholdLandsOnLevelOne() {
+        // Male squat beginner multiple is 1.25 -> ratio 1.25 maps to level 1.0.
         let v = StrengthStandards.levelValue(ratio: 1.25, lift: .squat, sex: .male)
         #expect(abs(v - 1.0) < 0.0001)
     }
 
-    @Test func eliteThresholdLandsOnLevelFour() {
+    @Test func advancedThresholdLandsOnLevelFour() {
         let v = StrengthStandards.levelValue(ratio: 2.75, lift: .squat, sex: .male)
         #expect(abs(v - 4.0) < 0.0001)
     }
