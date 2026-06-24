@@ -120,7 +120,35 @@ function escapeHtml(v) {
   return String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
+function captureRawEditorInteraction() {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLTextAreaElement) || active.id !== "raw") return null;
+  return {
+    pageX: window.scrollX,
+    pageY: window.scrollY,
+    selectionStart: active.selectionStart,
+    selectionEnd: active.selectionEnd,
+    scrollLeft: active.scrollLeft,
+    scrollTop: active.scrollTop,
+  };
+}
+
+function restoreRawEditorInteraction(snapshot) {
+  if (!snapshot) return;
+  const raw = document.querySelector("#raw");
+  if (!(raw instanceof HTMLTextAreaElement)) return;
+
+  raw.focus({ preventScroll: true });
+  const selectionStart = Math.min(snapshot.selectionStart, raw.value.length);
+  const selectionEnd = Math.min(snapshot.selectionEnd, raw.value.length);
+  raw.setSelectionRange(selectionStart, selectionEnd);
+  raw.scrollLeft = snapshot.scrollLeft;
+  raw.scrollTop = snapshot.scrollTop;
+  window.scrollTo(snapshot.pageX, snapshot.pageY);
+}
+
 function renderShell() {
+  const rawEditorInteraction = captureRawEditorInteraction();
   const state = getState();
   document.documentElement.dataset.theme = state.theme || "sage";
   const ctx = buildContext(state);
@@ -160,6 +188,7 @@ function renderShell() {
   });
 
   (VIEWS[currentView] || VIEWS.overview)(app.querySelector("#view"), ctx);
+  restoreRawEditorInteraction(rawEditorInteraction);
 }
 
 async function boot() {
