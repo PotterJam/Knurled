@@ -38,7 +38,7 @@
           "fallback": "per_set_reps",
           "fields": [
             {
-              "default": 5,
+              "default": 3,
               "max": null,
               "min": 0,
               "name": "final_set_reps",
@@ -57,7 +57,7 @@
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "squat.t1",
         "progression_rule": "gzcl.t1",
-        "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
+        "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
         "slot_id": "a1.t1"
       },
       "item_id": "a1.t1",
@@ -67,19 +67,31 @@
             "amrap": false,
             "load": "80kg",
             "set": 1,
-            "target_reps": 5
+            "target_reps": 3
           },
           {
             "amrap": false,
             "load": "80kg",
             "set": 2,
-            "target_reps": 5
+            "target_reps": 3
+          },
+          {
+            "amrap": false,
+            "load": "80kg",
+            "set": 3,
+            "target_reps": 3
+          },
+          {
+            "amrap": false,
+            "load": "80kg",
+            "set": 4,
+            "target_reps": 3
           },
           {
             "amrap": true,
             "load": "80kg",
-            "set": 3,
-            "target_reps": 5
+            "set": 5,
+            "target_reps": 3
           }
         ],
         "warmups": [
@@ -181,7 +193,7 @@
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "bench.t2",
         "progression_rule": "gzcl.t2",
-        "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
+        "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
         "slot_id": "a1.t2"
       },
       "item_id": "a1.t2",
@@ -292,7 +304,7 @@
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "lat_pulldown.t3",
         "progression_rule": "gzcl.t3",
-        "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
+        "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
         "slot_id": "a1.t3"
       },
       "item_id": "a1.t3",
@@ -329,7 +341,7 @@
     }
   ],
   "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
-  "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
+  "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
   "schema_version": "0.1",
   "session_id": "a1",
   "suggested_date": null,

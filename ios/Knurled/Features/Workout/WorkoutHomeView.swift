@@ -151,6 +151,12 @@ struct ExercisePrescriptionCard: View {
             Label(WorkoutFormat.repScheme(item.prescription.sets), systemImage: "repeat")
                 .font(.callout.monospaced())
                 .foregroundStyle(.primary)
+
+            if !item.prescription.warmups.isEmpty {
+                Label("Warm-up \(WorkoutFormat.repScheme(item.prescription.warmups))", systemImage: "flame")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
         }
         .knurledCard()
     }

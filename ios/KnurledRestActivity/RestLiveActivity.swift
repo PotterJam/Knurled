@@ -53,7 +53,9 @@ struct RestLiveActivity: Widget {
     @ViewBuilder private func controls(_ state: RestActivityAttributes.ContentState) -> some View {
         switch state.phase {
         case .ready:
-            if state.isAmrap {
+            if state.isWarmup {
+                WarmupControls()
+            } else if state.isAmrap {
                 AmrapControls(reps: state.amrapReps)
             } else {
                 Button(intent: LogSetIntent()) {
@@ -123,7 +125,9 @@ private struct LockScreenView: View {
                 }
                 Spacer()
             }
-            if state.isAmrap {
+            if state.isWarmup {
+                WarmupControls()
+            } else if state.isAmrap {
                 AmrapControls(reps: state.amrapReps)
             } else {
                 Button(intent: LogSetIntent()) {
@@ -164,6 +168,29 @@ private struct LockScreenView: View {
                 .controlSize(.small)
             }
         }
+    }
+}
+
+/// A warmup ramp set: log it, or skip the rest of the warmups for this exercise and jump
+/// straight to the working sets. Warmups never start a rest countdown.
+private struct WarmupControls: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(intent: SkipWarmupIntent()) {
+                Label("Skip warmups", systemImage: "forward.fill")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(.secondary)
+            Button(intent: LogSetIntent()) {
+                Label("Log warmup", systemImage: "checkmark.circle.fill")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(.orange)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
     }
 }
 

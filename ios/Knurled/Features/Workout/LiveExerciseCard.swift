@@ -35,13 +35,15 @@ struct LiveExerciseCard: View {
             if live.skipped {
                 skippedBody
             } else {
+                if live.hasWarmups { warmupSection }
+
                 VStack(spacing: 6) {
                     ForEach(live.sets) { set in
                         SetRowView(
                             set: set,
                             isAmrap: live.isAmrap,
                             isLastSet: set.id == live.sets.last?.id,
-                            isCurrent: controller.isCurrent(item: live, set: set),
+                            isCurrent: controller.isCurrent(set),
                             onEdit: { editingSet = set },
                             onLogged: { controller.didLogSetInApp(item: live) },
                             onChanged: { controller.modelChanged() }
@@ -64,6 +66,54 @@ struct LiveExerciseCard: View {
         .sheet(isPresented: $showAdjust) { AdjustTodaySheet(live: live) }
         .sheet(isPresented: $showSwap) { SwapExerciseSheet(live: live) }
         .sheet(item: $editingSet) { set in SetDetailSheet(set: set) }
+    }
+
+    @ViewBuilder private var warmupSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label("Warm-up", systemImage: "flame")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                Spacer()
+                if live.warmupsSkipped {
+                    Button {
+                        controller.setWarmupsSkipped(live, false)
+                    } label: {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                } else {
+                    Button {
+                        controller.setWarmupsSkipped(live, true)
+                    } label: {
+                        Text("Skip warm-up")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                }
+            }
+
+            if live.warmupsSkipped {
+                Text("Skipped").font(.caption).foregroundStyle(.secondary)
+            } else {
+                ForEach(live.warmups) { set in
+                    SetRowView(
+                        set: set,
+                        isAmrap: false,
+                        isLastSet: set.id == live.warmups.last?.id,
+                        isCurrent: controller.isCurrent(set),
+                        isWarmup: true,
+                        onEdit: { editingSet = set },
+                        onLogged: { controller.didLogSetInApp(item: live, wasWarmup: true) },
+                        onChanged: { controller.modelChanged() }
+                    )
+                    if set.id != live.warmups.last?.id { Divider() }
+                }
+            }
+
+            Divider().padding(.vertical, 2)
+        }
     }
 
     @ViewBuilder private var footer: some View {
@@ -139,6 +189,7 @@ struct SetRowView: View {
     /// (or AMRAP) controls; logged rows show their result and upcoming rows are dimmed, so it
     /// is always obvious which set is current.
     let isCurrent: Bool
+    var isWarmup: Bool = false
     var onEdit: () -> Void
     var onLogged: () -> Void
     var onChanged: () -> Void
@@ -153,7 +204,8 @@ struct SetRowView: View {
         if isAmrapFinal {
             return "Set \(set.id)+ · min \(set.prescribed.targetReps) reps"
         }
-        return "Set \(set.id) · \(set.prescribed.targetReps) reps"
+        let label = isWarmup ? "Warm-up" : "Set"
+        return "\(label) \(set.id) · \(set.prescribed.targetReps) reps"
     }
 
     var body: some View {

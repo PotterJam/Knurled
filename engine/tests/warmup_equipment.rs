@@ -90,7 +90,7 @@ fn gzclp_ships_a_bay_strength_default_warmup() {
     assert_eq!(warmups[4].target_reps, 2);
 
     // Warmups never leak into the working sets.
-    assert_eq!(squat.prescription.sets.len(), 3);
+    assert_eq!(squat.prescription.sets.len(), 5);
     assert!(
         squat
             .prescription

@@ -38,7 +38,18 @@ struct DisplayFields: Codable, Sendable, Hashable {
 }
 
 struct Prescription: Codable, Sendable, Hashable {
+    /// Ramp-up sets the engine renders ahead of the working `sets`. They are guidance only:
+    /// never required for completion and never sent back to the engine, so they live in their
+    /// own field. The engine omits the key entirely when a lift has no warmups, hence the
+    /// decode default.
+    var warmups: [PrescribedSet]
     var sets: [PrescribedSet]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        warmups = try container.decodeIfPresent([PrescribedSet].self, forKey: .warmups) ?? []
+        sets = try container.decode([PrescribedSet].self, forKey: .sets)
+    }
 }
 
 struct PrescribedSet: Codable, Sendable, Hashable, Identifiable {

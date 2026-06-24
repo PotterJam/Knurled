@@ -17,15 +17,18 @@ struct RestActivityAttributes: ActivityAttributes {
         var exerciseTitle: String
         var exerciseIndex: Int   // 1-based position of the current exercise
         var totalExercises: Int
-        var setNumber: Int       // 1-based set within the exercise
+        var setNumber: Int       // 1-based set within the exercise (warmup or working)
         var totalSets: Int
         var targetReps: Int
         var loadText: String?
+        var isWarmup: Bool       // the current set is a ramp-up rather than a working set
         var isAmrap: Bool
         var amrapReps: Int       // staged rep count for an AMRAP final set
         var restEndDate: Date    // meaningful while `phase == .resting`
 
-        var setProgress: String { "Set \(setNumber) of \(totalSets)" }
+        var setProgress: String {
+            "\(isWarmup ? "Warmup" : "Set") \(setNumber) of \(totalSets)"
+        }
         var exerciseProgress: String { "Exercise \(exerciseIndex) of \(totalExercises)" }
         var loadReps: String {
             let reps = isAmrap ? "\(targetReps)+ reps" : "\(targetReps) reps"

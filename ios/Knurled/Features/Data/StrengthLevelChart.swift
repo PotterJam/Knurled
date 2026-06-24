@@ -19,7 +19,8 @@ struct StrengthLevelChart: View {
 
     private var maxY: Double {
         let top = data.samples.map(level).max() ?? 0
-        return max(4.5, (top + 0.5).rounded(.up))
+        let padded = top + 0.25
+        return max(1.0, (padded * 2).rounded(.up) / 2)
     }
 
     private var xDomain: ClosedRange<Int> {

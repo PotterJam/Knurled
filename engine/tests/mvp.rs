@@ -111,7 +111,7 @@ fn gzclp_t1_fail_advances_stage_without_increasing_load() {
         .iter_mut()
         .find(|item| item.item_id == "a1.t1")
         .unwrap()
-        .final_set_reps = Some(4);
+        .final_set_reps = Some(2);
 
     let result = reduce_input(&compiled, &state, &rendered, &input).unwrap();
     let squat = &result.new_state.lanes["squat.t1"];

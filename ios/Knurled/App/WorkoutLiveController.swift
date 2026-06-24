@@ -47,6 +47,11 @@ final class WorkoutLiveController {
     var currentTarget: (item: LiveItem, set: LiveSet)? {
         guard let workout else { return nil }
         for item in workout.items where !item.skipped {
+            if !item.warmupsSkipped {
+                for set in item.warmups where !set.logged {
+                    return (item, set)
+                }
+            }
             for set in item.sets where !set.logged {
                 return (item, set)
             }
@@ -54,10 +59,11 @@ final class WorkoutLiveController {
         return nil
     }
 
-    /// Whether `set` within `item` is the single active set across the whole workout.
-    func isCurrent(item: LiveItem, set: LiveSet) -> Bool {
-        guard let target = currentTarget else { return false }
-        return target.item.id == item.id && target.set.id == set.id
+    /// Whether `set` is the single active set across the whole workout. Compared by object
+    /// identity because a warmup and a working set within the same exercise can share a set
+    /// number (both number from 1).
+    func isCurrent(_ set: LiveSet) -> Bool {
+        currentTarget?.set === set
     }
 
     /// Whether `item` holds the current set (the exercise the user is on right now).
@@ -66,7 +72,7 @@ final class WorkoutLiveController {
     }
 
     private func isAmrapTarget(_ item: LiveItem, _ set: LiveSet) -> Bool {
-        item.isAmrap && set.id == item.sets.last?.id
+        !set.isWarmup && item.isAmrap && set.id == item.sets.last?.id
     }
 
     // MARK: - Lifecycle
@@ -90,7 +96,22 @@ final class WorkoutLiveController {
         guard let (item, set) = currentTarget else { return }
         set.reps = isAmrapTarget(item, set) ? amrapReps : set.prescribed.targetReps
         set.logged = true
-        afterLog(item: item)
+        afterLog(item: item, wasWarmup: set.isWarmup)
+    }
+
+    /// Skip the entire warmup ramp for the exercise the cursor is currently on (fired from the
+    /// Live Activity, which only knows about the current exercise).
+    func skipWarmups() {
+        guard let item = currentTarget?.item else { return }
+        setWarmupsSkipped(item, true)
+    }
+
+    /// Skip or restore the warmup ramp for a specific exercise (the in-app toggle).
+    func setWarmupsSkipped(_ item: LiveItem, _ skipped: Bool) {
+        item.warmupsSkipped = skipped
+        syncAmrap()
+        if currentTarget == nil { stopRest() }
+        updateActivity()
     }
 
     func adjustAmrap(delta: Int) {
@@ -115,9 +136,9 @@ final class WorkoutLiveController {
 
     /// Called after a set is logged in-app; starts rest before the next set (matching the
     /// previous in-app behaviour) and refreshes the activity.
-    func didLogSetInApp(item: LiveItem) {
+    func didLogSetInApp(item: LiveItem, wasWarmup: Bool = false) {
         syncAmrap()
-        if currentTarget != nil {
+        if currentTarget != nil, !wasWarmup {
             startRest(seconds: item.item.rest.seconds)
         } else {
             stopRest()
@@ -142,9 +163,9 @@ final class WorkoutLiveController {
 
     // MARK: - Internals
 
-    private func afterLog(item: LiveItem) {
+    private func afterLog(item: LiveItem, wasWarmup: Bool) {
         syncAmrap()
-        if currentTarget != nil {
+        if currentTarget != nil, !wasWarmup {
             startRest(seconds: item.item.rest.seconds)
         } else {
             stopRest()
@@ -198,7 +219,7 @@ final class WorkoutLiveController {
                 phase: .finished, exerciseTitle: "Workout complete",
                 exerciseIndex: totalExercises, totalExercises: totalExercises,
                 setNumber: 0, totalSets: 0, targetReps: 0, loadText: nil,
-                isAmrap: false, amrapReps: 0, restEndDate: now
+                isWarmup: false, isAmrap: false, amrapReps: 0, restEndDate: now
             )
         }
         let index = (workout.items.firstIndex { $0.id == item.id } ?? 0) + 1
@@ -208,9 +229,10 @@ final class WorkoutLiveController {
             exerciseIndex: index,
             totalExercises: totalExercises,
             setNumber: set.id,
-            totalSets: item.sets.count,
+            totalSets: set.isWarmup ? item.warmups.count : item.sets.count,
             targetReps: set.prescribed.targetReps,
             loadText: set.load,
+            isWarmup: set.isWarmup,
             isAmrap: isAmrapTarget(item, set),
             amrapReps: amrapReps,
             restEndDate: restEndDate ?? now

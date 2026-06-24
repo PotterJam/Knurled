@@ -20,13 +20,17 @@ enum AdjustScope: CaseIterable, Hashable {
 final class LiveSet: Identifiable {
     let id: Int
     let prescribed: PrescribedSet
+    /// Warmup ramp-up sets share the same row UI but are never logged to the engine, never
+    /// gate completion, and (unlike working sets) don't start a rest countdown.
+    let isWarmup: Bool
     var reps: Int
     var load: String?
     var logged: Bool
 
-    init(prescribed: PrescribedSet, defaultLoad: String?) {
+    init(prescribed: PrescribedSet, defaultLoad: String?, isWarmup: Bool = false) {
         self.id = prescribed.set
         self.prescribed = prescribed
+        self.isWarmup = isWarmup
         self.reps = prescribed.targetReps
         self.load = defaultLoad ?? prescribed.load
         self.logged = false
@@ -43,6 +47,7 @@ final class LiveSet: Identifiable {
 final class LiveItem: Identifiable {
     let id: String
     let item: RenderedItem
+    var warmups: [LiveSet]
     var sets: [LiveSet]
     var todayLoad: String?
     var performedExercise: String?
@@ -52,12 +57,18 @@ final class LiveItem: Identifiable {
     /// (so the next set everywhere becomes the one after it) and is excluded from the inputs
     /// sent to the engine. A skipped *required* exercise keeps the finish a partial (§24).
     var skipped: Bool = false
+    /// When true the warmup ramp is skipped for this exercise: the cursor jumps straight to the
+    /// first working set. Working sets and progression are unaffected (warmups never feed them).
+    var warmupsSkipped: Bool = false
 
     init(item: RenderedItem) {
         self.id = item.itemId
         self.item = item
+        self.warmups = item.prescription.warmups.map { LiveSet(prescribed: $0, defaultLoad: $0.load, isWarmup: true) }
         self.sets = item.prescription.sets.map { LiveSet(prescribed: $0, defaultLoad: $0.load) }
     }
+
+    var hasWarmups: Bool { !warmups.isEmpty }
 
     var mode: String { item.executionContract.recommendedInput }
     var isAmrap: Bool { item.executionContract.recommendedInput == InputMode.amrapFinalSet }
@@ -178,6 +189,12 @@ final class LiveWorkout: Identifiable {
                 set.reps = actual.reps
                 if let load = actual.load { set.load = load }
                 set.logged = true
+            }
+            // Warmups aren't stored in the saved event, so an exercise that already has logged
+            // working sets has clearly been warmed up — mark its ramp done so resuming doesn't
+            // drop the cursor back onto warmups.
+            if item.anyLogged {
+                for warmup in item.warmups { warmup.logged = true }
             }
         }
     }

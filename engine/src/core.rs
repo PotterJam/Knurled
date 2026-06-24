@@ -2094,7 +2094,7 @@ fn sets_for_t1(load: Option<String>, stage: &str) -> Vec<PrescribedSet> {
     let (count, reps) = match stage {
         "6x2+" => (6, 2),
         "10x1+" => (10, 1),
-        _ => (3, 5),
+        _ => (5, 3),
     };
     (1..=count)
         .map(|set| PrescribedSet {
