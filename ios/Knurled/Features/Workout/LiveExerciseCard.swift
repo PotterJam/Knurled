@@ -77,7 +77,8 @@ struct LiveExerciseCard: View {
                 Spacer()
             }
 
-            ForEach(live.warmups) { set in
+            let visibleWarmups = live.visibleWarmups
+            ForEach(visibleWarmups) { set in
                 SetRowView(
                     set: set,
                     isAmrap: false,
@@ -91,7 +92,7 @@ struct LiveExerciseCard: View {
                     onAdvanceWarmup: { controller.advanceCurrentWarmup() },
                     onStartHere: { controller.startWarmups(at: set, in: live) }
                 )
-                if set.id != live.warmups.last?.id { Divider() }
+                if set.id != visibleWarmups.last?.id { Divider() }
             }
 
             Divider().padding(.vertical, 2)
@@ -132,7 +133,7 @@ struct LiveExerciseCard: View {
 
     private var skippedBody: some View {
         HStack(spacing: 12) {
-            Label("Skipped", systemImage: "forward.end.fill")
+            Label(skippedTitle, systemImage: skippedSystemImage)
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
             Spacer()
@@ -144,6 +145,14 @@ struct LiveExerciseCard: View {
             .buttonStyle(.borderless)
             .font(.footnote)
         }
+    }
+
+    private var skippedTitle: String {
+        live.skippedState == .partial ? "Partial" : "Skipped"
+    }
+
+    private var skippedSystemImage: String {
+        live.skippedState == .partial ? "circle.lefthalf.filled" : "forward.end.fill"
     }
 
     private var swapPolicyText: String {

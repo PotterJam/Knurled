@@ -16,14 +16,25 @@ struct ActiveWorkoutView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: KnurledTheme.Spacing.m) {
-                progress
-                ForEach(workout.items) { item in
-                    LiveExerciseCard(live: item, controller: controller)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: KnurledTheme.Spacing.m) {
+                    progress
+                    ForEach(workout.items) { item in
+                        LiveExerciseCard(live: item, controller: controller)
+                            .id(item.id)
+                    }
                 }
+                .padding()
             }
-            .padding()
+            .onAppear {
+                controller.begin(workout)
+                scrollToExercise(currentExerciseID, proxy: proxy, animated: false)
+            }
+            .onDisappear { controller.end() }
+            .onChange(of: currentExerciseID) { _, exerciseID in
+                scrollToExercise(exerciseID, proxy: proxy)
+            }
         }
         .navigationTitle(workout.session.displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -34,8 +45,6 @@ struct ActiveWorkoutView: View {
                 bottomBar
             }
         }
-        .onAppear { controller.begin(workout) }
-        .onDisappear { controller.end() }
         .sheet(isPresented: $showFinish) {
             FinishWorkoutView(workout: workout) { dismiss() }
         }
@@ -43,6 +52,21 @@ struct ActiveWorkoutView: View {
             Button("OK") { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
+        }
+    }
+
+    private var currentExerciseID: String? {
+        controller.currentTarget?.item.id
+    }
+
+    private func scrollToExercise(_ exerciseID: String?, proxy: ScrollViewProxy, animated: Bool = true) {
+        guard let exerciseID else { return }
+        if animated {
+            withAnimation(.snappy) {
+                proxy.scrollTo(exerciseID, anchor: .top)
+            }
+        } else {
+            proxy.scrollTo(exerciseID, anchor: .top)
         }
     }
 

@@ -15,6 +15,11 @@ enum AdjustScope: CaseIterable, Hashable {
     }
 }
 
+enum SkippedExerciseState: Equatable {
+    case skipped
+    case partial
+}
+
 @MainActor
 @Observable
 final class LiveSet: Identifiable {
@@ -77,8 +82,15 @@ final class LiveItem: Identifiable {
     var prescribedLoad: String? { item.prescription.sets.first?.load }
     var isComplete: Bool { !skipped && sets.allSatisfy(\.logged) }
     var anyLogged: Bool { sets.contains(where: \.logged) }
+    var anyWarmupActivity: Bool { warmups.contains { $0.logged || $0.bypassed } }
+    var anyActivity: Bool { anyLogged || anyWarmupActivity }
     var isAdjusted: Bool { sets.contains(where: \.isAdjusted) }
     var loggedCount: Int { sets.filter(\.logged).count }
+    var skippedState: SkippedExerciseState { anyActivity ? .partial : .skipped }
+    var visibleWarmups: [LiveSet] {
+        guard warmups.contains(where: \.logged) else { return warmups }
+        return warmups.filter { !$0.bypassed }
+    }
 
     var options: RenderedExerciseOptions? { item.exerciseOptions }
     var canSwap: Bool {
@@ -220,7 +232,7 @@ final class LiveWorkout: Identifiable {
         let isComplete = status == ExecutionStatus.complete
         let inputs = isComplete
             ? items.filter { !$0.skipped }.map { $0.itemInput() }
-            : items.filter { $0.anyLogged && !$0.skipped }.map { $0.partialInput() }
+            : items.filter(\.anyLogged).map { $0.partialInput() }
         return ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
             status: status,
