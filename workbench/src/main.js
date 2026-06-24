@@ -4,7 +4,7 @@ import { initEngine, engine } from "../engine/index.js";
 import { getState, setState, subscribe, resetPlan } from "./store.js";
 import { VIEWS } from "./views.js";
 import * as github from "./github.js";
-import { importedEventFiles } from "./commit.mjs";
+import { buildCommitPlan } from "./commit.mjs";
 
 const NAV = [
   ["overview", "Overview"],
@@ -85,20 +85,8 @@ function buildContext(state) {
         setState(loaded);
       },
       commit: async () => {
-        const r = result;
-        const files = [
-          { path: "plan.fitspec", text: state.planText },
-          { path: "fitspec.lock", text: lock },
-          { path: "build/current.ir.json", text: JSON.stringify(r.ir, null, 2) },
-          { path: "build/next-workout.json", text: JSON.stringify(r.next_workout, null, 2) },
-          { path: "build/validation.json", text: JSON.stringify(r.validation, null, 2) },
-          ...state.patches
-            .filter((p) => p.active !== false)
-            .map((p) => ({ path: `patches/${p.filename}`, text: p.text })),
-          ...importedEventFiles(state.events),
-        ];
-        const msg = `Update ${templateRef(state.planText).split("@")[0]} plan via workbench`;
-        return github.commitFiles(state.github.token, state.github.repo, state.github.branch, files, msg);
+        const plan = buildCommitPlan({ state, result, lock, templateRef: templateRef(state.planText) });
+        return github.commitFiles(state.github.token, state.github.repo, state.github.branch, plan);
       },
     },
   };

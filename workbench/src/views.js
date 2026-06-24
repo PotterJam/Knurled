@@ -678,6 +678,7 @@ export function backtest(root, ctx) {
 // --------------------------------------------------------------------------
 export function git(root, ctx) {
   const g = ctx.state.github;
+  const canCommit = Boolean(g.token && g.repo && ctx.result?.validation?.status === "valid");
   root.innerHTML = `
     <div class="stack">
       <div class="card">
@@ -697,8 +698,8 @@ export function git(root, ctx) {
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Commit</h3><button id="g-commit" ${g.token && g.repo ? "" : "disabled"}>Commit changes</button></div>
-        <p class="muted small">Writes plan.fitspec, regenerated fitspec.lock, build/*.json, active patches, and imported logs. Blocked unless valid.</p>
+        <div class="card-head"><h3>Commit</h3><button id="g-commit" ${canCommit ? "" : "disabled"}>Commit changes</button></div>
+        <p class="muted small">Writes one atomic Git commit: plan.fitspec, fitspec.lock, state/current.json, build/*.json, active patches, and imported logs. Blocked unless valid.</p>
         <div id="g-status"></div>
       </div>
       <div class="card">
@@ -756,7 +757,14 @@ export function git(root, ctx) {
     status.innerHTML = `<p class="muted">Committing…</p>`;
     try {
       const res = await ctx.github.commit();
-      status.innerHTML = `<p class="msg ok">Committed ${res.committed} files.</p>`;
+      if (res.skipped) {
+        status.innerHTML = `<p class="msg ok">${esc(res.message || "No changes to commit.")}</p>`;
+      } else {
+        const shortSha = res.commitSha ? res.commitSha.slice(0, 7) : "";
+        status.innerHTML = `
+          <p class="msg ok">Committed ${res.committed} paths${shortSha ? ` at <a href="${esc(res.htmlUrl)}" target="_blank" rel="noreferrer">${esc(shortSha)}</a>` : ""}.</p>
+          <pre class="patch-text">${esc((res.changedFiles || []).join("\n"))}</pre>`;
+      }
     } catch (e) {
       status.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`;
     }
