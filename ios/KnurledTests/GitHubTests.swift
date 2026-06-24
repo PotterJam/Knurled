@@ -14,8 +14,36 @@ import Foundation
 
         let files = Set(GitHubChangedFiles.present(in: dir))
         #expect(files.contains("state/current.json"))
+        #expect(files.contains("build/current.ir.json"))
         #expect(files.contains("build/next-workout.json"))
         #expect(files.contains("logs/2026/06.jsonl"))
+        #expect(!files.contains("build/ir.json"))
+    }
+
+    @Test func syncRetriesPendingPushBeforePulling() async throws {
+        let fake = FakeGitHubClient()
+        let github = GitHubStore(makeClient: { _ in fake })
+        github.authenticateForTesting(token: "token")
+        let app = AppModel(github: github)
+        let dir = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        _ = try await app.engine.build(dir: dir, write: true)
+        try LogReader().appendEvent(line: "{\"id\":\"x\",\"type\":\"session_skipped\",\"session_id\":\"a1\"}", dir: dir, timestamp: "2026-06-24T09:00:00Z")
+
+        let repo = ActiveRepo(displayName: "owner/repo", url: dir, isSample: false)
+        repo.remote = GitHubRemote(owner: "owner", name: "repo", branch: "main", headCommit: "base")
+        repo.pendingPush = true
+        app.activeRepo = repo
+        app.phase = .ready
+
+        await app.sync()
+
+        let calls = await fake.calls
+        #expect(calls.commitMessages == ["Sync pending Knurled changes"])
+        #expect(calls.commitFiles.first?.contains("build/current.ir.json") == true)
+        #expect(calls.pullCount == 1)
+        #expect(repo.pendingPush == false)
+        #expect(repo.remote?.headCommit == "pulled-head")
     }
 
     // `all` feeds the initial commit; its paths must be repo-relative and readable back via
@@ -66,5 +94,57 @@ import Foundation
         GitHub.applyCommonHeaders(to: &request)
 
         #expect(request.value(forHTTPHeaderField: "User-Agent") == GitHub.userAgent)
+    }
+}
+
+private actor FakeGitHubClient: GitHubClientProtocol {
+    struct Calls {
+        var commitMessages: [String] = []
+        var commitFiles: [[String]] = []
+        var pullCount = 0
+    }
+
+    private(set) var calls = Calls()
+
+    func currentUser() async throws -> GitHubUser {
+        GitHubUser(login: "test")
+    }
+
+    func repositories() async throws -> [GitHubRepo] {
+        []
+    }
+
+    func createRepository(name: String, isPrivate: Bool) async throws -> GitHubRepo {
+        GitHubRepo(id: 1, name: name, fullName: "test/\(name)", defaultBranch: "main", private: isPrivate, size: 1)
+    }
+
+    func pull(owner: String, repo: String, branch: String, into dir: URL) async throws -> String {
+        calls.pullCount += 1
+        return "pulled-head"
+    }
+
+    func commit(
+        owner: String,
+        repo: String,
+        branch: String,
+        baseCommit: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String {
+        calls.commitMessages.append(message)
+        calls.commitFiles.append(files)
+        return "pushed-head"
+    }
+
+    func commitInitial(
+        owner: String,
+        repo: String,
+        branch: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String {
+        "initial-head"
     }
 }

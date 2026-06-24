@@ -16,8 +16,13 @@ final class GitHubStore {
     var errorMessage: String?
 
     private let tokenStore = TokenStore()
+    private let makeClient: @Sendable (String) -> any GitHubClientProtocol
     private var token: String?
     private var signInTask: Task<Void, Never>?
+
+    init(makeClient: @escaping @Sendable (String) -> any GitHubClientProtocol = { GitHubClient(token: $0) }) {
+        self.makeClient = makeClient
+    }
 
     var isConfigured: Bool { GitHubConfig.isConfigured }
 
@@ -31,7 +36,7 @@ final class GitHubStore {
         guard let saved = tokenStore.load() else { return }
         token = saved
         do {
-            let user = try await GitHubClient(token: saved).currentUser()
+            let user = try await makeClient(saved).currentUser()
             phase = .signedIn(login: user.login)
         } catch {
             tokenStore.clear()
@@ -72,14 +77,19 @@ final class GitHubStore {
         isLoadingRepos = true
         defer { isLoadingRepos = false }
         do {
-            repos = try await GitHubClient(token: token).repositories()
+            repos = try await makeClient(token).repositories()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func client() -> GitHubClient? {
-        token.map(GitHubClient.init(token:))
+    func client() -> (any GitHubClientProtocol)? {
+        token.map(makeClient)
+    }
+
+    func authenticateForTesting(token: String, login: String = "test") {
+        self.token = token
+        phase = .signedIn(login: login)
     }
 
     private func runDeviceFlow(clientID: String) async {
@@ -91,7 +101,7 @@ final class GitHubStore {
                 deviceCode: code.deviceCode,
                 interval: code.interval
             )
-            let user = try await GitHubClient(token: accessToken).currentUser()
+            let user = try await makeClient(accessToken).currentUser()
             tokenStore.save(accessToken)
             token = accessToken
             phase = .signedIn(login: user.login)

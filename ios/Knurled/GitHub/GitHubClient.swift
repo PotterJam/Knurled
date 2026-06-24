@@ -1,6 +1,30 @@
 import Foundation
 
-struct GitHubClient: Sendable {
+protocol GitHubClientProtocol: Sendable {
+    func currentUser() async throws -> GitHubUser
+    func repositories() async throws -> [GitHubRepo]
+    func createRepository(name: String, isPrivate: Bool) async throws -> GitHubRepo
+    func pull(owner: String, repo: String, branch: String, into dir: URL) async throws -> String
+    func commit(
+        owner: String,
+        repo: String,
+        branch: String,
+        baseCommit: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String
+    func commitInitial(
+        owner: String,
+        repo: String,
+        branch: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String
+}
+
+struct GitHubClient: GitHubClientProtocol {
     let token: String
 
     func currentUser() async throws -> GitHubUser {

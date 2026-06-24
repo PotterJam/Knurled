@@ -5,6 +5,7 @@
   "scripts": {
     "knurled": "cargo run -p knurled-cli --",
     "test": "cargo test --workspace",
+    "test:workbench": "node --test workbench/test/*.mjs",
     "serve": "cargo run -p knurled-cli -- serve",
     "build:example": "cargo run -p knurled-cli -- build examples/gzclp-repo",
     "build:workbench": "bash workbench/scripts/build-wasm.sh",
