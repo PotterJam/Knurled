@@ -9,7 +9,7 @@ pub mod templates;
 
 pub use core::{
     PatchFile, build_outputs, compile_plan, create_initial_state, reduce_input, render_next,
-    replay_events, simulate, synthetic_execution_input, validate_compiled,
+    render_session, replay_events, simulate, synthetic_execution_input, validate_compiled,
     validate_execution_input,
 };
 pub use error::{KnurledError, Result};

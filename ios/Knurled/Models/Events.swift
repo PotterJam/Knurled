@@ -78,5 +78,8 @@ struct BuildOutputs: Codable, Sendable {
     var state: StateProjection
     var ir: JSONValue
     var nextWorkout: RenderedSession?
+    /// Saved partials re-rendered against the current state so they stay resumable from history
+    /// after a partial save advances the cursor past them (§16/§19).
+    var resumableSessions: [RenderedSession]?
     var validation: ValidationReport
 }

@@ -7,6 +7,7 @@ protocol WorkoutEngine: Sendable {
     func build(dir: URL, write: Bool) async throws -> BuildOutputs
     func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) async throws -> ReductionOutcome
     func validateInput(dir: URL, input: ExecutionInput) async throws -> ExecutionInputValidation
+    func renderSession(dir: URL, sessionId: String) async throws -> RenderedSession
 }
 
 struct ReductionOutcome: Sendable {

@@ -30,6 +30,7 @@ final class ActiveRepo: Identifiable {
     }
 
     var nextWorkout: RenderedSession? { displayOutputs?.nextWorkout }
+    var resumableSessions: [RenderedSession] { displayOutputs?.resumableSessions ?? [] }
     var state: StateProjection? { displayOutputs?.state }
     var validation: ValidationReport? { outputs?.validation }
     var isValid: Bool { outputs?.validation.isValid ?? false }

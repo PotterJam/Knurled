@@ -18,7 +18,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
     ENGINE_VERSION, ExecutionInput, RenderedSession, build_outputs, build_repo, init_training_repo,
-    read_training_repo, reduce_input, validate_execution_input, validate_repo,
+    read_training_repo, reduce_input, render_session, validate_execution_input, validate_repo,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -153,6 +153,38 @@ pub extern "C" fn knurled_reduce_input(
         };
         match reduce_input(&repo.compiled, &outputs.state, &rendered, &input) {
             Ok(result) => ok(result),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+/// Re-renders a specific session by id against the repo's current state, ignoring the cursor.
+/// A saved partial advances the cursor to the next workout, so resuming it from history needs the
+/// session re-rendered explicitly (spec §16/§19).
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_render_session(
+    dir: *const c_char,
+    session_id: *const c_char,
+) -> *mut c_char {
+    guard("knurled_render_session", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let session_id = match unsafe { borrow(session_id) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let repo = match read_training_repo(dir) {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let outputs = match build_outputs(&repo.compiled, &repo.events) {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match render_session(&repo.compiled, &outputs.state, session_id) {
+            Ok(rendered) => ok(rendered),
             Err(error) => fail(error),
         }
     })

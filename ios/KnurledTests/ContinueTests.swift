@@ -52,8 +52,9 @@ import Foundation
         #expect(input.inputs.count == session.items.count)
     }
 
-    // §16/§19/§31 — a partial save keeps in-progress sets without advancing the cursor, and
-    // continuing finishes the same snapshot as a linked session_continued.
+    // §16/§19/§31 — a partial save keeps in-progress sets and advances the cursor to the next
+    // workout, while the snapshot stays resumable from history and continuing finishes it as a
+    // linked session_continued.
     @Test func partialSavePreservesSetsThenContinueCompletes() async throws {
         let dir = try SampleRepo.makeWorkingCopy()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -79,10 +80,14 @@ import Foundation
 
         let saved = try #require(repo.events.first { $0.type == "session_saved" })
         #expect(saved.results.first { $0.slotId == "a1.t2" }?.actual.count == 2)
-        #expect(repo.state?.cursor.nextSession == "a1")
+        // The partial moves the program on to B1, but A1 stays resumable from history.
+        #expect(repo.state?.cursor.nextSession == "b1")
+        #expect(repo.nextWorkout?.sessionId == "b1")
 
-        // Continue: the snapshot still matches; finish the whole session linked to the partial.
-        let again = try #require(repo.nextWorkout)
+        // Continue from history: the saved snapshot is re-rendered and still matches.
+        let again = try #require(
+            repo.resumableSessions.first { $0.renderedSessionHash == saved.renderedSessionHash }
+        )
         #expect(again.renderedSessionHash == session.renderedSessionHash)
         let fullInput = ExecutionInput(
             renderedSessionHash: again.renderedSessionHash,

@@ -580,6 +580,10 @@ pub struct BuildOutputs {
     pub state: StateProjection,
     pub ir: serde_json::Value,
     pub next_workout: Option<RenderedSession>,
+    /// Saved partials that have not yet been continued, re-rendered against the current state so
+    /// the app can resume them from history even though the cursor has moved past them (§16/§19).
+    #[serde(default)]
+    pub resumable_sessions: Vec<RenderedSession>,
     pub validation: ValidationReport,
 }
 

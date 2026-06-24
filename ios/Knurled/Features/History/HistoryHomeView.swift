@@ -56,15 +56,15 @@ struct HistoryHomeView: View {
         }
     }
 
-    /// A saved partial can be continued only while the current next workout still matches the
-    /// snapshot it was logged against (the cursor doesn't move on a partial). If the plan has
-    /// since changed, it falls back to correction instead.
+    /// A saved partial advances the cursor to the next workout, but stays resumable from history.
+    /// The engine re-renders each outstanding partial (`resumableSessions`); we match by the
+    /// snapshot hash it was logged against. If the plan has since changed the hash no longer
+    /// matches, so it falls back to correction instead.
     private func continuableSession(for item: HistoryItem, in repo: ActiveRepo) -> RenderedSession? {
-        guard item.event.type == "session_saved", item.canContinue,
-              let session = repo.nextWorkout,
-              session.renderedSessionHash == item.event.renderedSessionHash
-        else { return nil }
-        return session
+        guard item.event.type == "session_saved", item.canContinue else { return nil }
+        return repo.resumableSessions.first {
+            $0.renderedSessionHash == item.event.renderedSessionHash
+        }
     }
 
     private var filteredItems: [HistoryItem] {
