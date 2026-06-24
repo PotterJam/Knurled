@@ -17,8 +17,9 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    ENGINE_VERSION, ExecutionInput, RenderedSession, build_outputs, build_repo, init_training_repo,
-    read_training_repo, reduce_input, render_session, validate_execution_input, validate_repo,
+    ENGINE_VERSION, ExecutionInput, RenderedSession, build_outputs, build_repo, builtin_templates,
+    init_training_repo, read_training_repo, reduce_input, render_session, validate_execution_input,
+    validate_repo,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -227,6 +228,26 @@ pub extern "C" fn knurled_validate_execution_input(
 #[unsafe(no_mangle)]
 pub extern "C" fn knurled_engine_version() -> *mut c_char {
     guard("knurled_engine_version", || ok(ENGINE_VERSION))
+}
+
+/// Lists the engine's built-in starter templates so the app never hardcodes template
+/// identifiers or names. Each entry carries the `@`-versioned reference to pass back to
+/// `knurled_init_repo`, plus the display name and description the engine owns.
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_builtin_templates() -> *mut c_char {
+    guard("knurled_builtin_templates", || {
+        let templates: Vec<_> = builtin_templates()
+            .iter()
+            .map(|info| {
+                json!({
+                    "reference": format!("{}@{}", info.id, info.version),
+                    "display_name": info.display_name,
+                    "description": info.description,
+                })
+            })
+            .collect();
+        ok(templates)
+    })
 }
 
 /// Frees a string previously returned by any `knurled_*` function.

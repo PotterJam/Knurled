@@ -8,7 +8,7 @@ struct GitHubConnectView: View {
     @State private var selectedRepoID: GitHubRepo.ID?
     @State private var creatingRepo = false
     @State private var newRepoName = "my-training"
-    @State private var newRepoTemplate = StarterTemplate.gzclpStandard
+    @State private var newRepoTemplate: StarterTemplate?
     @State private var newRepoPrivate = true
     @State private var emptyRepoToInitialize: GitHubRepo?
 
@@ -36,6 +36,10 @@ struct GitHubConnectView: View {
                     try await app.initializeRepository(githubRepo: repo, template: template)
                     dismiss()
                 }
+            }
+            .task {
+                await app.loadStarterTemplates()
+                if newRepoTemplate == nil { newRepoTemplate = app.starterTemplates.first }
             }
         }
     }
@@ -139,32 +143,34 @@ struct GitHubConnectView: View {
                     .autocorrectionDisabled()
 
                 Picker("Template", selection: $newRepoTemplate) {
-                    ForEach(StarterTemplate.allCases) { template in
+                    ForEach(app.starterTemplates) { template in
                         VStack(alignment: .leading) {
                             Text(template.title)
                             Text(template.reference)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        .tag(template)
+                        .tag(Optional(template))
                     }
                 }
 
                 Toggle("Private repository", isOn: $newRepoPrivate)
 
-                Text(newRepoTemplate.subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if let subtitle = newRepoTemplate?.subtitle {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 Button {
-                    createStarterRepo()
+                    if let template = newRepoTemplate { createStarterRepo(template) }
                 } label: {
                     HStack {
                         Label("Create and connect", systemImage: "plus.circle")
                         if creatingRepo { Spacer(); ProgressView() }
                     }
                 }
-                .disabled(creatingRepo || newRepoName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(creatingRepo || newRepoTemplate == nil || newRepoName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             errorSection
         }
@@ -221,13 +227,13 @@ struct GitHubConnectView: View {
         }
     }
 
-    private func createStarterRepo() {
+    private func createStarterRepo(_ template: StarterTemplate) {
         creatingRepo = true
         Task {
             do {
                 try await app.createStarterRepository(
                     name: newRepoName,
-                    template: newRepoTemplate,
+                    template: template,
                     isPrivate: newRepoPrivate
                 )
                 dismiss()
@@ -245,8 +251,9 @@ private struct InitializeEmptyRepoView: View {
     let repo: GitHubRepo
     let initialize: (StarterTemplate) async throws -> Void
 
+    @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var template = StarterTemplate.gzclpStandard
+    @State private var template: StarterTemplate?
     @State private var isInitializing = false
     @State private var errorMessage: String?
 
@@ -259,30 +266,32 @@ private struct InitializeEmptyRepoView: View {
                 }
                 Section("Template") {
                     Picker("Template", selection: $template) {
-                        ForEach(StarterTemplate.allCases) { template in
+                        ForEach(app.starterTemplates) { template in
                             VStack(alignment: .leading) {
                                 Text(template.title)
                                 Text(template.reference)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            .tag(template)
+                            .tag(Optional(template))
                         }
                     }
 
-                    Text(template.subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if let subtitle = template?.subtitle {
+                        Text(subtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
                     Button {
-                        initializeRepo()
+                        if let template { initializeRepo(template) }
                     } label: {
                         HStack {
                             Label("Initialize repository", systemImage: "plus.circle")
                             if isInitializing { Spacer(); ProgressView() }
                         }
                     }
-                    .disabled(isInitializing)
+                    .disabled(isInitializing || template == nil)
                 }
                 if let errorMessage {
                     Section {
@@ -297,10 +306,14 @@ private struct InitializeEmptyRepoView: View {
                     Button("Cancel") { dismiss() }.disabled(isInitializing)
                 }
             }
+            .task {
+                await app.loadStarterTemplates()
+                if template == nil { template = app.starterTemplates.first }
+            }
         }
     }
 
-    private func initializeRepo() {
+    private func initializeRepo(_ template: StarterTemplate) {
         isInitializing = true
         errorMessage = nil
         Task {

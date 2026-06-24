@@ -168,6 +168,7 @@ pub fn builtin_template_catalog() -> String {
             "version": info.version,
             "ref": reference,
             "display_name": info.display_name,
+            "description": info.description,
             "skeleton": skeleton,
         }));
     }

@@ -7,6 +7,11 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(String.self, from: raw)
     }
 
+    func builtinTemplates() throws -> [StarterTemplate] {
+        let raw = try call { knurled_builtin_templates() }
+        return try decode([StarterTemplate].self, from: raw)
+    }
+
     func initRepo(dir: URL, template: String) throws {
         let raw = try call(dir: dir, json: template) { knurled_init_repo($0, $1) }
         _ = try decode(JSONValue.self, from: raw)

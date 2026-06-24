@@ -7,51 +7,20 @@ struct GitHubRemote: Codable, Sendable, Hashable {
     var headCommit: String
 }
 
-enum StarterTemplate: String, CaseIterable, Identifiable {
-    case gzclpStandard
-    case gzclpPZero
-    case fiveThreeOneBasic
-    case fiveThreeOneBeginners
-    case startingStrengthPhase1
-    case startingStrengthPhase2
-    case startingStrengthPhase3
+/// A built-in starter template, as described by the engine. The app never invents template
+/// identifiers or names — `reference`, `title`, and `subtitle` all come from
+/// `knurled_builtin_templates` so the two can't drift apart.
+struct StarterTemplate: Codable, Sendable, Hashable, Identifiable {
+    let reference: String
+    let title: String
+    let subtitle: String
 
-    var id: String { rawValue }
+    var id: String { reference }
 
-    var title: String {
-        switch self {
-        case .gzclpStandard: "GZCLP Standard"
-        case .gzclpPZero: "GZCLP P-Zero"
-        case .fiveThreeOneBasic: "5/3/1 Basic"
-        case .fiveThreeOneBeginners: "5/3/1 for Beginners"
-        case .startingStrengthPhase1: "Starting Strength Phase 1"
-        case .startingStrengthPhase2: "Starting Strength Phase 2"
-        case .startingStrengthPhase3: "Starting Strength Phase 3"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .gzclpStandard: "Simple linear progression with A/B rotation."
-        case .gzclpPZero: "GZCLP variant with the same starter lifts."
-        case .fiveThreeOneBasic: "Four-day 5/3/1 starter using training maxes."
-        case .fiveThreeOneBeginners: "Beginner-friendly 5/3/1 starter."
-        case .startingStrengthPhase1: "Novice A/B progression with squat, press, bench, and deadlift."
-        case .startingStrengthPhase2: "Adds the next novice phase while staying template-driven."
-        case .startingStrengthPhase3: "Adds power cleans for later novice progression."
-        }
-    }
-
-    var reference: String {
-        switch self {
-        case .gzclpStandard: "gzclp.standard@1.0.0"
-        case .gzclpPZero: "gzclp.pzero@1.0.0"
-        case .fiveThreeOneBasic: "531.basic@1.0.0"
-        case .fiveThreeOneBeginners: "531.beginners@1.0.0"
-        case .startingStrengthPhase1: "starting-strength.phase1@1.0.0"
-        case .startingStrengthPhase2: "starting-strength.phase2@1.0.0"
-        case .startingStrengthPhase3: "starting-strength.phase3@1.0.0"
-        }
+    private enum CodingKeys: String, CodingKey {
+        case reference
+        case title = "display_name"
+        case subtitle = "description"
     }
 }
 

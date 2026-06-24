@@ -2,6 +2,7 @@ import Foundation
 
 protocol WorkoutEngine: Sendable {
     func engineVersion() async throws -> String
+    func builtinTemplates() async throws -> [StarterTemplate]
     func initRepo(dir: URL, template: String) async throws
     func validate(dir: URL) async throws -> ValidationReport
     func build(dir: URL, write: Bool) async throws -> BuildOutputs

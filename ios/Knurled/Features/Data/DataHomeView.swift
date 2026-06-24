@@ -3,16 +3,22 @@ import SwiftUI
 struct DataHomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(BodyMetricsStore.self) private var metrics
+    @FocusState private var bodyWeightFocused: Bool
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: KnurledTheme.Spacing.m) {
-                    BodyMetricsCard()
+                    BodyMetricsCard(weightFocused: $bodyWeightFocused)
                     content
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            bodyWeightFocused = false
+                        }
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Data")
         }
     }
@@ -51,6 +57,7 @@ struct DataHomeView: View {
 /// the strength-level normalisation; they are never written to the repo or log.
 private struct BodyMetricsCard: View {
     @Environment(BodyMetricsStore.self) private var metrics
+    let weightFocused: FocusState<Bool>.Binding
     @State private var weightText = ""
 
     var body: some View {
@@ -63,8 +70,17 @@ private struct BodyMetricsCard: View {
                 TextField("Weight", text: $weightText)
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.roundedBorder)
+                    .focused(weightFocused)
                     .onChange(of: weightText) { _, new in
                         metrics.bodyWeight = Double(new.replacingOccurrences(of: ",", with: "."))
+                    }
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") {
+                                weightFocused.wrappedValue = false
+                            }
+                        }
                     }
 
                 Picker("Unit", selection: $metrics.unit) {

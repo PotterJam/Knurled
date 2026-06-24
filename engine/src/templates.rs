@@ -19,6 +19,7 @@ pub struct BuiltinTemplateInfo {
     pub id: &'static str,
     pub version: &'static str,
     pub display_name: &'static str,
+    pub description: &'static str,
     pub kind: TemplateKind,
 }
 
@@ -28,42 +29,49 @@ pub const BUILTIN_TEMPLATES: &[BuiltinTemplateInfo] = &[
         id: "gzcl.gzclp",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "GZCLP",
+        description: "Simple linear progression with A/B rotation.",
         kind: TemplateKind::Gzclp,
     },
     BuiltinTemplateInfo {
         id: "gzcl.p-zero",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "GZCLP P-Zero",
+        description: "GZCLP variant with the same starter lifts.",
         kind: TemplateKind::Gzclp,
     },
     BuiltinTemplateInfo {
         id: "531.basic",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "5/3/1 Basic",
+        description: "Four-day 5/3/1 starter using training maxes.",
         kind: TemplateKind::FiveThreeOne,
     },
     BuiltinTemplateInfo {
         id: "531.beginners",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "5/3/1 for Beginners",
+        description: "Beginner-friendly 5/3/1 starter.",
         kind: TemplateKind::FiveThreeOne,
     },
     BuiltinTemplateInfo {
         id: "starting-strength.phase1",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "Starting Strength Phase 1",
+        description: "Novice A/B progression with squat, press, bench, and deadlift.",
         kind: TemplateKind::StartingStrength,
     },
     BuiltinTemplateInfo {
         id: "starting-strength.phase2",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "Starting Strength Phase 2",
+        description: "Adds the next novice phase while staying template-driven.",
         kind: TemplateKind::StartingStrength,
     },
     BuiltinTemplateInfo {
         id: "starting-strength.phase3",
         version: DEFAULT_TEMPLATE_VERSION,
         display_name: "Starting Strength Phase 3",
+        description: "Adds power cleans for later novice progression.",
         kind: TemplateKind::StartingStrength,
     },
 ];

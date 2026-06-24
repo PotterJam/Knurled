@@ -37,6 +37,10 @@ char *knurled_validate_execution_input(const char *dir, const char *execution_in
 /* -> engine version string */
 char *knurled_engine_version(void);
 
+/* Lists the built-in starter templates (reference, display_name, description) so the app
+ * never hardcodes template ids or names. -> array of template descriptors */
+char *knurled_builtin_templates(void);
+
 /* Releases a string returned by any function above. */
 void knurled_string_free(char *ptr);
 

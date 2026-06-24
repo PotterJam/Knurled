@@ -17,6 +17,7 @@ final class AppModel {
     var phase: Phase = .launching
     var activeRepo: ActiveRepo?
     var engineVersion: String?
+    var starterTemplates: [StarterTemplate] = []
 
     init(
         engine: WorkoutEngine = RustWorkoutEngine(),
@@ -30,9 +31,17 @@ final class AppModel {
 
     func bootstrap() async {
         engineVersion = try? await engine.engineVersion()
+        await loadStarterTemplates()
         await github.restore()
         if await restoreSelection() { return }
         await loadSampleRepo()
+    }
+
+    /// Loads the engine's built-in starter templates once. The app shows whatever the engine
+    /// reports rather than a hardcoded list, so the two can't drift.
+    func loadStarterTemplates() async {
+        guard starterTemplates.isEmpty else { return }
+        starterTemplates = (try? await engine.builtinTemplates()) ?? []
     }
 
     func loadSampleRepo() async {
