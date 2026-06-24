@@ -24,7 +24,10 @@ extension AppModel {
         if let continuesEventId {
             line = try Self.rewriteAsContinued(baseLine, continuesEventId: continuesEventId, timestamp: timestamp)
             let session = (outcome.result.event?.sessionId ?? "session").uppercased()
-            message = "Continue \(session) - \(String(timestamp.prefix(10)))"
+            let date = String(timestamp.prefix(10))
+            message = outcome.result.event?.type == "session_completed"
+                ? "Continue \(session) - \(date)"
+                : "Save partial \(session) - \(date)"
         } else {
             line = baseLine
             message = Self.commitMessage(for: outcome.result.event, timestamp: timestamp)
@@ -33,19 +36,25 @@ extension AppModel {
         return outcome.result
     }
 
-    /// Relabels the engine's `session_completed` as a `session_continued` linked to the saved
-    /// partial it finishes. The engine replays both the same way (apply effects, advance cursor)
-    /// but History can then show them as one workout (§19).
+    /// Links a finished resumed workout back to the partial it continues, so the original is
+    /// superseded rather than duplicated (§19).
+    ///
+    /// A *complete* finish is relabelled `session_completed` → `session_continued` so replay
+    /// guards the cursor advance the partial already made. A still-*partial* finish stays
+    /// `session_saved` (its replay already guards the cursor) and only carries the link — that
+    /// drops the superseded partial out of the resumable set and out of History.
     private static func rewriteAsContinued(
         _ line: String,
         continuesEventId: String,
         timestamp: String
     ) throws -> String {
         var event = try KnurledCoding.decoder().decode(TrainingEvent.self, from: Data(line.utf8))
-        event.type = "session_continued"
+        if event.type == "session_completed" {
+            event.type = "session_continued"
+        }
         event.continuesEventId = continuesEventId
         if let session = event.sessionId {
-            event.id = EventID.make(type: "session_continued", session: session, timestamp: timestamp)
+            event.id = EventID.make(type: event.type, session: session, timestamp: timestamp)
         }
         return try EventEncoding.line(event)
     }

@@ -91,7 +91,12 @@ struct ActiveWorkoutView: View {
         guard !input.inputs.isEmpty else { dismiss(); return }
         do {
             let outcome = try await app.engine.reduce(dir: workout.repo.url, session: workout.session, input: input)
-            try await app.commit(outcome: outcome, in: workout.repo, timestamp: timestamp)
+            try await app.commit(
+                outcome: outcome,
+                in: workout.repo,
+                timestamp: timestamp,
+                continuesEventId: workout.continuesEventId
+            )
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

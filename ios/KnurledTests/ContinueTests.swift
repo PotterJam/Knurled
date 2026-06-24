@@ -108,5 +108,72 @@ import Foundation
         let continued = try #require(events.first { $0.type == "session_continued" })
         #expect(continued.continuesEventId == saved.id)
         #expect(repo.state?.cursor.nextSession == "b1")
+
+        // The partial and its continuation are one workout: History shows a single complete A1
+        // row, not the partial duplicated alongside it (§19).
+        let a1Rows = HistoryBuilder.items(from: repo.events).filter { $0.title == "A1" }
+        #expect(a1Rows.count == 1)
+        #expect(a1Rows.first?.status == "Complete")
+    }
+
+    // §19 — continuing a partial and saving it as a partial *again* must supersede the original
+    // rather than leaving two resumable partials (the duplicate-on-resave bug). The re-save links
+    // back to the original, which drops out of both the resumable set and History.
+    @Test func continuingThenResavingPartialSupersedesTheOriginal() async throws {
+        let dir = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = RustWorkoutEngine()
+        let repo = ActiveRepo(displayName: "Test", url: dir, isSample: true)
+        let app = AppModel(engine: engine)
+
+        let session = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
+
+        let firstInput = ExecutionInput(
+            renderedSessionHash: session.renderedSessionHash,
+            status: ExecutionStatus.partial,
+            startedAt: "2026-06-24T10:00:00Z",
+            savedAt: "2026-06-24T10:20:00Z",
+            inputs: [ItemInput(itemId: "a1.t2", mode: InputMode.perSetReps, sets: [
+                ActualSet(set: 1, load: "45kg", reps: 10),
+            ])]
+        )
+        let first = try await engine.reduce(dir: dir, session: session, input: firstInput)
+        try await app.commit(outcome: first, in: repo, timestamp: "2026-06-24T10:20:00Z")
+        let original = try #require(repo.events.last { $0.type == "session_saved" })
+
+        // Continue from history and save again, still partial (one more set logged).
+        let resumed = try #require(
+            repo.resumableSessions.first { $0.renderedSessionHash == original.renderedSessionHash }
+        )
+        let secondInput = ExecutionInput(
+            renderedSessionHash: resumed.renderedSessionHash,
+            status: ExecutionStatus.partial,
+            startedAt: original.startedAt,
+            savedAt: "2026-06-24T10:40:00Z",
+            inputs: [ItemInput(itemId: "a1.t2", mode: InputMode.perSetReps, sets: [
+                ActualSet(set: 1, load: "45kg", reps: 10),
+                ActualSet(set: 2, load: "45kg", reps: 10),
+            ])]
+        )
+        let second = try await engine.reduce(dir: dir, session: resumed, input: secondInput)
+        try await app.commit(
+            outcome: second, in: repo, timestamp: "2026-06-24T10:40:00Z", continuesEventId: original.id
+        )
+
+        // Both saves are on the log, but the re-save stays a partial that links to the original.
+        let saves = repo.events.filter { $0.type == "session_saved" }
+        #expect(saves.count == 2)
+        let latest = try #require(saves.last)
+        #expect(latest.continuesEventId == original.id)
+
+        // Only the latest partial stays resumable — the original no longer duplicates it.
+        #expect(repo.resumableSessions.filter { $0.sessionId == "a1" }.count == 1)
+        // The re-save must not advance the cursor a second time.
+        #expect(repo.state?.cursor.nextSession == "b1")
+
+        // History shows one A1 row that can still be continued, not two.
+        let a1Rows = HistoryBuilder.items(from: repo.events).filter { $0.title == "A1" }
+        #expect(a1Rows.count == 1)
+        #expect(a1Rows.first?.canContinue == true)
     }
 }

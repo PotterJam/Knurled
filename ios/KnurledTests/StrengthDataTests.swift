@@ -67,6 +67,12 @@ import Foundation
         #expect(CoreLift.from(lane: "barbell_row.t3") == nil)
     }
 
+    @Test func mapsImportedExerciseNamesToLift() {
+        #expect(CoreLift.from(exercise: "Bench Press") == .bench)
+        #expect(CoreLift.from(exercise: "overhead_press") == .press)
+        #expect(CoreLift.from(exercise: "barbell row") == nil)
+    }
+
     // MARK: - Progress reconstruction
 
     @Test func emptyInputsProduceNoSamples() {
@@ -97,5 +103,98 @@ import Foundation
         let squat = try #require(data.samples.first { $0.lift == .squat })
         #expect(squat.e1RMkg == 80)
         #expect(squat.estimated == false)
+    }
+
+    @Test func importedWorkoutsFeedLastMonthSamples() throws {
+        let events = try [
+            Self.importedEvent(id: "old", completedAt: "2026-04-15T12:00:00Z", exercise: "Squat", load: "100kg"),
+            Self.importedEvent(id: "recent-squat", completedAt: "2026-05-25T12:00:00Z", exercise: "Squat", load: "105kg"),
+            Self.importedEvent(id: "recent-bench", completedAt: "2026-06-20T12:00:00Z", exercise: "Bench Press", load: "80kg"),
+        ]
+
+        let data = LiftProgressData.build(
+            events: events,
+            state: nil,
+            units: .kg,
+            calendar: Self.utcCalendar
+        )
+
+        #expect(data.samples.count == 2)
+        #expect(data.samples.allSatisfy { $0.estimated })
+        #expect(data.samples.map { $0.lift } == [CoreLift.squat, CoreLift.bench])
+        #expect(abs(data.samples[0].e1RMkg - 122.5) < 0.001)
+        #expect(abs(data.samples[1].e1RMkg - 93.3333) < 0.001)
+    }
+
+    @Test func recentLoggedSamplesSuppressCurrentLoadFallback() throws {
+        let stateJSON = """
+        {
+          "type": "state_projection",
+          "schema_version": "0.1",
+          "engine_version": "0.1.0",
+          "program_hash": "sha256:abc",
+          "last_event_id": null,
+          "cursor": { "next_session": "a1", "week": 1, "cycle": 1 },
+          "lanes": {
+            "squat.t1": { "load": "80kg", "stage": "5x3+" },
+            "bench.t1": { "load": "55kg", "stage": "5x3+" }
+          },
+          "sessions": {}
+        }
+        """
+        let state = try KnurledCoding.decoder().decode(StateProjection.self, from: Data(stateJSON.utf8))
+        let event = try Self.importedEvent(
+            id: "recent-squat",
+            completedAt: "2026-06-20T12:00:00Z",
+            exercise: "Squat",
+            load: "100kg"
+        )
+
+        let data = LiftProgressData.build(
+            events: [event],
+            state: state,
+            units: .kg,
+            calendar: Self.utcCalendar
+        )
+
+        #expect(data.samples.count == 1)
+        #expect(data.samples.first?.lift == .squat)
+        #expect(data.samples.first?.estimated == true)
+    }
+
+    private static var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private static func importedEvent(
+        id: String,
+        completedAt: String,
+        exercise: String,
+        load: String
+    ) throws -> TrainingEvent {
+        let json = """
+        {
+          "id": "\(id)",
+          "type": "session_imported",
+          "completed_at": "\(completedAt)",
+          "results": [
+            {
+              "slot_id": "\(exercise.lowercased().replacingOccurrences(of: " ", with: "_"))",
+              "performed_exercise": "\(exercise)",
+              "actual": [
+                { "set": 1, "load": "\(load)", "reps": 5 }
+              ],
+              "outcome": "imported",
+              "effects": []
+            }
+          ],
+          "results_added": [],
+          "effects": [],
+          "changes": []
+        }
+        """
+        return try KnurledCoding.decoder().decode(TrainingEvent.self, from: Data(json.utf8))
     }
 }

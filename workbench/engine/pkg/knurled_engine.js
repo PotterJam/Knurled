@@ -74,18 +74,17 @@ function getStringFromWasm0(ptr, len) {
     return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 /**
- * Project the plan forward. Returns a `SimulationReport`.
+ * Compile + replay events + render. Returns `BuildOutputs`
+ * (`state`, `ir`, `next_workout`, `validation`) — the workbench's main call.
  * @param {string} plan_text
  * @param {string} lock_text
  * @param {string} patches_json
  * @param {string} events_json
- * @param {number} weeks
- * @param {string} strategy
  * @returns {string}
  */
-export function simulate_plan(plan_text, lock_text, patches_json, events_json, weeks, strategy) {
-    let deferred6_0;
-    let deferred6_1;
+export function build(plan_text, lock_text, patches_json, events_json) {
+    let deferred5_0;
+    let deferred5_1;
     try {
         const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -95,14 +94,65 @@ export function simulate_plan(plan_text, lock_text, patches_json, events_json, w
         const len2 = WASM_VECTOR_LEN;
         const ptr3 = passStringToWasm0(events_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(strategy, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ret = wasm.simulate_plan(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, weeks, ptr4, len4);
-        deferred6_0 = ret[0];
-        deferred6_1 = ret[1];
+        const ret = wasm.build(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * Parse delimited history text into a `HistoryImportDraft` (events + per-row
+ * diagnostics), entirely in memory. `delimiter` is "auto" | "csv" | "tsv".
+ * @param {string} text
+ * @param {string} source
+ * @param {string} delimiter
+ * @returns {string}
+ */
+export function import_history(text, source, delimiter) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(delimiter, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.import_history(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Compile + validate a plan. Returns a `ValidationReport`.
+ * @param {string} plan_text
+ * @param {string} lock_text
+ * @param {string} patches_json
+ * @returns {string}
+ */
+export function validate(plan_text, lock_text, patches_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.validate(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -161,17 +211,18 @@ export function builtin_template_catalog() {
 }
 
 /**
- * Compile + replay events + render. Returns `BuildOutputs`
- * (`state`, `ir`, `next_workout`, `validation`) — the workbench's main call.
+ * Project the plan forward. Returns a `SimulationReport`.
  * @param {string} plan_text
  * @param {string} lock_text
  * @param {string} patches_json
  * @param {string} events_json
+ * @param {number} weeks
+ * @param {string} strategy
  * @returns {string}
  */
-export function build(plan_text, lock_text, patches_json, events_json) {
-    let deferred5_0;
-    let deferred5_1;
+export function simulate_plan(plan_text, lock_text, patches_json, events_json, weeks, strategy) {
+    let deferred6_0;
+    let deferred6_1;
     try {
         const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -181,65 +232,14 @@ export function build(plan_text, lock_text, patches_json, events_json) {
         const len2 = WASM_VECTOR_LEN;
         const ptr3 = passStringToWasm0(events_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len3 = WASM_VECTOR_LEN;
-        const ret = wasm.build(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-        deferred5_0 = ret[0];
-        deferred5_1 = ret[1];
+        const ptr4 = passStringToWasm0(strategy, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.simulate_plan(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, weeks, ptr4, len4);
+        deferred6_0 = ret[0];
+        deferred6_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-    }
-}
-
-/**
- * Compile + validate a plan. Returns a `ValidationReport`.
- * @param {string} plan_text
- * @param {string} lock_text
- * @param {string} patches_json
- * @returns {string}
- */
-export function validate(plan_text, lock_text, patches_json) {
-    let deferred4_0;
-    let deferred4_1;
-    try {
-        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.validate(ptr0, len0, ptr1, len1, ptr2, len2);
-        deferred4_0 = ret[0];
-        deferred4_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-    }
-}
-
-/**
- * Parse delimited history text into a `HistoryImportDraft` (events + per-row
- * diagnostics), entirely in memory. `delimiter` is "auto" | "csv" | "tsv".
- * @param {string} text
- * @param {string} source
- * @param {string} delimiter
- * @returns {string}
- */
-export function import_history(text, source, delimiter) {
-    let deferred4_0;
-    let deferred4_1;
-    try {
-        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(delimiter, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.import_history(ptr0, len0, ptr1, len1, ptr2, len2);
-        deferred4_0 = ret[0];
-        deferred4_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
     }
 }
 

@@ -69,13 +69,15 @@ enum HistoryBuilder {
                 event: event
             )
         case "session_saved":
+            // A partial that's since been continued is superseded by its continuation; that
+            // continuation is the canonical row, so drop the partial instead of showing both (§19).
+            if continued.contains(event.id) { return nil }
             let logged = event.results.count
-            let wasContinued = continued.contains(event.id)
             return HistoryItem(
                 id: event.id, title: title,
-                detail: "\(date) · \(logged) logged" + editedSuffix + (wasContinued ? " · continued" : ""),
-                status: wasContinued ? "Continued" : (event.status ?? "partial").capitalized,
-                statusStyle: wasContinued ? .ok : .warn, kind: .workout, canContinue: !wasContinued,
+                detail: "\(date) · \(logged) logged" + editedSuffix,
+                status: (event.status ?? "partial").capitalized,
+                statusStyle: .warn, kind: .workout, canContinue: true,
                 event: event
             )
         case "session_skipped":

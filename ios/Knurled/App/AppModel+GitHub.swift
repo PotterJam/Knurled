@@ -17,9 +17,11 @@ struct StarterTemplate: Codable, Sendable, Hashable, Identifiable {
 
     var id: String { reference }
 
+    // The shared decoder uses `.convertFromSnakeCase`, so the engine's `display_name`
+    // arrives as `displayName` before keys are matched — map against the converted form.
     private enum CodingKeys: String, CodingKey {
         case reference
-        case title = "display_name"
+        case title = "displayName"
         case subtitle = "description"
     }
 }

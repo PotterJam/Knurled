@@ -24,6 +24,32 @@ enum CoreLift: String, CaseIterable, Identifiable, Sendable {
         let key = lane.split(separator: ".").first.map(String.init) ?? lane
         return CoreLift(rawValue: key)
     }
+
+    /// Maps normalized exercise names from imported history to the core lift
+    /// tracked on the Data tab.
+    static func from(exercise: String?) -> CoreLift? {
+        guard let exercise else { return nil }
+        switch normalize(exercise) {
+        case "squat", "back_squat", "barbell_squat":
+            return .squat
+        case "bench", "bench_press", "barbell_bench_press", "flat_bench_press":
+            return .bench
+        case "deadlift", "barbell_deadlift":
+            return .deadlift
+        case "press", "overhead_press", "barbell_press", "strict_press", "shoulder_press":
+            return .press
+        default:
+            return nil
+        }
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: "_")
+    }
 }
 
 /// Named strength tiers. Numeric `value` doubles as the y-position of the shared
@@ -96,11 +122,11 @@ enum StrengthStandards {
     }
 }
 
-/// Estimated one-rep max and load parsing helpers. e1RM uses the Epley formula,
-/// `load × (1 + reps/30)`, which reduces to the load itself at 1 rep.
+/// Estimated one-rep max and load parsing helpers. A true one-rep set is the
+/// load itself; higher-rep sets use the Epley formula, `load × (1 + reps/30)`.
 enum OneRepMax {
     static func epley(loadKg: Double, reps: Int) -> Double {
-        guard reps > 0 else { return loadKg }
+        guard reps > 1 else { return loadKg }
         return loadKg * (1.0 + Double(reps) / 30.0)
     }
 

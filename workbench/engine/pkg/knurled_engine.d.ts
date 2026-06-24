@@ -1,9 +1,19 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Project the plan forward. Returns a `SimulationReport`.
+ * Compile + replay events + render. Returns `BuildOutputs`
+ * (`state`, `ir`, `next_workout`, `validation`) — the workbench's main call.
  */
-export function simulate_plan(plan_text: string, lock_text: string, patches_json: string, events_json: string, weeks: number, strategy: string): string;
+export function build(plan_text: string, lock_text: string, patches_json: string, events_json: string): string;
+/**
+ * Parse delimited history text into a `HistoryImportDraft` (events + per-row
+ * diagnostics), entirely in memory. `delimiter` is "auto" | "csv" | "tsv".
+ */
+export function import_history(text: string, source: string, delimiter: string): string;
+/**
+ * Compile + validate a plan. Returns a `ValidationReport`.
+ */
+export function validate(plan_text: string, lock_text: string, patches_json: string): string;
 /**
  * Generate a correct `fitspec.lock` body for a freshly authored plan's template.
  */
@@ -15,19 +25,9 @@ export function engine_version(): string;
  */
 export function builtin_template_catalog(): string;
 /**
- * Compile + replay events + render. Returns `BuildOutputs`
- * (`state`, `ir`, `next_workout`, `validation`) — the workbench's main call.
+ * Project the plan forward. Returns a `SimulationReport`.
  */
-export function build(plan_text: string, lock_text: string, patches_json: string, events_json: string): string;
-/**
- * Compile + validate a plan. Returns a `ValidationReport`.
- */
-export function validate(plan_text: string, lock_text: string, patches_json: string): string;
-/**
- * Parse delimited history text into a `HistoryImportDraft` (events + per-row
- * diagnostics), entirely in memory. `delimiter` is "auto" | "csv" | "tsv".
- */
-export function import_history(text: string, source: string, delimiter: string): string;
+export function simulate_plan(plan_text: string, lock_text: string, patches_json: string, events_json: string, weeks: number, strategy: string): string;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
