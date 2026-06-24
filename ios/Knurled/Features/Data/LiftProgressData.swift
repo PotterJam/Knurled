@@ -1,10 +1,11 @@
 import Foundation
 
-/// One plotted point: a lift's estimated 1RM on a given day.
+/// One plotted point: a lift's estimated 1RM in one workout.
 struct LiftSample: Identifiable, Hashable {
     let id = UUID()
     let lift: CoreLift
     let date: Date
+    let workoutIndex: Int
     let e1RMkg: Double
     /// `true` when derived from logged sets (load + reps via Epley); `false` when
     /// falling back to the current working load (no rep data, treated as e1RM floor).
@@ -25,37 +26,59 @@ struct LiftProgressData {
         return CoreLift.allCases.filter(present.contains)
     }
 
+    var workoutIndexes: [Int] {
+        Array(Set(samples.map(\.workoutIndex))).sorted()
+    }
+
     static func build(
         events: [TrainingEvent],
         state: StateProjection?,
         units: Units,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        workoutLimit: Int = 12
     ) -> LiftProgressData {
-        // lift -> day -> best e1RM that day (dedupes save+complete on the same date).
-        var byLiftDay: [CoreLift: [Date: Double]] = [:]
+        var workouts: [WorkoutSample] = []
 
-        for event in events {
+        for (eventOrder, event) in events.enumerated() {
             guard isWorkoutEvent(event) else { continue }
             guard let date = parseDate(
                 event.completedAt ?? event.savedAt ?? event.startedAt
             ) else { continue }
-            let day = calendar.startOfDay(for: date)
+
+            var e1RMsByLift: [CoreLift: Double] = [:]
 
             for result in event.results {
                 guard let lift = lift(from: result),
                       let top = topSet(result.actual, units: units) else { continue }
                 let e1rm = OneRepMax.epley(loadKg: top.loadKg, reps: top.reps)
-                byLiftDay[lift, default: [:]][day] = max(byLiftDay[lift]?[day] ?? 0, e1rm)
+                e1RMsByLift[lift] = max(e1RMsByLift[lift] ?? 0, e1rm)
+            }
+
+            guard !e1RMsByLift.isEmpty else { continue }
+            workouts.append(WorkoutSample(date: date, eventOrder: eventOrder, e1RMsByLift: e1RMsByLift))
+        }
+
+        let recentWorkouts = workouts
+            .sorted { lhs, rhs in
+                if lhs.date == rhs.date { return lhs.eventOrder < rhs.eventOrder }
+                return lhs.date < rhs.date
+            }
+            .suffix(max(1, workoutLimit))
+
+        let loggedSamples = recentWorkouts.enumerated().flatMap { offset, workout in
+            let workoutIndex = offset + 1
+            return workout.e1RMsByLift.map { lift, e1RMkg in
+                LiftSample(
+                    lift: lift,
+                    date: calendar.startOfDay(for: workout.date),
+                    workoutIndex: workoutIndex,
+                    e1RMkg: e1RMkg,
+                    estimated: true
+                )
             }
         }
-
-        let loggedSamples = byLiftDay.flatMap { lift, days in
-            days.map { LiftSample(lift: lift, date: $0.key, e1RMkg: $0.value, estimated: true) }
-        }
-
-        let recentSamples = lastMonth(samples: loggedSamples, calendar: calendar)
-        if !recentSamples.isEmpty {
-            return LiftProgressData(samples: recentSamples.sorted { $0.date < $1.date })
+        if !loggedSamples.isEmpty {
+            return LiftProgressData(samples: loggedSamples.sorted(by: sampleComesBefore))
         }
 
         var samples: [LiftSample] = []
@@ -68,11 +91,17 @@ struct LiftProgressData {
                 guard let load = lanes["\(lift.rawValue).t1"]?.load,
                       let kg = OneRepMax.kilograms(fromLoad: load, defaultUnit: units)
                 else { continue }
-                samples.append(LiftSample(lift: lift, date: today, e1RMkg: kg, estimated: false))
+                samples.append(LiftSample(lift: lift, date: today, workoutIndex: 1, e1RMkg: kg, estimated: false))
             }
         }
 
-        return LiftProgressData(samples: samples.sorted { $0.date < $1.date })
+        return LiftProgressData(samples: samples.sorted(by: sampleComesBefore))
+    }
+
+    private struct WorkoutSample {
+        let date: Date
+        let eventOrder: Int
+        let e1RMsByLift: [CoreLift: Double]
     }
 
     /// The heaviest logged set (by load), with its reps. Sets without a parseable
@@ -104,11 +133,13 @@ struct LiftProgressData {
             ?? CoreLift.from(exercise: result.prescribedExercise)
     }
 
-    private static func lastMonth(samples: [LiftSample], calendar: Calendar) -> [LiftSample] {
-        guard let latestDay = samples.map(\.date).max(),
-              let cutoff = calendar.date(byAdding: .month, value: -1, to: latestDay)
-        else { return [] }
-        return samples.filter { $0.date >= cutoff && $0.date <= latestDay }
+    private static func sampleComesBefore(_ lhs: LiftSample, _ rhs: LiftSample) -> Bool {
+        if lhs.workoutIndex != rhs.workoutIndex {
+            return lhs.workoutIndex < rhs.workoutIndex
+        }
+        let lhsLiftIndex = CoreLift.allCases.firstIndex(of: lhs.lift) ?? 0
+        let rhsLiftIndex = CoreLift.allCases.firstIndex(of: rhs.lift) ?? 0
+        return lhsLiftIndex < rhsLiftIndex
     }
 
     private static func parseDate(_ iso: String?) -> Date? {

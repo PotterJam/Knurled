@@ -22,6 +22,11 @@ struct StrengthLevelChart: View {
         return max(4.5, (top + 0.5).rounded(.up))
     }
 
+    private var xDomain: ClosedRange<Int> {
+        let maxWorkout = data.workoutIndexes.max() ?? 1
+        return maxWorkout > 1 ? 1...maxWorkout : 0...2
+    }
+
     private static func color(for lift: CoreLift) -> Color {
         switch lift {
         case .squat: .blue
@@ -53,12 +58,25 @@ struct StrengthLevelChart: View {
 
                 ForEach(data.samples) { sample in
                     LineMark(
-                        x: .value("Date", sample.date),
+                        x: .value("Workout", sample.workoutIndex),
                         y: .value("Level", level(sample))
                     )
                     .foregroundStyle(by: .value("Lift", sample.lift.title))
                     .symbol(by: .value("Lift", sample.lift.title))
                 }
+
+                ForEach(data.samples) { sample in
+                    PointMark(
+                        x: .value("Workout", sample.workoutIndex),
+                        y: .value("Level", level(sample))
+                    )
+                    .foregroundStyle(by: .value("Lift", sample.lift.title))
+                    .symbol(by: .value("Lift", sample.lift.title))
+                }
+            }
+            .chartXScale(domain: xDomain)
+            .chartXAxis {
+                AxisMarks(values: data.workoutIndexes)
             }
             .chartYScale(domain: 0...maxY)
             .chartYAxis {

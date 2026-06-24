@@ -105,12 +105,15 @@ import Foundation
         #expect(squat.estimated == false)
     }
 
-    @Test func importedWorkoutsFeedLastMonthSamples() throws {
-        let events = try [
-            Self.importedEvent(id: "old", completedAt: "2026-04-15T12:00:00Z", exercise: "Squat", load: "100kg"),
-            Self.importedEvent(id: "recent-squat", completedAt: "2026-05-25T12:00:00Z", exercise: "Squat", load: "105kg"),
-            Self.importedEvent(id: "recent-bench", completedAt: "2026-06-20T12:00:00Z", exercise: "Bench Press", load: "80kg"),
-        ]
+    @Test func importedWorkoutsFeedLastTwelveSamplesEvenOnSameDay() throws {
+        let events = try (0..<13).map { index in
+            try Self.importedEvent(
+                id: "same-day-\(index)",
+                completedAt: "2026-06-20T12:00:00Z",
+                exercise: "Squat",
+                load: "\(100 + index)kg"
+            )
+        }
 
         let data = LiftProgressData.build(
             events: events,
@@ -119,11 +122,12 @@ import Foundation
             calendar: Self.utcCalendar
         )
 
-        #expect(data.samples.count == 2)
+        #expect(data.samples.count == 12)
         #expect(data.samples.allSatisfy { $0.estimated })
-        #expect(data.samples.map { $0.lift } == [CoreLift.squat, CoreLift.bench])
-        #expect(abs(data.samples[0].e1RMkg - 122.5) < 0.001)
-        #expect(abs(data.samples[1].e1RMkg - 93.3333) < 0.001)
+        #expect(data.workoutIndexes == Array(1...12))
+        #expect(data.samples.allSatisfy { $0.lift == .squat })
+        #expect(abs(data.samples[0].e1RMkg - 117.8333) < 0.001)
+        #expect(abs(data.samples[11].e1RMkg - 130.6667) < 0.001)
     }
 
     @Test func recentLoggedSamplesSuppressCurrentLoadFallback() throws {
@@ -159,6 +163,7 @@ import Foundation
 
         #expect(data.samples.count == 1)
         #expect(data.samples.first?.lift == .squat)
+        #expect(data.samples.first?.workoutIndex == 1)
         #expect(data.samples.first?.estimated == true)
     }
 

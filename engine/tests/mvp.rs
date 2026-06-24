@@ -172,6 +172,86 @@ fn adjusted_today_does_not_progress_future_lane() {
 }
 
 #[test]
+fn gzclp_accessory_start_seeds_t3_lane() {
+    let plan = gzclp_plan().replace(
+        "    deadlift \"100kg\"\n",
+        "    deadlift \"100kg\"\n    lat_pulldown \"40kg\"\n",
+    );
+    let lock = render_lockfile("gzcl.gzclp@1.0.0").unwrap();
+    let compiled = compile_plan(&plan, &lock, &[]).unwrap();
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+    let t3 = rendered
+        .items
+        .iter()
+        .find(|item| item.item_id == "a1.t3")
+        .unwrap();
+
+    assert_eq!(state.lanes["lat_pulldown.t3"].load.as_deref(), Some("40kg"));
+    assert_eq!(t3.prescription.sets[0].load.as_deref(), Some("40kg"));
+    assert_eq!(t3.effect_preview.pass[0].to.as_deref(), Some("42.5kg"));
+}
+
+#[test]
+fn gzclp_first_accessory_attempt_sets_or_progresses_lane_load() {
+    let compiled = compiled_gzclp();
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+    let mut input = synthetic_execution_input(&rendered, "all-pass", 0);
+    let t3 = input
+        .inputs
+        .iter_mut()
+        .find(|item| item.item_id == "a1.t3")
+        .unwrap();
+    t3.load = Some("40kg".into());
+    t3.final_set_reps = Some(25);
+
+    let result = reduce_input(&compiled, &state, &rendered, &input).unwrap();
+    let event = result.event.unwrap();
+    let t3_result = event
+        .results
+        .iter()
+        .find(|item| item.slot_id == "a1.t3")
+        .unwrap();
+
+    assert_eq!(t3_result.outcome, "pass");
+    assert_eq!(t3_result.effects[0].op, "increase_load");
+    assert_eq!(t3_result.effects[0].from.as_deref(), Some("40kg"));
+    assert_eq!(t3_result.effects[0].to.as_deref(), Some("42.5kg"));
+    assert_eq!(
+        result.new_state.lanes["lat_pulldown.t3"].load.as_deref(),
+        Some("42.5kg")
+    );
+
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+    let mut input = synthetic_execution_input(&rendered, "all-pass", 0);
+    let t3 = input
+        .inputs
+        .iter_mut()
+        .find(|item| item.item_id == "a1.t3")
+        .unwrap();
+    t3.load = Some("40kg".into());
+    t3.final_set_reps = Some(24);
+
+    let result = reduce_input(&compiled, &state, &rendered, &input).unwrap();
+    let event = result.event.unwrap();
+    let t3_result = event
+        .results
+        .iter()
+        .find(|item| item.slot_id == "a1.t3")
+        .unwrap();
+
+    assert_eq!(t3_result.outcome, "fail");
+    assert_eq!(t3_result.effects[0].op, "set_load");
+    assert_eq!(t3_result.effects[0].to.as_deref(), Some("40kg"));
+    assert_eq!(
+        result.new_state.lanes["lat_pulldown.t3"].load.as_deref(),
+        Some("40kg")
+    );
+}
+
+#[test]
 fn patch_can_replace_exercise_without_changing_lane_identity() {
     let lock = render_lockfile("gzcl.gzclp@1.0.0").unwrap();
     let patch = PatchFile {

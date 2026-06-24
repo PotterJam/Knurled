@@ -655,17 +655,33 @@ fn recompute_result_effects(
                 compiled.template.increments.default,
             )]
         }
-        (rule, "pass") if rule.ends_with(".t3") => load
-            .map(|load| {
-                increase_load_effect(
-                    compiled,
-                    lane,
-                    Some(load),
-                    compiled.template.increments.default,
-                )
-            })
-            .into_iter()
-            .collect(),
+        (rule, "pass") if rule.ends_with(".t3") => {
+            let basis = load.or_else(|| {
+                result
+                    .actual
+                    .iter()
+                    .rev()
+                    .find_map(|set| set.load.as_deref())
+            });
+            basis
+                .map(|load| {
+                    increase_load_effect(
+                        compiled,
+                        lane,
+                        Some(load),
+                        compiled.template.increments.default,
+                    )
+                })
+                .into_iter()
+                .collect()
+        }
+        (rule, "fail") if rule.ends_with(".t3") && load.is_none() => result
+            .actual
+            .iter()
+            .rev()
+            .find_map(|set| set.load.as_deref())
+            .map(|load| vec![set_load_effect(lane, None, load)])
+            .unwrap_or_default(),
         (rule, "fail") if rule.ends_with(".t1") => {
             let from = stage_from_prescribed_t1(prescribed_sets);
             vec![advance_stage_effect(
@@ -952,7 +968,7 @@ fn create_initial_gzclp_state(compiled: &CompiledPlan) -> StateProjection {
         lanes.insert(
             format!("{exercise}.t3"),
             LaneState {
-                load: None,
+                load: compiled.starts.get(exercise).cloned(),
                 stage: Some("3x15+".into()),
                 ..LaneState::default()
             },
@@ -1874,7 +1890,7 @@ fn reduce_item(
     } else {
         outcome_for(item, &actual, compiled)
     };
-    let effects = effects_for_outcome(item, &outcome);
+    let effects = effects_for_outcome(compiled, item, &outcome, &actual);
 
     Ok(ExerciseResult {
         slot_id: item.slot_id.clone(),
@@ -1961,7 +1977,23 @@ fn outcome_for(item: &RenderedItem, actual: &[ActualSet], compiled: &CompiledPla
     }
 }
 
-fn effects_for_outcome(item: &RenderedItem, outcome: &str) -> Vec<Effect> {
+fn effects_for_outcome(
+    compiled: &CompiledPlan,
+    item: &RenderedItem,
+    outcome: &str,
+    actual: &[ActualSet],
+) -> Vec<Effect> {
+    if item.progression_rule.ends_with(".t3")
+        && item
+            .prescription
+            .sets
+            .first()
+            .and_then(|set| set.load.as_ref())
+            .is_none()
+    {
+        return initial_t3_load_effect(compiled, item, outcome, actual);
+    }
+
     let effects = match outcome {
         "pass" => &item.effect_preview.pass,
         "fail" => &item.effect_preview.fail,
@@ -1975,10 +2007,36 @@ fn effects_for_outcome(item: &RenderedItem, outcome: &str) -> Vec<Effect> {
         .collect()
 }
 
+fn initial_t3_load_effect(
+    compiled: &CompiledPlan,
+    item: &RenderedItem,
+    outcome: &str,
+    actual: &[ActualSet],
+) -> Vec<Effect> {
+    let Some(actual_load) = actual.iter().rev().find_map(|set| set.load.as_deref()) else {
+        return Vec::new();
+    };
+    match outcome {
+        "pass" => vec![increase_load_effect(
+            compiled,
+            &item.progression_lane,
+            Some(actual_load),
+            compiled.template.increments.default,
+        )],
+        "fail" => vec![set_load_effect(&item.progression_lane, None, actual_load)],
+        _ => Vec::new(),
+    }
+}
+
 fn apply_effects(state: &mut StateProjection, effects: &[Effect]) {
     for effect in effects {
         match effect.op.as_str() {
             "increase_load" => {
+                if let Some(lane) = state.lanes.get_mut(&effect.lane) {
+                    lane.load = effect.to.clone();
+                }
+            }
+            "set_load" => {
                 if let Some(lane) = state.lanes.get_mut(&effect.lane) {
                     lane.load = effect.to.clone();
                 }
@@ -2076,6 +2134,15 @@ fn increase_load_effect(
         lane: lane.into(),
         from: from.map(str::to_owned),
         to: from.map(|from| add_load(compiled, lane_exercise(lane), from, increment)),
+    }
+}
+
+fn set_load_effect(lane: &str, from: Option<&str>, to: &str) -> Effect {
+    Effect {
+        op: "set_load".into(),
+        lane: lane.into(),
+        from: from.map(str::to_owned),
+        to: Some(to.into()),
     }
 }
 
