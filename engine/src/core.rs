@@ -57,6 +57,8 @@ pub fn compile_plan(
         accessories: plan.accessories,
         exercise_options: plan.exercise_options,
         rest: plan.rest,
+        warmup: plan.warmup,
+        equipment: plan.equipment,
         template,
         lock,
         patches,
@@ -153,6 +155,11 @@ pub fn validate_compiled(compiled: &CompiledPlan) -> ValidationReport {
         }
     }
 
+    validate_warmup(&compiled.warmup, &mut errors);
+    if let Some(equipment) = compiled.equipment.as_ref() {
+        validate_equipment(equipment, &mut errors, &mut warnings);
+    }
+
     let is_valid = errors.is_empty();
     ValidationReport {
         kind: "validation_report".into(),
@@ -174,6 +181,77 @@ pub fn validate_compiled(compiled: &CompiledPlan) -> ValidationReport {
             state_log_consistency: true,
             generated_file_freshness: false,
         },
+    }
+}
+
+fn validate_warmup(warmup: &WarmupPolicy, errors: &mut Vec<ValidationMessage>) {
+    let scoped = warmup
+        .default
+        .iter()
+        .map(|scheme| ("default".to_owned(), scheme))
+        .chain(
+            [
+                &warmup.by_tier,
+                &warmup.by_slot,
+                &warmup.by_lane,
+                &warmup.by_exercise,
+            ]
+            .into_iter()
+            .flat_map(|map| map.iter().map(|(key, scheme)| (key.clone(), scheme))),
+        );
+
+    for (scope, scheme) in scoped {
+        for step in &scheme.ramp {
+            if step.percentage == 0 || step.percentage > 100 {
+                errors.push(message(
+                    "invalid_warmup_percentage",
+                    format!(
+                        "warmup {scope} has a ramp step at {}% (must be 1–100)",
+                        step.percentage
+                    ),
+                ));
+            }
+            if step.reps == 0 {
+                errors.push(message(
+                    "invalid_warmup_reps",
+                    format!("warmup {scope} has a ramp step with zero reps"),
+                ));
+            }
+        }
+    }
+}
+
+fn validate_equipment(
+    equipment: &EquipmentProfile,
+    errors: &mut Vec<ValidationMessage>,
+    warnings: &mut Vec<ValidationMessage>,
+) {
+    for (exercise, weight) in &equipment.bars {
+        if *weight <= 0.0 {
+            errors.push(message(
+                "invalid_bar_weight",
+                format!("equipment bar `{exercise}` must be a positive weight"),
+            ));
+        }
+    }
+    if equipment.plate_pairs.iter().any(|plate| *plate <= 0.0) {
+        errors.push(message(
+            "invalid_plate",
+            "equipment plates must all be positive weights".to_owned(),
+        ));
+    }
+    if equipment.dumbbells.iter().any(|weight| *weight <= 0.0) {
+        errors.push(message(
+            "invalid_dumbbell",
+            "equipment dumbbells must all be positive weights".to_owned(),
+        ));
+    }
+    if equipment.plate_pairs.is_empty() && equipment.dumbbells.is_empty() {
+        warnings.push(message(
+            "empty_equipment",
+            "equipment has neither plates nor dumbbells; loads fall back to 2.5-unit rounding"
+                .to_owned(),
+        ));
     }
 }
 
@@ -571,6 +649,7 @@ fn recompute_result_effects(
     match (rule, result.outcome.as_str()) {
         (rule, "pass") if rule.ends_with(".t1") || rule.ends_with(".t2") => {
             vec![increase_load_effect(
+                compiled,
                 lane,
                 load,
                 compiled.template.increments.default,
@@ -578,7 +657,12 @@ fn recompute_result_effects(
         }
         (rule, "pass") if rule.ends_with(".t3") => load
             .map(|load| {
-                increase_load_effect(lane, Some(load), compiled.template.increments.default)
+                increase_load_effect(
+                    compiled,
+                    lane,
+                    Some(load),
+                    compiled.template.increments.default,
+                )
             })
             .into_iter()
             .collect(),
@@ -623,6 +707,7 @@ fn recompute_result_effects(
             if rule.starts_with("starting_strength.") && rule != "starting_strength.chins" =>
         {
             vec![increase_load_effect(
+                compiled,
                 lane,
                 load,
                 starting_strength_increment(compiled, lane),
@@ -856,7 +941,7 @@ fn create_initial_gzclp_state(compiled: &CompiledPlan) -> StateProjection {
         lanes.insert(
             format!("{lift}.t2"),
             LaneState {
-                load: Some(scale_load(start, 0.8)),
+                load: Some(scale_load(compiled, lift, start, 0.8)),
                 stage: Some("3x10".into()),
                 ..LaneState::default()
             },
@@ -973,6 +1058,207 @@ fn starting_strength_increment(compiled: &CompiledPlan, lane: &str) -> f64 {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Warmup sets
+// ---------------------------------------------------------------------------
+
+/// Build the warmup (ramp-up) sets for an item. Returns empty when no scheme
+/// resolves or the lift has no load to ramp from (e.g. bodyweight work), so
+/// plans and lifts without warmups serialise exactly as before.
+fn compute_warmups(
+    compiled: &CompiledPlan,
+    slot: &TemplateSlot,
+    spec: &RenderedItemSpec<'_>,
+) -> Vec<PrescribedSet> {
+    let Some(scheme) = resolve_warmup(compiled, slot, &spec.lane, &spec.exercise) else {
+        return Vec::new();
+    };
+
+    let basis = match scheme.basis {
+        WarmupBasis::TrainingMax => spec.training_max.clone(),
+        WarmupBasis::WorkingWeight | WarmupBasis::TopSet => top_working_load(&spec.sets),
+    };
+    let Some(basis) = basis else {
+        return Vec::new();
+    };
+    let parsed = parse_load(&basis);
+    if parsed.value <= 0.0 {
+        return Vec::new();
+    }
+
+    let mut sets = Vec::new();
+    let mut index = 1;
+
+    if scheme.empty_bar_sets > 0
+        && scheme.empty_bar_reps > 0
+        && let Some(bar) = warmup_bar_weight(compiled, &spec.exercise)
+    {
+        let load = Some(format_load(bar, parsed.unit));
+        for _ in 0..scheme.empty_bar_sets {
+            sets.push(PrescribedSet {
+                set: index,
+                load: load.clone(),
+                target_reps: scheme.empty_bar_reps,
+                amrap: false,
+                percentage: None,
+            });
+            index += 1;
+        }
+    }
+
+    for step in &scheme.ramp {
+        let value = snap_load(
+            compiled,
+            &spec.exercise,
+            parsed.value * (step.percentage as f64) / 100.0,
+        );
+        sets.push(PrescribedSet {
+            set: index,
+            load: Some(format_load(value, parsed.unit)),
+            target_reps: step.reps,
+            amrap: false,
+            percentage: Some(step.percentage),
+        });
+        index += 1;
+    }
+
+    sets
+}
+
+/// Heaviest working load of an item — the load a Bay-Strength-style ramp warms
+/// up to. All-equal working sets (GZCLP, Starting Strength) collapse to that
+/// load; ascending sets (5/3/1) pick the top set.
+fn top_working_load(sets: &[PrescribedSet]) -> Option<String> {
+    sets.iter()
+        .filter_map(|set| set.load.as_deref())
+        .max_by(|left, right| {
+            parse_load(left)
+                .value
+                .partial_cmp(&parse_load(right).value)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(str::to_owned)
+}
+
+/// Bar weight to prescribe for empty-bar warmups, or `None` when the lift is
+/// not barbell work (dumbbell lifts have no empty bar).
+fn warmup_bar_weight(compiled: &CompiledPlan, exercise: &str) -> Option<f64> {
+    match compiled.equipment.as_ref() {
+        Some(equipment) => match implement_for(equipment, exercise) {
+            Implement::Barbell => Some(bar_weight(equipment, &compiled.plan.units, exercise)),
+            Implement::Dumbbell => None,
+        },
+        None => Some(match compiled.plan.units {
+            Units::Kg => 20.0,
+            Units::Lb => 45.0,
+        }),
+    }
+}
+
+/// Resolve the warmup scheme for an item: the plan's policy first (most
+/// specific scope wins), then the template's built-in defaults.
+fn resolve_warmup(
+    compiled: &CompiledPlan,
+    slot: &TemplateSlot,
+    lane: &str,
+    exercise: &str,
+) -> Option<WarmupScheme> {
+    let slot_key = slot.slot_id.to_ascii_lowercase();
+    let lane_key = lane.to_ascii_lowercase();
+    let exercise_key = normalize_exercise(exercise);
+    let tier_key = slot.tier.to_ascii_lowercase();
+
+    pick_warmup(
+        &compiled.warmup,
+        &slot_key,
+        &lane_key,
+        &exercise_key,
+        &tier_key,
+    )
+    .or_else(|| {
+        pick_warmup(
+            &template_warmup_defaults(&compiled.template.kind),
+            &slot_key,
+            &lane_key,
+            &exercise_key,
+            &tier_key,
+        )
+    })
+}
+
+fn pick_warmup(
+    policy: &WarmupPolicy,
+    slot: &str,
+    lane: &str,
+    exercise: &str,
+    tier: &str,
+) -> Option<WarmupScheme> {
+    policy
+        .by_slot
+        .get(slot)
+        .or_else(|| policy.by_lane.get(lane))
+        .or_else(|| policy.by_exercise.get(exercise))
+        .or_else(|| policy.by_tier.get(tier))
+        .or(policy.default.as_ref())
+        .cloned()
+}
+
+/// Sensible per-program warmup defaults. These are engine behaviour (pinned by
+/// `ENGINE_VERSION`, like every other rendering rule) rather than part of the
+/// hashed template, so adding them does not perturb existing template hashes or
+/// lockfiles. A plan's own `warmup { … }` block overrides them.
+fn template_warmup_defaults(kind: &TemplateKind) -> WarmupPolicy {
+    match kind {
+        // GZCLP / Starting Strength: Bay-Strength novice ramp — two empty-bar
+        // sets, then 45/65/85% of the work weight for 5/3/2.
+        TemplateKind::Gzclp | TemplateKind::StartingStrength => WarmupPolicy {
+            default: Some(WarmupScheme {
+                empty_bar_sets: 2,
+                empty_bar_reps: 5,
+                ramp: vec![
+                    WarmupStep {
+                        percentage: 45,
+                        reps: 5,
+                    },
+                    WarmupStep {
+                        percentage: 65,
+                        reps: 3,
+                    },
+                    WarmupStep {
+                        percentage: 85,
+                        reps: 2,
+                    },
+                ],
+                basis: WarmupBasis::TopSet,
+            }),
+            ..WarmupPolicy::default()
+        },
+        // 5/3/1: canonical warmup is 40/50/60% of the training max.
+        TemplateKind::FiveThreeOne => WarmupPolicy {
+            default: Some(WarmupScheme {
+                empty_bar_sets: 0,
+                empty_bar_reps: 0,
+                ramp: vec![
+                    WarmupStep {
+                        percentage: 40,
+                        reps: 5,
+                    },
+                    WarmupStep {
+                        percentage: 50,
+                        reps: 5,
+                    },
+                    WarmupStep {
+                        percentage: 60,
+                        reps: 3,
+                    },
+                ],
+                basis: WarmupBasis::TrainingMax,
+            }),
+            ..WarmupPolicy::default()
+        },
+    }
+}
+
 fn starting_strength_display_name(compiled: &CompiledPlan, session_id: &str) -> String {
     let phase = compiled
         .plan
@@ -1074,12 +1360,14 @@ fn render_gzclp_item(
                 slot,
                 RenderedItemSpec {
                     exercise,
+                    training_max: None,
                     lane: lane.clone(),
                     stage: Some(stage.clone()),
                     sets,
                     recommended_input: "amrap_final_set",
                     effect_preview: EffectPreview {
                         pass: vec![increase_load_effect(
+                            compiled,
                             &lane,
                             load.as_deref(),
                             compiled.template.increments.default,
@@ -1103,12 +1391,14 @@ fn render_gzclp_item(
                 slot,
                 RenderedItemSpec {
                     exercise,
+                    training_max: None,
                     lane: lane.clone(),
                     stage: Some(stage.clone()),
                     sets,
                     recommended_input: "per_set_reps",
                     effect_preview: EffectPreview {
                         pass: vec![increase_load_effect(
+                            compiled,
                             &lane,
                             load.as_deref(),
                             compiled.template.increments.default,
@@ -1140,6 +1430,7 @@ fn render_gzclp_item(
                 slot,
                 RenderedItemSpec {
                     exercise,
+                    training_max: None,
                     lane: lane.clone(),
                     stage: Some("3x15+".into()),
                     sets,
@@ -1149,6 +1440,7 @@ fn render_gzclp_item(
                             .as_deref()
                             .map(|load| {
                                 increase_load_effect(
+                                    compiled,
                                     &lane,
                                     Some(load),
                                     compiled.template.increments.default,
@@ -1200,7 +1492,11 @@ fn render_531_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
         .map(|(index, (percentage, reps))| PrescribedSet {
             set: index as u32 + 1,
             load: Some(format_load(
-                round_to_increment(parsed.value * (*percentage as f64) / 100.0, 2.5),
+                snap_load(
+                    compiled,
+                    &exercise,
+                    parsed.value * (*percentage as f64) / 100.0,
+                ),
                 parsed.unit,
             )),
             target_reps: reps.trim_end_matches('+').parse().unwrap_or(1),
@@ -1216,6 +1512,7 @@ fn render_531_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
             lane: lane.clone(),
             stage: None,
             sets,
+            training_max: lane_state.training_max.clone(),
             recommended_input: "amrap_final_set",
             effect_preview: EffectPreview {
                 pass: vec![Effect {
@@ -1323,6 +1620,7 @@ fn render_starting_strength_item(
             Some(slot.tier.clone()),
             EffectPreview {
                 pass: vec![increase_load_effect(
+                    compiled,
                     &lane,
                     load.as_deref(),
                     starting_strength_increment(compiled, &lane),
@@ -1343,6 +1641,7 @@ fn render_starting_strength_item(
             sets,
             recommended_input: "per_set_reps",
             effect_preview,
+            training_max: None,
         },
     )
 }
@@ -1354,6 +1653,9 @@ struct RenderedItemSpec<'a> {
     sets: Vec<PrescribedSet>,
     recommended_input: &'a str,
     effect_preview: EffectPreview,
+    /// Training max for this lane, when the program tracks one (5/3/1). Lets a
+    /// warmup scheme ramp off the training max rather than the working set.
+    training_max: Option<String>,
 }
 
 fn rendered_item(
@@ -1393,6 +1695,7 @@ fn rendered_item(
             subtitle: subtitle_for(&spec.sets, spec.stage.as_deref()),
         },
         prescription: Prescription {
+            warmups: compute_warmups(compiled, slot, &spec),
             sets: spec.sets.clone(),
         },
         execution_contract: execution_contract(spec.recommended_input, &spec.sets),
@@ -1762,12 +2065,17 @@ fn sets_for_straight_stage(load: Option<String>, stage: &str) -> Vec<PrescribedS
         .collect()
 }
 
-fn increase_load_effect(lane: &str, from: Option<&str>, increment: f64) -> Effect {
+fn increase_load_effect(
+    compiled: &CompiledPlan,
+    lane: &str,
+    from: Option<&str>,
+    increment: f64,
+) -> Effect {
     Effect {
         op: "increase_load".into(),
         lane: lane.into(),
         from: from.map(str::to_owned),
-        to: from.map(|from| add_load(from, increment)),
+        to: from.map(|from| add_load(compiled, lane_exercise(lane), from, increment)),
     }
 }
 
@@ -1824,17 +2132,176 @@ fn parse_load(load: &str) -> ParsedLoad<'_> {
     ParsedLoad { value, unit }
 }
 
-fn scale_load(load: &str, multiplier: f64) -> String {
+fn scale_load(compiled: &CompiledPlan, exercise: &str, load: &str, multiplier: f64) -> String {
     let parsed = parse_load(load);
     format_load(
-        round_to_increment(parsed.value * multiplier, 2.5),
+        snap_load(compiled, exercise, parsed.value * multiplier),
         parsed.unit,
     )
 }
 
-fn add_load(load: &str, increment: f64) -> String {
+fn add_load(compiled: &CompiledPlan, exercise: &str, load: &str, increment: f64) -> String {
     let parsed = parse_load(load);
-    format_load(parsed.value + increment, parsed.unit)
+    let value = parsed.value + increment;
+    // With no equipment configured, progression increments are applied as-is —
+    // historical behaviour, and what keeps existing plans byte-identical. Only
+    // an explicit equipment profile snaps the result onto the lifter's grid.
+    let value = match compiled.equipment.as_ref() {
+        Some(equipment) => snap_with_equipment(equipment, &compiled.plan.units, exercise, value),
+        None => value,
+    };
+    format_load(value, parsed.unit)
+}
+
+/// Exercise name embedded in a lane id (`squat.t1` -> `squat`).
+fn lane_exercise(lane: &str) -> &str {
+    lane.split('.').next().unwrap_or(lane)
+}
+
+const SNAP_EPSILON: f64 = 1e-6;
+
+/// Round a raw numeric load to the nearest weight the lifter can actually
+/// load. With no equipment configured this is the historical fixed 2.5-unit
+/// rounding, so existing plans are unaffected.
+fn snap_load(compiled: &CompiledPlan, exercise: &str, value: f64) -> f64 {
+    match compiled.equipment.as_ref() {
+        Some(equipment) => snap_with_equipment(equipment, &compiled.plan.units, exercise, value),
+        None => round_to_increment(value, 2.5),
+    }
+}
+
+fn snap_with_equipment(
+    equipment: &EquipmentProfile,
+    units: &Units,
+    exercise: &str,
+    value: f64,
+) -> f64 {
+    match implement_for(equipment, exercise) {
+        Implement::Dumbbell => snap_to_list(&equipment.dumbbells, equipment.rounding, value)
+            .unwrap_or_else(|| round_to_increment(value, 2.5)),
+        Implement::Barbell => {
+            let bar = bar_weight(equipment, units, exercise);
+            snap_barbell(bar, &equipment.plate_pairs, equipment.rounding, value)
+                .unwrap_or_else(|| round_to_increment(value, 2.5))
+        }
+    }
+}
+
+fn implement_for(equipment: &EquipmentProfile, exercise: &str) -> Implement {
+    if let Some(implement) = equipment.implements.get(exercise) {
+        return *implement;
+    }
+    if exercise.contains("dumbbell") || exercise.contains("_db") || exercise.starts_with("db_") {
+        Implement::Dumbbell
+    } else {
+        Implement::Barbell
+    }
+}
+
+fn bar_weight(equipment: &EquipmentProfile, units: &Units, exercise: &str) -> f64 {
+    equipment
+        .bars
+        .get(exercise)
+        .or_else(|| equipment.bars.get("default"))
+        .copied()
+        .unwrap_or(match units {
+            Units::Kg => 20.0,
+            Units::Lb => 45.0,
+        })
+}
+
+/// Nearest value in a discrete list (dumbbell sizes). Ties resolve downward;
+/// `Down` never exceeds the target.
+fn snap_to_list(values: &[f64], rounding: RoundingMode, target: f64) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    match rounding {
+        RoundingMode::Down => values
+            .iter()
+            .copied()
+            .filter(|value| *value <= target + SNAP_EPSILON)
+            .fold(None, |best: Option<f64>, value| {
+                Some(best.map_or(value, |best| best.max(value)))
+            })
+            .or_else(|| {
+                values
+                    .iter()
+                    .copied()
+                    .reduce(|min, value| if value < min { value } else { min })
+            }),
+        RoundingMode::Nearest => nearest(values.iter().copied(), target),
+    }
+}
+
+/// Nearest achievable barbell total: `bar + 2 × (multiset of plate pairs)`.
+/// Plates are treated as unlimited in quantity (we do not model plate counts).
+fn snap_barbell(bar: f64, plate_pairs: &[f64], rounding: RoundingMode, target: f64) -> Option<f64> {
+    if plate_pairs.is_empty() {
+        return None;
+    }
+    if target <= bar + SNAP_EPSILON {
+        return Some(bar);
+    }
+    let per_side_target = (target - bar) / 2.0;
+    let reachable = reachable_per_side_sums(plate_pairs, per_side_target);
+    let chosen = match rounding {
+        RoundingMode::Down => reachable
+            .iter()
+            .copied()
+            .filter(|sum| *sum <= per_side_target + SNAP_EPSILON)
+            .fold(0.0, f64::max),
+        RoundingMode::Nearest => nearest(reachable.iter().copied(), per_side_target)?,
+    };
+    Some(bar + 2.0 * chosen)
+}
+
+/// Per-side sums reachable from unlimited copies of `plate_pairs`, from 0 up to
+/// just past `target`. Computed on a centi-unit integer grid so float error
+/// never makes an achievable load look unreachable.
+fn reachable_per_side_sums(plate_pairs: &[f64], target: f64) -> Vec<f64> {
+    const SCALE: f64 = 100.0;
+    // Cap the search a little past the target (plus the largest plate) so the
+    // nearest sum above the target is still considered, with a hard ceiling to
+    // bound the allocation for pathological inputs.
+    let largest = plate_pairs.iter().copied().fold(0.0, f64::max);
+    let cap_units = (((target + largest) * SCALE).ceil() as usize + 1).min(200_000);
+    let denoms: Vec<usize> = plate_pairs
+        .iter()
+        .map(|plate| (plate * SCALE).round() as usize)
+        .filter(|units| *units > 0)
+        .collect();
+    let mut reachable = vec![false; cap_units + 1];
+    reachable[0] = true;
+    for index in 1..=cap_units {
+        if denoms
+            .iter()
+            .any(|denom| *denom <= index && reachable[index - denom])
+        {
+            reachable[index] = true;
+        }
+    }
+    reachable
+        .iter()
+        .enumerate()
+        .filter(|(_, ok)| **ok)
+        .map(|(index, _)| index as f64 / SCALE)
+        .collect()
+}
+
+/// Value nearest to `target`; equidistant candidates resolve to the lower one.
+fn nearest(values: impl Iterator<Item = f64>, target: f64) -> Option<f64> {
+    values.reduce(|best, value| {
+        let best_gap = (best - target).abs();
+        let gap = (value - target).abs();
+        if gap < best_gap - SNAP_EPSILON {
+            value
+        } else if (gap - best_gap).abs() <= SNAP_EPSILON {
+            best.min(value)
+        } else {
+            best
+        }
+    })
 }
 
 fn format_load(value: f64, unit: &str) -> String {

@@ -37,6 +37,10 @@ pub struct Plan {
     pub accessories: Map<String>,
     pub exercise_options: Map<ExerciseOptions>,
     pub rest: RestPolicy,
+    #[serde(default, skip_serializing_if = "WarmupPolicy::is_empty")]
+    pub warmup: WarmupPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equipment: Option<EquipmentProfile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -190,6 +194,10 @@ pub struct CompiledPlan {
     pub accessories: Map<String>,
     pub exercise_options: Map<ExerciseOptions>,
     pub rest: RestPolicy,
+    #[serde(default, skip_serializing_if = "WarmupPolicy::is_empty")]
+    pub warmup: WarmupPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equipment: Option<EquipmentProfile>,
     pub template: BuiltinTemplate,
     pub lock: Lockfile,
     pub patches: Vec<Patch>,
@@ -207,6 +215,115 @@ pub struct RestPolicy {
     pub by_lane: Map<u32>,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub by_exercise: Map<u32>,
+}
+
+/// Configurable warmup (ramp-up) sets, scoped exactly like [`RestPolicy`]:
+/// the engine resolves a single [`WarmupScheme`] for an item by precedence
+/// `exercise` > `lane` > `slot` > `tier` > `default`, with the plan's policy
+/// taking precedence over the template's built-in defaults.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct WarmupPolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<WarmupScheme>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_tier: Map<WarmupScheme>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_slot: Map<WarmupScheme>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_lane: Map<WarmupScheme>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub by_exercise: Map<WarmupScheme>,
+}
+
+impl WarmupPolicy {
+    pub fn is_empty(&self) -> bool {
+        self.default.is_none()
+            && self.by_tier.is_empty()
+            && self.by_slot.is_empty()
+            && self.by_lane.is_empty()
+            && self.by_exercise.is_empty()
+    }
+}
+
+/// One warmup prescription: some empty-bar sets followed by a percentage ramp
+/// of the resolved [`WarmupBasis`]. The number of sets (empty bar + ramp
+/// steps) and their reps are fully configurable, which is what lets different
+/// lifts, tiers, and program phases carry different warmup volumes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct WarmupScheme {
+    #[serde(default)]
+    pub empty_bar_sets: u32,
+    #[serde(default)]
+    pub empty_bar_reps: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ramp: Vec<WarmupStep>,
+    #[serde(default)]
+    pub basis: WarmupBasis,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WarmupStep {
+    /// Percentage (1–100) of the resolved basis load.
+    pub percentage: u32,
+    pub reps: u32,
+}
+
+/// What a warmup ramp is computed from.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WarmupBasis {
+    /// Heaviest working set of the item (default; matches Bay Strength style).
+    #[default]
+    TopSet,
+    /// The lane's current working weight.
+    WorkingWeight,
+    /// The lane's training max (e.g. canonical 5/3/1 warmups).
+    TrainingMax,
+}
+
+/// Optional, user-owned description of the equipment available in a gym, used
+/// to snap computed loads to the nearest weight the lifter can actually load.
+/// Purely plan-level: it is never part of a template (a template describes the
+/// program, not the user's plates).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct EquipmentProfile {
+    /// Bar weight by exercise, plus an optional `default`. Bare numbers are in
+    /// the plan's units.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub bars: Map<f64>,
+    /// Available plate denominations (per side). Barbell loads are bar plus
+    /// twice a multiset of these.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plate_pairs: Vec<f64>,
+    /// Discrete dumbbell sizes available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dumbbells: Vec<f64>,
+    #[serde(default)]
+    pub rounding: RoundingMode,
+    /// Per-exercise implement override; absent exercises are inferred by name.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub implements: Map<Implement>,
+}
+
+// `f64` fields keep `EquipmentProfile` out of `Eq`'s derive; the values are
+// authored, finite numbers, so structural equality is well-defined here.
+impl Eq for EquipmentProfile {}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RoundingMode {
+    /// Snap to the nearest achievable load (ties resolve downward).
+    #[default]
+    Nearest,
+    /// Snap down to the nearest achievable load (never prescribe more than asked).
+    Down,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Implement {
+    Barbell,
+    Dumbbell,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -348,6 +465,13 @@ pub struct DisplayFields {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Prescription {
+    /// Warmup (ramp-up) sets. Prescription-only guidance: they are never
+    /// required for completion and never feed progression outcomes, so they
+    /// live in a separate field from the working `sets`. Omitted from JSON
+    /// when empty so plans without a configured warmup hash identically to
+    /// before this field existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warmups: Vec<PrescribedSet>,
     pub sets: Vec<PrescribedSet>,
 }
 

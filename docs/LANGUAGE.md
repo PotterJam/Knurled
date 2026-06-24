@@ -65,6 +65,8 @@ A plan is a single `plan "name" { … }` node. Inside it:
 | `training_maxes` | | `training_maxes { squat "140kg" … }` | Per-lift training maxes (for %-based templates). |
 | `accessories` | | `accessories { A1.T3 lat_pulldown … }` | Maps a `slot.tier` to an accessory exercise. |
 | `rest` | | `rest { … }` | Rest prescription, see below. |
+| `warmup` | | `warmup { … }` | Warmup (ramp-up) sets, see below. |
+| `equipment` | | `equipment { … }` | Available plates/dumbbells/bars for load rounding, see below. |
 | `exercise_options` | | `exercise_options { slot "…" { … } }` | Runtime swap options, see below. |
 | `assistance` | | `assistance …` | **Accepted but ignored** — reserved placeholder (mvp-spec §11). |
 
@@ -86,6 +88,67 @@ rest {
 
 Scopes: `default`, `tier`, `slot`, `lane`, `exercise`. Durations accept bare seconds (`180`),
 a value + unit (`3 m`, `90 s`), or `mm:ss` (`2:30`).
+
+### `warmup`
+
+Warmup (ramp-up) sets, computed by the engine and attached to each rendered item as a separate
+`prescription.warmups` list. They are **guidance only**: never required for completion and never
+fed into progression — a missed or modified warmup can't pass or fail a lift.
+
+```kdl
+warmup {
+  default {
+    empty_bar 2 5            // 2 sets of 5 with just the bar
+    ramp {
+      step 45 5              // 45% of the basis load x5
+      step 65 3
+      step 85 2
+    }
+    basis top_set           // top_set (default) | working_weight | training_max
+  }
+  tier T1   { empty_bar 1 5; ramp { step 40 5; step 60 3; step 80 2; step 90 1 } }
+  lane "press.t1" { ramp { step 50 5; step 70 3; step 85 2 } }   // upper body, fewer
+  exercise deadlift { ramp { step 45 5; step 65 3; step 85 3; step 95 1 } }
+}
+```
+
+Scopes resolve by precedence `slot` > `lane` > `exercise` > `tier` > `default`, mirroring `rest`,
+and a plan's `warmup` overrides the template's built-in default. Each scheme is:
+
+| Key | Form | Notes |
+|---|---|---|
+| `empty_bar` | `empty_bar <sets> <reps>` | Empty-bar sets at the bar weight. Skipped for dumbbell lifts. |
+| `ramp` | `ramp { step <pct> <reps> … }` | A step is `step 65 3` (65% × 3). `pct=`/`reps=` properties also accepted. |
+| `basis` | `basis top_set` | What the percentages are taken from. |
+
+The number of warmup sets (empty-bar sets plus ramp steps) and their reps are fully configurable,
+so different lifts, tiers, and program phases carry different warmup volume. Built-in defaults:
+GZCLP and Starting Strength ship the Bay-Strength novice ramp (2×5 empty bar, then 45/65/85% of
+the work weight); 5/3/1 ships the canonical 40/50/60% of the training max. Warmup loads are
+rounded by the same equipment-aware logic as working loads.
+
+### `equipment`
+
+Optional, user-owned description of the gym's equipment. When present, the engine snaps every
+**computed** load (working sets, 5/3/1 percentages, progression increments, and warmups) to the
+nearest weight the lifter can actually load. With no `equipment` block, loads use the historical
+fixed 2.5-unit rounding, so existing plans are unaffected. Starting loads you type in `starts`
+are taken as-entered.
+
+```kdl
+equipment {
+  bar default 20            // bar weight (plan units); per-exercise: `bar press 20`
+  plates 25 20 15 10 5 2.5 1.25   // available plate denominations (per side, unlimited count)
+  dumbbells 5 7.5 10 12.5 15 17.5 20 22.5 25 30
+  rounding nearest          // nearest (default, ties resolve down) | down
+  implement dumbbell_bench_press dumbbell   // override; otherwise inferred from the name
+}
+```
+
+A barbell total is `bar + 2 × (multiset of plate pairs)`; a dumbbell lift snaps to the nearest
+listed size. Lifts are treated as barbell unless their name contains `dumbbell`/`db` or an
+`implement` override says otherwise. If the relevant inventory is empty, that lift falls back to
+2.5-unit rounding.
 
 ### `exercise_options`
 
@@ -151,8 +214,10 @@ not hand-authored.
 Specced in mvp-spec §11 but **not** currently accepted by the parser:
 
 - **Plan-level:** `substitutions`, `overrides`, plan-level `active patches`.
-- **Patch ops:** `add warmup`, `add cooldown`, a distinct `cap rpe`, `change suggested days`,
-  `temporary load adjustment`, `enable` / `disable`.
+- **Patch ops:** `add cooldown`, a distinct `cap rpe`, `change suggested days`,
+  `temporary load adjustment`, `enable` / `disable`. (Plan-level `warmup` and `equipment` are now
+  implemented — see above; a patch-level `add-warmup` op that layers a warmup change for a
+  date-bounded period is still future work.)
 - **Template authoring:** the `fitspec template vendor` escape hatch and
   `template "./templates/x.fitspec"` file references (mvp-spec §9) are specced but unimplemented.
 
@@ -170,3 +235,5 @@ expressed through templates, not scripts.
   `plan_changed` events.
 - [ADR 0003](adr/0003-template-authoring-model.md) — proposed declarative template-authoring DSL
   (the progression primitives that would make this an authoring language).
+- [ADR 0006](adr/0006-warmup-sets-and-equipment-rounding.md) — warmup sets as scoped, template-
+  defaulted configuration, and equipment-aware load rounding as a cross-cutting deterministic layer.

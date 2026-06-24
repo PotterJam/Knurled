@@ -418,7 +418,10 @@ fn initial_531_files(reference: &TemplateRef) -> Result<BTreeMap<String, String>
 "#
             ),
         ),
-        ("fitspec.lock".into(), render_lockfile(&reference.normalized)?),
+        (
+            "fitspec.lock".into(),
+            render_lockfile(&reference.normalized)?,
+        ),
         ("README.md".into(), "# Knurled 5/3/1 Training Repo\n".into()),
     ]))
 }

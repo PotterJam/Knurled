@@ -57,7 +57,7 @@
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "squat.t1",
         "progression_rule": "gzcl.t1",
-        "rendered_session_hash": "sha256:40ebc5b32eaed5302afdcc02c254f62b8c37f74b6b96b74149a2b5a2392ef101",
+        "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
         "slot_id": "a1.t1"
       },
       "item_id": "a1.t1",
@@ -80,6 +80,41 @@
             "load": "80kg",
             "set": 3,
             "target_reps": 5
+          }
+        ],
+        "warmups": [
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "35kg",
+            "percentage": 45,
+            "set": 3,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "52.5kg",
+            "percentage": 65,
+            "set": 4,
+            "target_reps": 3
+          },
+          {
+            "amrap": false,
+            "load": "67.5kg",
+            "percentage": 85,
+            "set": 5,
+            "target_reps": 2
           }
         ]
       },
@@ -146,7 +181,7 @@
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "bench.t2",
         "progression_rule": "gzcl.t2",
-        "rendered_session_hash": "sha256:40ebc5b32eaed5302afdcc02c254f62b8c37f74b6b96b74149a2b5a2392ef101",
+        "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
         "slot_id": "a1.t2"
       },
       "item_id": "a1.t2",
@@ -169,6 +204,41 @@
             "load": "45kg",
             "set": 3,
             "target_reps": 10
+          }
+        ],
+        "warmups": [
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 1,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "20kg",
+            "set": 2,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "20kg",
+            "percentage": 45,
+            "set": 3,
+            "target_reps": 5
+          },
+          {
+            "amrap": false,
+            "load": "30kg",
+            "percentage": 65,
+            "set": 4,
+            "target_reps": 3
+          },
+          {
+            "amrap": false,
+            "load": "37.5kg",
+            "percentage": 85,
+            "set": 5,
+            "target_reps": 2
           }
         ]
       },
@@ -222,7 +292,7 @@
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "lat_pulldown.t3",
         "progression_rule": "gzcl.t3",
-        "rendered_session_hash": "sha256:40ebc5b32eaed5302afdcc02c254f62b8c37f74b6b96b74149a2b5a2392ef101",
+        "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
         "slot_id": "a1.t3"
       },
       "item_id": "a1.t3",
@@ -259,7 +329,7 @@
     }
   ],
   "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
-  "rendered_session_hash": "sha256:40ebc5b32eaed5302afdcc02c254f62b8c37f74b6b96b74149a2b5a2392ef101",
+  "rendered_session_hash": "sha256:b10ec997056cf57d86dff47cccd13e152705a70fa7603a52986a5b604eeedbc4",
   "schema_version": "0.1",
   "session_id": "a1",
   "suggested_date": null,
