@@ -37,4 +37,7 @@ pub enum KnurledError {
 
     #[error("invalid execution input: {0}")]
     InvalidExecutionInput(String),
+
+    #[error("invalid history import: {0}")]
+    InvalidHistoryImport(String),
 }

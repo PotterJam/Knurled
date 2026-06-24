@@ -1,7 +1,11 @@
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use knurled_core::{
-    CorrectionChange, Effect, PatchFile, RestSource, StateChange, TrainingEvent, compile_plan,
-    create_initial_state, reduce_input, render_lockfile, render_next, replay_events, simulate,
-    synthetic_execution_input,
+    CorrectionChange, Effect, HistoryImportOptions, PatchFile, PlanChangeRef, RestSource,
+    StateChange, TrainingEvent, compile_plan, create_initial_state, history_import_events_from_str,
+    import_history_repo, init_training_repo, reduce_input, render_lockfile, render_next,
+    replay_events, simulate, synthetic_execution_input,
 };
 use serde_json::json;
 
@@ -414,10 +418,164 @@ fn state_adjustment_events_are_replayed_explicitly() {
             }),
             cursor: None,
             changes: Vec::new(),
+            change_kind: None,
+            from_plan: None,
+            to_plan: None,
         }],
     );
 
     assert_eq!(state.lanes["squat.t1"].load.as_deref(), Some("77.5kg"));
+}
+
+#[test]
+fn flat_history_import_groups_hevy_like_rows_into_imported_sessions() {
+    let csv = "\
+title,start_time,exercise_title,set_index,weight_kg,reps,rpe,set_type
+Push Day,2024-01-02 18:30:00,Bench Press,1,80,5,8,normal
+Push Day,2024-01-02 18:30:00,Bench Press,2,80,5,8.5,normal
+Push Day,2024-01-02 18:30:00,Barbell Row,1,70,8,,warmup
+";
+
+    let draft = history_import_events_from_str(
+        csv,
+        &HistoryImportOptions {
+            source: "hevy".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(draft.input_rows, 3);
+    assert_eq!(draft.imported_sets, 3);
+    assert_eq!(draft.events.len(), 1);
+
+    let event = &draft.events[0];
+    assert_eq!(event.kind, "session_imported");
+    assert_eq!(event.program.as_deref(), Some("history_import:hevy"));
+    assert_eq!(event.reason.as_deref(), Some("Push Day"));
+    assert_eq!(event.completed_at.as_deref(), Some("2024-01-02T18:30:00Z"));
+    assert!(event.effects.is_empty());
+
+    let bench = event
+        .results
+        .iter()
+        .find(|result| result.performed_exercise.as_deref() == Some("bench_press"))
+        .unwrap();
+    assert_eq!(bench.actual.len(), 2);
+    assert_eq!(bench.actual[0].load.as_deref(), Some("80kg"));
+    assert_eq!(bench.actual[0].metrics["rpe"], "8");
+    assert_eq!(bench.actual[1].metrics["rpe"], "8.5");
+
+    let row = event
+        .results
+        .iter()
+        .find(|result| result.performed_exercise.as_deref() == Some("barbell_row"))
+        .unwrap();
+    assert_eq!(row.actual[0].metrics["set_type"], "warmup");
+}
+
+#[test]
+fn flat_history_import_expands_aggregate_set_rows() {
+    let csv = "\
+date,session,exercise,set,sets,load,unit,reps,metric_source
+2024-02-03,Strength Levels,Squat,1,3,100,kg,5,strengthlevels
+";
+
+    let draft = history_import_events_from_str(csv, &HistoryImportOptions::default()).unwrap();
+    let squat = &draft.events[0].results[0];
+
+    assert_eq!(draft.imported_sets, 3);
+    assert_eq!(
+        squat.actual.iter().map(|set| set.set).collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
+    assert_eq!(
+        squat
+            .actual
+            .iter()
+            .map(|set| (
+                set.load.as_deref(),
+                set.reps,
+                set.metrics["source"].as_str()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (Some("100kg"), 5, "strengthlevels"),
+            (Some("100kg"), 5, "strengthlevels"),
+            (Some("100kg"), 5, "strengthlevels")
+        ]
+    );
+}
+
+#[test]
+fn imported_sessions_do_not_advance_program_replay_but_plan_markers_are_visible() {
+    let compiled = compiled_gzclp();
+    let draft = history_import_events_from_str(
+        "date,session,exercise,set,load,unit,reps\n2024-02-03,Old Program,Squat,1,100,kg,5\n",
+        &HistoryImportOptions::default(),
+    )
+    .unwrap();
+    let marker = TrainingEvent {
+        id: "evt_plan_changed".into(),
+        kind: "plan_changed".into(),
+        change_kind: Some("program_switch".into()),
+        from_plan: Some(PlanChangeRef {
+            plan_hash: None,
+            template: Some("hevy-history".into()),
+        }),
+        to_plan: Some(PlanChangeRef {
+            plan_hash: Some(compiled.plan_hash.clone()),
+            template: Some(compiled.plan.template.clone()),
+        }),
+        reason: Some("imported prior Hevy history and started Knurled plan".into()),
+        ..empty_event()
+    };
+
+    let state = replay_events(&compiled, &[draft.events[0].clone(), marker]);
+
+    assert_eq!(state.cursor.next_session, "a1");
+    assert_eq!(state.lanes["squat.t1"].load.as_deref(), Some("80kg"));
+    assert_eq!(state.last_event_id.as_deref(), Some("evt_plan_changed"));
+}
+
+#[test]
+fn history_import_repo_writes_import_file_idempotently() {
+    let repo = temp_repo("history-import");
+    init_training_repo(&repo, "gzcl.gzclp@1.0.0").unwrap();
+    let input = repo.join("history.csv");
+    fs::write(
+        &input,
+        "date,session,exercise,set,load,unit,reps\n2024-02-03,Old Program,Squat,1,100,kg,5\n",
+    )
+    .unwrap();
+
+    let first = import_history_repo(
+        &repo,
+        &input,
+        HistoryImportOptions {
+            source: "hevy".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let second = import_history_repo(
+        &repo,
+        &input,
+        HistoryImportOptions {
+            source: "hevy".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(first.events_written, 1);
+    assert_eq!(first.output_files, vec!["logs/imports/hevy.jsonl"]);
+    assert_eq!(second.events_written, 0);
+    assert_eq!(second.duplicates_skipped, 1);
+    let log = fs::read_to_string(repo.join("logs/imports/hevy.jsonl")).unwrap();
+    assert_eq!(log.lines().count(), 1);
+
+    let _ = fs::remove_dir_all(repo);
 }
 
 #[test]
@@ -528,6 +686,14 @@ fn exercise_summary(rendered: &knurled_core::RenderedSession) -> Vec<(&str, usiz
         .collect()
 }
 
+fn temp_repo(name: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!("knurled-{name}-{nanos}"))
+}
+
 fn empty_event() -> TrainingEvent {
     TrainingEvent {
         id: String::new(),
@@ -554,5 +720,8 @@ fn empty_event() -> TrainingEvent {
         change: None,
         cursor: None,
         changes: Vec::new(),
+        change_kind: None,
+        from_plan: None,
+        to_plan: None,
     }
 }

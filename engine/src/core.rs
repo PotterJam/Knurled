@@ -324,6 +324,9 @@ pub fn reduce_input(
         change: None,
         cursor: None,
         changes: Vec::new(),
+        change_kind: None,
+        from_plan: None,
+        to_plan: None,
     };
 
     new_state.last_event_id = Some(event_id.clone());
@@ -405,6 +408,9 @@ pub fn replay_events(compiled: &CompiledPlan, events: &[TrainingEvent]) -> State
                 state.last_event_id = Some(event.id.clone());
             }
             "session_corrected" => {
+                state.last_event_id = Some(event.id.clone());
+            }
+            "plan_changed" => {
                 state.last_event_id = Some(event.id.clone());
             }
             _ => {}

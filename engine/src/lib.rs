@@ -1,5 +1,6 @@
 pub mod core;
 pub mod error;
+pub mod import;
 pub mod json;
 pub mod model;
 pub mod parser;
@@ -12,6 +13,10 @@ pub use core::{
     validate_execution_input,
 };
 pub use error::{KnurledError, Result};
+pub use import::{
+    HistoryImportDelimiter, HistoryImportDraft, HistoryImportOptions, HistoryImportReport,
+    history_import_events_from_str, import_history_repo,
+};
 pub use json::{pretty_json, sha256_json, sha256_text, stable_json};
 pub use model::*;
 pub use parser::{parse_lock, parse_patch, parse_plan};

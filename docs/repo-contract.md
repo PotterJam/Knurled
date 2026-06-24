@@ -25,7 +25,9 @@ my-training/
 
 `patches/*.fitspec` contains explicit future-plan changes.
 
-`logs/**/*.jsonl` contains canonical training events.
+`logs/**/*.jsonl` contains canonical training events. Historical imports may write
+`session_imported` events under `logs/imports/*.jsonl`; these are retained as history but do not
+advance the active plan cursor.
 
 ## Generated Files
 

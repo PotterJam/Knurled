@@ -35,6 +35,7 @@ cargo run -p knurled-cli -- init examples/gzclp-repo --template gzcl.gzclp
 cargo run -p knurled-cli -- init examples/ss-phase3-repo --template starting-strength.phase3
 cargo run -p knurled-cli -- validate examples/gzclp-repo
 cargo run -p knurled-cli -- preview examples/gzclp-repo --weeks 4
+cargo run -p knurled-cli -- import-history examples/gzclp-repo hevy.csv --source hevy
 cargo run -p knurled-cli -- serve --port 4321
 ```
 

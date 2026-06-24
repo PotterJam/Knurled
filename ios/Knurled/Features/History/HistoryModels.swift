@@ -55,6 +55,19 @@ enum HistoryBuilder {
                 status: "Complete", statusStyle: .ok, kind: .workout, canContinue: true,
                 event: event
             )
+        case "session_imported":
+            let source = (event.program ?? "")
+                .replacingOccurrences(of: "history_import:", with: "")
+                .replacingOccurrences(of: "_", with: " ")
+            return HistoryItem(
+                id: event.id,
+                title: event.reason ?? title,
+                detail: [date, source.isEmpty ? "" : source.capitalized]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " · ") + editedSuffix,
+                status: "Imported", statusStyle: .neutral, kind: .workout, canContinue: false,
+                event: event
+            )
         case "session_saved":
             let logged = event.results.count
             let wasContinued = continued.contains(event.id)

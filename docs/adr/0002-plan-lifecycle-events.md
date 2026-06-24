@@ -62,3 +62,14 @@ Rules:
 - New work this implies (not done here): emit `plan_changed` from the plan-edit / patch / "mark
   complete" paths in the engine + app; teach replay to recognise the marker; surface program
   history in the UI.
+
+## Implementation status
+
+- **Done:** `TrainingEvent` carries the optional `change_kind`, `from`, and `to` fields needed by
+  `plan_changed`; replay recognises `plan_changed` as a marker and updates `last_event_id` without
+  mutating plan content or progression state.
+- **Used by ADR 0005:** historical imports may pair `session_imported` workout facts with a
+  `plan_changed` boundary when the import marks the transition from a prior tool/program into a
+  FitSpec plan.
+- **Still to do:** emit `plan_changed` automatically from plan-edit, patch, phase-complete, and
+  program-complete workflows; surface a program timeline in the app/workbench.

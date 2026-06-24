@@ -512,6 +512,12 @@ pub struct TrainingEvent {
     pub cursor: Option<CursorChange>,
     #[serde(default)]
     pub changes: Vec<CorrectionChange>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_kind: Option<String>,
+    #[serde(rename = "from", skip_serializing_if = "Option::is_none")]
+    pub from_plan: Option<PlanChangeRef>,
+    #[serde(rename = "to", skip_serializing_if = "Option::is_none")]
+    pub to_plan: Option<PlanChangeRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -559,6 +565,14 @@ pub struct CorrectionChange {
     pub path: String,
     pub before: serde_json::Value,
     pub after: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlanChangeRef {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

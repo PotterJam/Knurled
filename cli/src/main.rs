@@ -3,10 +3,11 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use knurled_core::{
-    backtest_repo, build_repo, check_generated_repo, init_training_repo, pretty_json, preview_repo,
-    replay_repo, simulate_repo, validate_repo,
+    HistoryImportDelimiter, HistoryImportOptions, backtest_repo, build_repo, check_generated_repo,
+    import_history_repo, init_training_repo, pretty_json, preview_repo, replay_repo, simulate_repo,
+    validate_repo,
 };
 
 #[derive(Debug, Parser)]
@@ -60,10 +61,39 @@ enum Command {
         #[arg(default_value = ".")]
         repo: PathBuf,
     },
+    ImportHistory {
+        repo: PathBuf,
+        input: PathBuf,
+        #[arg(long, default_value = "history-flat-v1")]
+        format: String,
+        #[arg(long, default_value = "manual")]
+        source: String,
+        #[arg(long, value_enum, default_value_t = ImportDelimiterArg::Auto)]
+        delimiter: ImportDelimiterArg,
+        #[arg(long)]
+        dry_run: bool,
+    },
     Serve {
         #[arg(long, default_value_t = 4321)]
         port: u16,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ImportDelimiterArg {
+    Auto,
+    Csv,
+    Tsv,
+}
+
+impl From<ImportDelimiterArg> for HistoryImportDelimiter {
+    fn from(value: ImportDelimiterArg) -> Self {
+        match value {
+            ImportDelimiterArg::Auto => HistoryImportDelimiter::Auto,
+            ImportDelimiterArg::Csv => HistoryImportDelimiter::Csv,
+            ImportDelimiterArg::Tsv => HistoryImportDelimiter::Tsv,
+        }
+    }
 }
 
 fn main() {
@@ -126,6 +156,31 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             if report.status != "passed" {
                 std::process::exit(1);
             }
+        }
+        Command::ImportHistory {
+            repo,
+            input,
+            format,
+            source,
+            delimiter,
+            dry_run,
+        } => {
+            if format != "history-flat-v1" {
+                return Err(format!(
+                    "unsupported import format {format:?}; expected history-flat-v1"
+                )
+                .into());
+            }
+            let report = import_history_repo(
+                repo,
+                input,
+                HistoryImportOptions {
+                    source,
+                    delimiter: delimiter.into(),
+                    dry_run,
+                },
+            )?;
+            println!("{}", pretty_json(&report)?);
         }
         Command::Serve { port } => serve(port)?,
     }
