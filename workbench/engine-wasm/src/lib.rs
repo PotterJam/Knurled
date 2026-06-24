@@ -1,0 +1,189 @@
+//! wasm-bindgen bridge over `knurled-core` for the static browser workbench.
+//!
+//! Every export returns a JSON string holding the same envelope the iOS FFI
+//! uses (`ios/Engine/knurled-ios-ffi`):
+//!
+//! ```json
+//! { "ok": true,  "data": <result> }
+//! { "ok": false, "error": "<message>" }
+//! ```
+//!
+//! No training logic lives here. The browser has no filesystem, so we bind the
+//! engine's **in-memory** functions (`compile_plan`, `build_outputs`,
+//! `simulate`, `history_import_events_from_str`, …) rather than the `*_repo`
+//! helpers that read directories. The JS loader (`workbench/engine/index.js`)
+//! unwraps the envelope and throws on `ok:false`.
+
+use knurled_core::{
+    ENGINE_VERSION, HistoryImportDelimiter, HistoryImportOptions, PatchFile, TrainingEvent,
+    build_outputs, builtin_template, builtin_templates, compile_plan,
+    history_import_events_from_str, render_lockfile, replay_events, simulate, validate_compiled,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use wasm_bindgen::prelude::*;
+
+#[derive(Deserialize)]
+struct PatchInput {
+    filename: String,
+    text: String,
+}
+
+fn ok<T: Serialize>(data: T) -> String {
+    match serde_json::to_value(&data) {
+        Ok(value) => json!({ "ok": true, "data": value }).to_string(),
+        Err(error) => json!({ "ok": false, "error": format!("serialize error: {error}") })
+            .to_string(),
+    }
+}
+
+fn fail(message: impl std::fmt::Display) -> String {
+    json!({ "ok": false, "error": message.to_string() }).to_string()
+}
+
+fn parse_patches(patches_json: &str) -> Result<Vec<PatchFile>, String> {
+    if patches_json.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let inputs: Vec<PatchInput> = serde_json::from_str(patches_json)
+        .map_err(|error| format!("invalid patches json: {error}"))?;
+    Ok(inputs
+        .into_iter()
+        .map(|input| PatchFile {
+            filename: input.filename,
+            text: input.text,
+        })
+        .collect())
+}
+
+fn parse_events(events_json: &str) -> Result<Vec<TrainingEvent>, String> {
+    if events_json.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(events_json).map_err(|error| format!("invalid events json: {error}"))
+}
+
+/// Compile + validate a plan. Returns a `ValidationReport`.
+#[wasm_bindgen]
+pub fn validate(plan_text: &str, lock_text: &str, patches_json: &str) -> String {
+    let patches = match parse_patches(patches_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    match compile_plan(plan_text, lock_text, &patches) {
+        Ok(compiled) => ok(validate_compiled(&compiled)),
+        Err(error) => fail(error),
+    }
+}
+
+/// Compile + replay events + render. Returns `BuildOutputs`
+/// (`state`, `ir`, `next_workout`, `validation`) — the workbench's main call.
+#[wasm_bindgen]
+pub fn build(plan_text: &str, lock_text: &str, patches_json: &str, events_json: &str) -> String {
+    let patches = match parse_patches(patches_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    let events = match parse_events(events_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    let compiled = match compile_plan(plan_text, lock_text, &patches) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    match build_outputs(&compiled, &events) {
+        Ok(outputs) => ok(outputs),
+        Err(error) => fail(error),
+    }
+}
+
+/// Project the plan forward. Returns a `SimulationReport`.
+#[wasm_bindgen]
+pub fn simulate_plan(
+    plan_text: &str,
+    lock_text: &str,
+    patches_json: &str,
+    events_json: &str,
+    weeks: u32,
+    strategy: &str,
+) -> String {
+    let patches = match parse_patches(patches_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    let events = match parse_events(events_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    let compiled = match compile_plan(plan_text, lock_text, &patches) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    let state = replay_events(&compiled, &events);
+    match simulate(&compiled, &state, weeks, strategy) {
+        Ok(report) => ok(report),
+        Err(error) => fail(error),
+    }
+}
+
+/// Parse delimited history text into a `HistoryImportDraft` (events + per-row
+/// diagnostics), entirely in memory. `delimiter` is "auto" | "csv" | "tsv".
+#[wasm_bindgen]
+pub fn import_history(text: &str, source: &str, delimiter: &str) -> String {
+    let delimiter = match delimiter {
+        "csv" => HistoryImportDelimiter::Csv,
+        "tsv" => HistoryImportDelimiter::Tsv,
+        _ => HistoryImportDelimiter::Auto,
+    };
+    let options = HistoryImportOptions {
+        source: source.to_owned(),
+        delimiter,
+        dry_run: true,
+    };
+    match history_import_events_from_str(text, &options) {
+        // HistoryImportDraft is not Serialize; build the envelope from its fields.
+        Ok(draft) => ok(json!({
+            "events": draft.events,
+            "input_rows": draft.input_rows,
+            "imported_sets": draft.imported_sets,
+        })),
+        Err(error) => fail(error),
+    }
+}
+
+/// List built-in templates with their session/slot/tier skeleton so the builder
+/// canvas reflects real structure instead of hardcoded assumptions.
+#[wasm_bindgen]
+pub fn builtin_template_catalog() -> String {
+    let mut templates = Vec::new();
+    for info in builtin_templates() {
+        let reference = format!("{}@{}", info.id, info.version);
+        let skeleton = match builtin_template(&reference) {
+            Ok(template) => serde_json::to_value(&template).unwrap_or(Value::Null),
+            Err(error) => return fail(error),
+        };
+        templates.push(json!({
+            "id": info.id,
+            "version": info.version,
+            "ref": reference,
+            "display_name": info.display_name,
+            "skeleton": skeleton,
+        }));
+    }
+    ok(templates)
+}
+
+/// Generate a correct `fitspec.lock` body for a freshly authored plan's template.
+#[wasm_bindgen]
+pub fn lock_for(template_ref: &str) -> String {
+    match render_lockfile(template_ref) {
+        Ok(text) => ok(text),
+        Err(error) => fail(error),
+    }
+}
+
+#[wasm_bindgen]
+pub fn engine_version() -> String {
+    ok(ENGINE_VERSION)
+}
