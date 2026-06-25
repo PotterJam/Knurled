@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use knurled_core::{
-    ExecutionInput, HistoryImportDelimiter, HistoryImportOptions, SubmitMode, backtest_records_repo,
-    backtest_repo, build_repo, check_generated_repo, import_history_repo, init_training_repo,
-    pretty_json, preview_repo, replay_repo, simulate_repo, submit_repo, validate_repo,
+    ExecutionInput, SubmitMode, backtest_records_repo, build_repo, check_generated_repo,
+    init_training_repo, pretty_json, preview_repo, simulate_repo, submit_repo, validate_repo,
 };
 
 #[derive(Debug, Parser)]
@@ -47,17 +46,7 @@ enum Command {
         #[arg(long, default_value = "all-pass")]
         strategy: String,
     },
-    Replay {
-        #[arg(default_value = ".")]
-        repo: PathBuf,
-        #[arg(long)]
-        write_state: bool,
-    },
     CheckGenerated {
-        #[arg(default_value = ".")]
-        repo: PathBuf,
-    },
-    Backtest {
         #[arg(default_value = ".")]
         repo: PathBuf,
     },
@@ -78,29 +67,10 @@ enum Command {
         #[arg(default_value = ".")]
         repo: PathBuf,
     },
-    ImportHistory {
-        repo: PathBuf,
-        input: PathBuf,
-        #[arg(long, default_value = "history-flat-v1")]
-        format: String,
-        #[arg(long, default_value = "manual")]
-        source: String,
-        #[arg(long, value_enum, default_value_t = ImportDelimiterArg::Auto)]
-        delimiter: ImportDelimiterArg,
-        #[arg(long)]
-        dry_run: bool,
-    },
     Serve {
         #[arg(long, default_value_t = 4321)]
         port: u16,
     },
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum ImportDelimiterArg {
-    Auto,
-    Csv,
-    Tsv,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -119,16 +89,6 @@ impl From<SubmitModeArg> for SubmitMode {
             SubmitModeArg::Advance => SubmitMode::Advance,
             SubmitModeArg::OffDay => SubmitMode::OffDay,
             SubmitModeArg::Reset => SubmitMode::Reset,
-        }
-    }
-}
-
-impl From<ImportDelimiterArg> for HistoryImportDelimiter {
-    fn from(value: ImportDelimiterArg) -> Self {
-        match value {
-            ImportDelimiterArg::Auto => HistoryImportDelimiter::Auto,
-            ImportDelimiterArg::Csv => HistoryImportDelimiter::Csv,
-            ImportDelimiterArg::Tsv => HistoryImportDelimiter::Tsv,
         }
     }
 }
@@ -172,9 +132,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             println!("{}", pretty_json(&simulate_repo(repo, weeks, &strategy)?)?);
         }
-        Command::Replay { repo, write_state } => {
-            println!("{}", pretty_json(&replay_repo(repo, write_state)?)?);
-        }
         Command::CheckGenerated { repo } => {
             let report = check_generated_repo(repo)?;
             if report.status == "current" {
@@ -184,13 +141,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 for file in report.missing.iter().chain(&report.changed) {
                     println!("- {file}");
                 }
-                std::process::exit(1);
-            }
-        }
-        Command::Backtest { repo } => {
-            let report = backtest_repo(repo)?;
-            println!("{}", pretty_json(&report)?);
-            if report.status != "passed" {
                 std::process::exit(1);
             }
         }
@@ -210,31 +160,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::BacktestRecords { repo } => {
             println!("{}", pretty_json(&backtest_records_repo(repo)?)?);
-        }
-        Command::ImportHistory {
-            repo,
-            input,
-            format,
-            source,
-            delimiter,
-            dry_run,
-        } => {
-            if format != "history-flat-v1" {
-                return Err(format!(
-                    "unsupported import format {format:?}; expected history-flat-v1"
-                )
-                .into());
-            }
-            let report = import_history_repo(
-                repo,
-                input,
-                HistoryImportOptions {
-                    source,
-                    delimiter: delimiter.into(),
-                    dry_run,
-                },
-            )?;
-            println!("{}", pretty_json(&report)?);
         }
         Command::Serve { port } => serve(port)?,
     }

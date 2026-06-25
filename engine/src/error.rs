@@ -21,14 +21,6 @@ pub enum KnurledError {
         source: serde_json::Error,
     },
 
-    #[error("invalid JSONL event in {path} at line {line}: {source}")]
-    Jsonl {
-        path: PathBuf,
-        line: usize,
-        #[source]
-        source: serde_json::Error,
-    },
-
     #[error("unknown built-in template: {0}")]
     UnknownTemplate(String),
 
@@ -37,7 +29,4 @@ pub enum KnurledError {
 
     #[error("invalid execution input: {0}")]
     InvalidExecutionInput(String),
-
-    #[error("invalid history import: {0}")]
-    InvalidHistoryImport(String),
 }

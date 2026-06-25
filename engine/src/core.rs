@@ -342,7 +342,7 @@ pub fn reduce_input(
     if validation.status != ValidationStatus::Valid {
         return Ok(ReductionResult {
             validation,
-            event: None,
+            results: Vec::new(),
             effects: Vec::new(),
             new_state: state.clone(),
             next_workout: rendered_session.clone(),
@@ -382,430 +382,54 @@ pub fn reduce_input(
         );
     }
 
-    let event_type = if input.status == "complete" {
-        "session_completed"
-    } else {
-        "session_saved"
-    };
-    let timestamp = input
-        .completed_at
-        .as_deref()
-        .or(input.saved_at.as_deref())
-        .or(input.started_at.as_deref())
-        .unwrap_or("unknown-time");
-    let event_id = make_event_id(event_type, &rendered_session.session_id, timestamp);
-
-    let event = TrainingEvent {
-        id: event_id.clone(),
-        kind: event_type.into(),
-        schema_version: Some(SCHEMA_VERSION.into()),
-        program: Some(match compiled.template.kind {
-            TemplateKind::Gzclp => "gzcl".into(),
-            TemplateKind::FiveThreeOne => "531".into(),
-            TemplateKind::StartingStrength => "starting_strength".into(),
-        }),
-        session_id: Some(rendered_session.session_id.clone()),
-        plan_hash: Some(compiled.plan_hash.clone()),
-        template_hash: Some(compiled.template_hash.clone()),
-        rendered_session_hash: Some(rendered_session.rendered_session_hash.clone()),
-        engine_version: Some(ENGINE_VERSION.into()),
-        started_at: input.started_at.clone(),
-        completed_at: input.completed_at.clone(),
-        saved_at: input.saved_at.clone(),
-        status: Some(input.status.clone()),
-        results,
-        results_added: Vec::new(),
-        effects: effects.clone(),
-        continues_event_id: None,
-        corrects_event_id: None,
-        reason: None,
-        policy: None,
-        lane: None,
-        change: None,
-        cursor: None,
-        changes: Vec::new(),
-        change_kind: None,
-        from_plan: None,
-        to_plan: None,
-    };
-
-    new_state.last_event_id = Some(event_id.clone());
-    new_state.sessions.insert(
-        format!("{}_{}", rendered_session.session_id, event_id),
-        SessionState {
-            status: input.status.clone(),
-            source_events: vec![event_id],
-        },
-    );
-
     let next_workout = render_next(compiled, &new_state)?;
     Ok(ReductionResult {
         validation,
-        event: Some(event),
+        results,
         effects,
         new_state,
         next_workout,
     })
 }
 
-pub fn replay_events(compiled: &CompiledPlan, events: &[TrainingEvent]) -> StateProjection {
-    let events = fold_corrections(compiled, events);
-    let mut state = create_initial_state(compiled);
-
-    for event in &events {
-        match event.kind.as_str() {
-            "session_completed" => {
-                apply_effects(&mut state, &event.effects);
-                if let Some(session_id) = &event.session_id {
-                    advance_cursor(&mut state, &compiled.schedule.rotation, session_id);
-                    state.sessions.insert(
-                        format!("{}_{}", session_id, event.id),
-                        SessionState {
-                            status: "complete".into(),
-                            source_events: vec![event.id.clone()],
-                        },
-                    );
-                }
-                state.last_event_id = Some(event.id.clone());
-            }
-            "session_saved" => {
-                if let Some(session_id) = &event.session_id {
-                    // A partial save moves the program on to the next workout; the saved snapshot
-                    // stays resumable from history (§16/§19). Guard on the cursor so repeated saves
-                    // of the same session don't advance more than once.
-                    if state.cursor.next_session.eq_ignore_ascii_case(session_id) {
-                        advance_cursor(&mut state, &compiled.schedule.rotation, session_id);
-                    }
-                    state.sessions.insert(
-                        format!("{}_{}", session_id, event.id),
-                        SessionState {
-                            status: "partial".into(),
-                            source_events: vec![event.id.clone()],
-                        },
-                    );
-                }
-                state.last_event_id = Some(event.id.clone());
-            }
-            "session_continued" => {
-                apply_effects(&mut state, &event.effects);
-                if let Some(session_id) = &event.session_id {
-                    // The partial this continues already advanced the cursor; only advance here if
-                    // the cursor is somehow still on this session (e.g. a continue with no prior
-                    // save in the log).
-                    if state.cursor.next_session.eq_ignore_ascii_case(session_id) {
-                        advance_cursor(&mut state, &compiled.schedule.rotation, session_id);
-                    }
-                    state.sessions.insert(
-                        format!("{}_{}", session_id, event.id),
-                        SessionState {
-                            status: "complete".into(),
-                            source_events: vec![
-                                event.continues_event_id.clone().unwrap_or_default(),
-                                event.id.clone(),
-                            ],
-                        },
-                    );
-                }
-                state.last_event_id = Some(event.id.clone());
-            }
-            "session_skipped" => {
-                if let Some(session_id) = &event.session_id {
-                    advance_cursor(&mut state, &compiled.schedule.rotation, session_id);
-                }
-                state.last_event_id = Some(event.id.clone());
-            }
-            "state_adjusted" => {
-                apply_state_adjustment(&mut state, event);
-                state.last_event_id = Some(event.id.clone());
-            }
-            "session_corrected" => {
-                state.last_event_id = Some(event.id.clone());
-            }
-            "plan_changed" => {
-                state.last_event_id = Some(event.id.clone());
-            }
-            _ => {}
-        }
-    }
-
-    state
-}
-
-fn fold_corrections(compiled: &CompiledPlan, events: &[TrainingEvent]) -> Vec<TrainingEvent> {
-    let mut folded = Vec::<TrainingEvent>::new();
-    for event in events {
-        if event.kind == "session_corrected" {
-            if let Some(target_id) = &event.corrects_event_id
-                && let Some(target) = folded
-                    .iter_mut()
-                    .find(|candidate| &candidate.id == target_id)
-            {
-                apply_correction_changes(compiled, target, &event.changes);
-            }
-            folded.push(event.clone());
-        } else {
-            folded.push(event.clone());
-        }
-    }
-    folded
-}
-
-fn apply_correction_changes(
-    compiled: &CompiledPlan,
-    target: &mut TrainingEvent,
-    changes: &[CorrectionChange],
-) {
-    let path_re = Regex::new(r"^results\[([^\]]+)\]\.actual\[(\d+)\]\.reps$").unwrap();
-    for change in changes {
-        let Some(capture) = path_re.captures(&change.path) else {
-            continue;
-        };
-        let slot_id = &capture[1];
-        let Some(set_index) = capture[2].parse::<usize>().ok() else {
-            continue;
-        };
-        let Some(reps) = change
-            .after
-            .as_u64()
-            .and_then(|value| u32::try_from(value).ok())
-        else {
-            continue;
-        };
-        let Some(result) = target
-            .results
-            .iter_mut()
-            .chain(target.results_added.iter_mut())
-            .find(|result| result.slot_id == slot_id)
-        else {
-            continue;
-        };
-        if let Some(actual) = result.actual.get_mut(set_index) {
-            actual.reps = reps;
-            recompute_result(compiled, result);
-        }
-    }
-    target.effects = target
-        .results
+/// Advance the schedule cursor to the next session in the rotation, wrapping to
+/// the next week at the end of the rotation.
+pub(crate) fn advance_cursor(state: &mut StateProjection, rotation: &[String], session_id: &str) {
+    let normalized = session_id.to_ascii_lowercase();
+    let index = rotation
         .iter()
-        .chain(target.results_added.iter())
-        .flat_map(|result| result.effects.clone())
-        .collect();
-}
-
-fn recompute_result(compiled: &CompiledPlan, result: &mut ExerciseResult) {
-    let prescribed_sets = prescribed_sets_from_log(&result.prescribed);
-    let adjusted_today = result.actual.iter().any(|actual| {
-        prescribed_sets
-            .first()
-            .and_then(|set| set.load.as_ref())
-            .zip(actual.load.as_ref())
-            .is_some_and(|(prescribed, actual)| prescribed != actual)
-    });
-
-    result.outcome = if adjusted_today {
-        "adjusted_today".into()
-    } else if result
-        .progression_rule
-        .as_deref()
-        .is_some_and(|rule| rule.ends_with(".t3"))
-    {
-        let final_reps = result.actual.last().map(|set| set.reps).unwrap_or_default();
-        if final_reps >= compiled.template.lanes.t3_pass_final_set_reps {
-            "pass".into()
-        } else {
-            "fail".into()
-        }
-    } else if prescribed_sets
-        .iter()
-        .zip(&result.actual)
-        .all(|(target, actual)| actual.reps >= target.target_reps)
-    {
-        "pass".into()
-    } else {
-        "fail".into()
-    };
-
-    result.effects = recompute_result_effects(compiled, result, &prescribed_sets);
-}
-
-fn recompute_result_effects(
-    compiled: &CompiledPlan,
-    result: &ExerciseResult,
-    prescribed_sets: &[PrescribedSet],
-) -> Vec<Effect> {
-    if result.outcome == "adjusted_today" {
-        return Vec::new();
-    }
-
-    let Some(lane) = result.progression_lane.as_deref() else {
-        return Vec::new();
-    };
-    let rule = result.progression_rule.as_deref().unwrap_or_default();
-    let load = prescribed_sets.first().and_then(|set| set.load.as_deref());
-
-    match (rule, result.outcome.as_str()) {
-        (rule, "pass") if rule.ends_with(".t1") || rule.ends_with(".t2") => {
-            vec![increase_load_effect(
-                compiled,
-                lane,
-                load,
-                compiled.template.increments.default,
-            )]
-        }
-        (rule, "pass") if rule.ends_with(".t3") => {
-            let basis = load.or_else(|| {
-                result
-                    .actual
-                    .iter()
-                    .rev()
-                    .find_map(|set| set.load.as_deref())
-            });
-            basis
-                .map(|load| {
-                    increase_load_effect(
-                        compiled,
-                        lane,
-                        Some(load),
-                        compiled.template.increments.default,
-                    )
-                })
-                .into_iter()
-                .collect()
-        }
-        (rule, "fail") if rule.ends_with(".t3") && load.is_none() => result
-            .actual
-            .iter()
-            .rev()
-            .find_map(|set| set.load.as_deref())
-            .map(|load| vec![set_load_effect(lane, None, load)])
-            .unwrap_or_default(),
-        (rule, "fail") if rule.ends_with(".t1") => {
-            let from = stage_from_prescribed_t1(prescribed_sets);
-            vec![advance_stage_effect(
-                lane,
-                Some(&from),
-                next_stage(&compiled.template.lanes.t1_stages, &from).as_deref(),
-            )]
-        }
-        (rule, "fail") if rule.ends_with(".t2") => {
-            let from = stage_from_prescribed_t2(prescribed_sets);
-            vec![advance_stage_effect(
-                lane,
-                Some(&from),
-                next_stage(&compiled.template.lanes.t2_stages, &from).as_deref(),
-            )]
-        }
-        (rule, "pass") if rule.ends_with(".main") => {
-            let from = result
-                .effects
-                .iter()
-                .find(|effect| effect.op == "advance_531_week")
-                .and_then(|effect| effect.from.clone())
-                .unwrap_or_else(|| "1".into());
-            let to = if from == "4" {
-                "1".into()
-            } else {
-                from.parse::<u32>()
-                    .map(|week| (week + 1).to_string())
-                    .unwrap_or_else(|_| "2".into())
-            };
-            vec![Effect {
-                op: "advance_531_week".into(),
-                lane: lane.into(),
-                from: Some(from),
-                to: Some(to),
-            }]
-        }
-        (rule, "pass")
-            if rule.starts_with("starting_strength.") && rule != "starting_strength.chins" =>
-        {
-            vec![increase_load_effect(
-                compiled,
-                lane,
-                load,
-                starting_strength_increment(compiled, lane),
-            )]
-        }
-        _ => Vec::new(),
+        .position(|candidate| candidate == &normalized)
+        .unwrap_or(0);
+    let next_index = (index + 1) % rotation.len().max(1);
+    state.cursor.next_session = rotation
+        .get(next_index)
+        .cloned()
+        .unwrap_or_else(|| normalized.clone());
+    if next_index == 0 {
+        state.cursor.week += 1;
     }
 }
 
-fn stage_from_prescribed_t1(sets: &[PrescribedSet]) -> String {
-    match (sets.len(), sets.first().map(|set| set.target_reps)) {
-        (6, Some(2)) => "6x2+".into(),
-        (10, Some(1)) => "10x1+".into(),
-        _ => "5x3+".into(),
-    }
-}
-
-fn stage_from_prescribed_t2(sets: &[PrescribedSet]) -> String {
-    let reps = sets.first().map(|set| set.target_reps).unwrap_or(10);
-    format!("3x{reps}")
-}
-
-pub fn build_outputs(compiled: &CompiledPlan, events: &[TrainingEvent]) -> Result<BuildOutputs> {
-    let state = replay_events(compiled, events);
+/// Build the generated outputs from the source-of-truth `state` (ADR 0007):
+/// the next workout rendered from `state`, plus the compiled-plan IR and
+/// validation. No replay — `state` is authoritative.
+pub fn build_outputs(compiled: &CompiledPlan, state: &StateProjection) -> Result<BuildOutputs> {
     let validation = validate_compiled(compiled);
     let next_workout = if validation.status == ValidationStatus::Valid {
-        Some(render_next(compiled, &state)?)
+        Some(render_next(compiled, state)?)
     } else {
         None
-    };
-    let resumable_sessions = if validation.status == ValidationStatus::Valid {
-        resumable_sessions(compiled, &state, events)
-    } else {
-        Vec::new()
     };
     let mut ir = serde_json::to_value(compiled)?;
     if let Some(object) = ir.as_object_mut() {
         object.remove("lock");
     }
     Ok(BuildOutputs {
-        state,
+        state: state.clone(),
         ir,
         next_workout,
-        resumable_sessions,
         validation,
     })
-}
-
-/// Re-renders each saved partial that has not yet been continued, so the app can resume it from
-/// history after the cursor has moved on (§16/§19). One entry per session id (most recent save
-/// wins); a render is only included when it still matches the snapshot the partial was logged
-/// against, otherwise the plan has changed underneath it and it falls back to correction.
-fn resumable_sessions(
-    compiled: &CompiledPlan,
-    state: &StateProjection,
-    events: &[TrainingEvent],
-) -> Vec<RenderedSession> {
-    let continued: Vec<&str> = events
-        .iter()
-        .filter_map(|event| event.continues_event_id.as_deref())
-        .collect();
-
-    let mut sessions = Vec::new();
-    let mut seen = Vec::new();
-    for event in events.iter().rev() {
-        if event.kind != "session_saved" || continued.contains(&event.id.as_str()) {
-            continue;
-        }
-        let Some(session_id) = &event.session_id else {
-            continue;
-        };
-        if seen.iter().any(|id: &String| id == session_id) {
-            continue;
-        }
-        seen.push(session_id.clone());
-        if let Ok(rendered) = render_session(compiled, state, session_id)
-            && event
-                .rendered_session_hash
-                .as_deref()
-                .is_none_or(|hash| hash == rendered.rendered_session_hash)
-        {
-            sessions.push(rendered);
-        }
-    }
-    sessions
 }
 
 pub fn simulate(
@@ -827,7 +451,6 @@ pub fn simulate(
             index: index + 1,
             session_id: rendered.session_id,
             display_name: rendered.display_name,
-            event_id: reduced.event.map(|event| event.id).unwrap_or_default(),
             effects: reduced.effects,
         });
     }
@@ -1937,44 +1560,6 @@ fn compact_prescribed(sets: &[PrescribedSet]) -> serde_json::Value {
     }
 }
 
-fn prescribed_sets_from_log(value: &serde_json::Value) -> Vec<PrescribedSet> {
-    if let Some(sets) = value
-        .get("sets")
-        .cloned()
-        .and_then(|value| serde_json::from_value::<Vec<PrescribedSet>>(value).ok())
-    {
-        return sets;
-    }
-
-    let load = value
-        .get("load")
-        .and_then(|value| value.as_str())
-        .map(str::to_owned);
-    value
-        .get("reps")
-        .and_then(|value| value.as_array())
-        .into_iter()
-        .flatten()
-        .enumerate()
-        .filter_map(|(index, reps)| {
-            let (target_reps, amrap) = if let Some(number) = reps.as_u64() {
-                (u32::try_from(number).ok()?, false)
-            } else {
-                let text = reps.as_str()?;
-                let target = text.strip_suffix('+').unwrap_or(text);
-                (target.parse::<u32>().ok()?, text.ends_with('+'))
-            };
-            Some(PrescribedSet {
-                set: u32::try_from(index + 1).ok()?,
-                load: load.clone(),
-                target_reps,
-                amrap,
-                percentage: None,
-            })
-        })
-        .collect()
-}
-
 fn actual_sets_for(item: &RenderedItem, input: &ItemInput) -> Result<Vec<ActualSet>> {
     match input.mode.as_str() {
         "amrap_final_set" => {
@@ -2116,40 +1701,6 @@ fn apply_effects(state: &mut StateProjection, effects: &[Effect]) {
             }
             _ => {}
         }
-    }
-}
-
-fn apply_state_adjustment(state: &mut StateProjection, event: &TrainingEvent) {
-    if let (Some(lane_id), Some(change)) = (&event.lane, &event.change)
-        && let Some(lane) = state.lanes.get_mut(lane_id)
-    {
-        if let Some(load) = &change.load {
-            lane.load = Some(load.to.clone());
-        }
-        if let Some(stage) = &change.stage {
-            lane.stage = Some(stage.to.clone());
-        }
-    }
-    if let Some(cursor) = &event.cursor
-        && let Some(next_session) = &cursor.next_session
-    {
-        state.cursor.next_session = next_session.to_ascii_lowercase();
-    }
-}
-
-pub(crate) fn advance_cursor(state: &mut StateProjection, rotation: &[String], session_id: &str) {
-    let normalized = session_id.to_ascii_lowercase();
-    let index = rotation
-        .iter()
-        .position(|candidate| candidate == &normalized)
-        .unwrap_or(0);
-    let next_index = (index + 1) % rotation.len().max(1);
-    state.cursor.next_session = rotation
-        .get(next_index)
-        .cloned()
-        .unwrap_or_else(|| normalized.clone());
-    if next_index == 0 {
-        state.cursor.week += 1;
     }
 }
 
@@ -2493,16 +2044,6 @@ fn title_case(value: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn make_event_id(event_type: &str, session_id: &str, timestamp: &str) -> String {
-    let clean = timestamp
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .take(20)
-        .collect::<String>()
-        .to_ascii_lowercase();
-    format!("evt_{clean}_{event_type}_{session_id}")
 }
 
 fn message(code: impl Into<String>, message: impl Into<String>) -> ValidationMessage {
