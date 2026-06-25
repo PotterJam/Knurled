@@ -4,10 +4,16 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-use crate::core::{PatchFile, build_outputs, compile_plan, replay_events, simulate};
+use crate::backtest::{BacktestProjection, backtest};
+use crate::core::{
+    PatchFile, build_outputs, compile_plan, create_initial_state, render_next, replay_events,
+    simulate,
+};
 use crate::error::{KnurledError, Result};
 use crate::json::pretty_json;
 use crate::model::*;
+use crate::record::{DayRecord, LogMonth, month_key, month_path};
+use crate::session::{SubmitMode, SubmitOutcome, submit_session};
 use crate::templates::{TemplateRef, parse_template_ref, render_lockfile};
 
 #[derive(Debug, Clone)]
@@ -198,6 +204,110 @@ pub fn backtest_repo(repo_path: impl AsRef<Path>) -> Result<BacktestReport> {
         generated_files: generated,
         cursor: state.cursor,
     })
+}
+
+// --- State-primary record flow (ADR 0007) -------------------------------------
+//
+// In the logs-as-record model `state/current.json` is the source of truth and
+// `logs/<yyyy>/<mm>.json` is an append/edit-in-place record the engine never
+// replays. These helpers read and write that pair directly. They live alongside
+// the legacy replay path during the cutover; clients move onto `submit_repo` /
+// `backtest_records_repo` instead of appending events and replaying.
+
+/// Read `state/current.json`, or derive the program's initial state when the
+/// repo has not recorded anything yet.
+pub fn read_state(repo_path: impl AsRef<Path>) -> Result<StateProjection> {
+    let root = repo_path.as_ref();
+    let path = root.join("state").join("current.json");
+    if let Some(text) = read_optional(&path)? {
+        serde_json::from_str(&text).map_err(|source| KnurledError::Json { path, source })
+    } else {
+        let repo = read_training_repo(root)?;
+        Ok(create_initial_state(&repo.compiled))
+    }
+}
+
+/// Write `state/current.json` (the source of truth).
+pub fn write_state(repo_path: impl AsRef<Path>, state: &StateProjection) -> Result<()> {
+    let dir = repo_path.as_ref().join("state");
+    fs::create_dir_all(&dir).map_err(|source| io_error(&dir, source))?;
+    let path = dir.join("current.json");
+    fs::write(&path, pretty_json(state)?).map_err(|source| io_error(&path, source))
+}
+
+/// Read every day record under `logs/**/*.json`, in chronological order. JSONL
+/// files (the legacy event log) are ignored.
+pub fn read_records(repo_path: impl AsRef<Path>) -> Result<Vec<DayRecord>> {
+    let logs_dir = repo_path.as_ref().join("logs");
+    if !logs_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    collect_files(&logs_dir, &mut files)?;
+    files.sort();
+
+    let mut days = Vec::new();
+    for path in files
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+    {
+        let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
+        let month: LogMonth =
+            serde_json::from_str(&text).map_err(|source| KnurledError::Json {
+                path: path.clone(),
+                source,
+            })?;
+        days.extend(month.days);
+    }
+    days.sort_by(|left, right| left.date.cmp(&right.date));
+    Ok(days)
+}
+
+/// Insert or replace a day in its month file (`logs/<yyyy>/<mm>.json`), keeping
+/// the file pretty-printed and chronological. Returns the repo-relative path.
+pub fn append_day_record(repo_path: impl AsRef<Path>, day: DayRecord) -> Result<String> {
+    let relative = month_path(&day.date)?;
+    let path = repo_path.as_ref().join(&relative);
+    let mut month = match read_optional(&path)? {
+        Some(text) => LogMonth::parse(&text)?,
+        None => LogMonth::new(month_key(&day.date)?),
+    };
+    month.upsert_day(day);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| io_error(parent, source))?;
+    }
+    fs::write(&path, month.to_pretty_json()?).map_err(|source| io_error(&path, source))?;
+    Ok(relative)
+}
+
+/// Submit a finished session against the next workout: advance `state` per
+/// `mode` and append the day to the record. On invalid input nothing is
+/// written; the returned outcome carries the validation errors.
+pub fn submit_repo(
+    repo_path: impl AsRef<Path>,
+    input: &ExecutionInput,
+    mode: SubmitMode,
+    date: &str,
+) -> Result<SubmitOutcome> {
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let state = read_state(root)?;
+    let rendered = render_next(&repo.compiled, &state)?;
+    let outcome = submit_session(&repo.compiled, &state, &rendered, input, mode, date)?;
+    if outcome.validation.status == ValidationStatus::Valid {
+        write_state(root, &outcome.new_state)?;
+        append_day_record(root, outcome.record_day.clone())?;
+    }
+    Ok(outcome)
+}
+
+/// Backtest the repo's plan over its recorded days (the opt-in, replay-free
+/// projection of ADR 0007).
+pub fn backtest_records_repo(repo_path: impl AsRef<Path>) -> Result<BacktestProjection> {
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let days = read_records(root)?;
+    backtest(&repo.compiled, &days)
 }
 
 pub fn write_generated_files(root: impl AsRef<Path>, outputs: &BuildOutputs) -> Result<()> {
