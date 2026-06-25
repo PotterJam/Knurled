@@ -44,12 +44,31 @@
         "required_for_completion": true
       },
       "exercise": "squat",
+      "exercise_options": {
+        "allow_runtime_swap": true,
+        "alternatives": [
+          {
+            "exercise": "hack_squat",
+            "label": "Hack Squat",
+            "option_id": "hack_squat",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "goblet_squat",
+            "label": "Goblet Squat",
+            "option_id": "goblet_squat",
+            "policy": "tracking_only"
+          }
+        ],
+        "default_policy": "tracking_only",
+        "primary": "squat"
+      },
       "identity": {
         "item_id": "a_deadlift.squat",
         "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "squat.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
+        "rendered_session_hash": "sha256:5e3caa4697cd942502e1fb1c961d99d2142b15f0e31aac1e41ccdcb079d836d3",
         "slot_id": "a_deadlift.squat"
       },
       "item_id": "a_deadlift.squat",
@@ -161,12 +180,31 @@
         "required_for_completion": true
       },
       "exercise": "press",
+      "exercise_options": {
+        "allow_runtime_swap": true,
+        "alternatives": [
+          {
+            "exercise": "dumbbell_press",
+            "label": "Dumbbell Press",
+            "option_id": "dumbbell_press",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "landmine_press",
+            "label": "Landmine Press",
+            "option_id": "landmine_press",
+            "policy": "tracking_only"
+          }
+        ],
+        "default_policy": "tracking_only",
+        "primary": "press"
+      },
       "identity": {
         "item_id": "a_deadlift.press",
         "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "press.linear",
         "progression_rule": "starting_strength.3x5",
-        "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
+        "rendered_session_hash": "sha256:5e3caa4697cd942502e1fb1c961d99d2142b15f0e31aac1e41ccdcb079d836d3",
         "slot_id": "a_deadlift.press"
       },
       "item_id": "a_deadlift.press",
@@ -278,12 +316,31 @@
         "required_for_completion": true
       },
       "exercise": "deadlift",
+      "exercise_options": {
+        "allow_runtime_swap": true,
+        "alternatives": [
+          {
+            "exercise": "rdl",
+            "label": "Romanian Deadlift",
+            "option_id": "rdl",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "dumbbell_rdl",
+            "label": "Dumbbell Romanian Deadlift",
+            "option_id": "dumbbell_rdl",
+            "policy": "tracking_only"
+          }
+        ],
+        "default_policy": "tracking_only",
+        "primary": "deadlift"
+      },
       "identity": {
         "item_id": "a_deadlift.deadlift",
         "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
         "progression_lane": "deadlift.linear",
         "progression_rule": "starting_strength.1x5",
-        "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
+        "rendered_session_hash": "sha256:5e3caa4697cd942502e1fb1c961d99d2142b15f0e31aac1e41ccdcb079d836d3",
         "slot_id": "a_deadlift.deadlift"
       },
       "item_id": "a_deadlift.deadlift",
@@ -343,7 +400,7 @@
     }
   ],
   "plan_hash": "sha256:9d5306e160d38ab3e2ca6ac2b549d68363d90b0ce9e5cfb2dea5e43a4464e2ca",
-  "rendered_session_hash": "sha256:587ea536c96481df40fe113c42a54d8443e6e447e1f1b722a88c6acecfa1218c",
+  "rendered_session_hash": "sha256:5e3caa4697cd942502e1fb1c961d99d2142b15f0e31aac1e41ccdcb079d836d3",
   "schema_version": "0.1",
   "session_id": "a_deadlift",
   "suggested_date": null,

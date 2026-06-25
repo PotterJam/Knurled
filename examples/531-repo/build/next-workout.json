@@ -45,12 +45,31 @@
         "required_for_completion": true
       },
       "exercise": "squat",
+      "exercise_options": {
+        "allow_runtime_swap": true,
+        "alternatives": [
+          {
+            "exercise": "hack_squat",
+            "label": "Hack Squat",
+            "option_id": "hack_squat",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "goblet_squat",
+            "label": "Goblet Squat",
+            "option_id": "goblet_squat",
+            "policy": "tracking_only"
+          }
+        ],
+        "default_policy": "tracking_only",
+        "primary": "squat"
+      },
       "identity": {
         "item_id": "squat.main",
         "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
         "progression_lane": "squat.main",
         "progression_rule": "531.main",
-        "rendered_session_hash": "sha256:dd9f286ecb9322c225a6364a732e1be16604011acf90f154340e9360149ebdd8",
+        "rendered_session_hash": "sha256:5bbab32d160eae1e5a61f2eb4fece2c6067cecbfd394b37eb9fe08a35f5e4ad9",
         "slot_id": "squat.main"
       },
       "item_id": "squat.main",
@@ -113,7 +132,7 @@
     }
   ],
   "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
-  "rendered_session_hash": "sha256:dd9f286ecb9322c225a6364a732e1be16604011acf90f154340e9360149ebdd8",
+  "rendered_session_hash": "sha256:5bbab32d160eae1e5a61f2eb4fece2c6067cecbfd394b37eb9fe08a35f5e4ad9",
   "schema_version": "0.1",
   "session_id": "squat_day",
   "suggested_date": null,

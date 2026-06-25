@@ -52,12 +52,31 @@
         "required_for_completion": true
       },
       "exercise": "squat",
+      "exercise_options": {
+        "allow_runtime_swap": true,
+        "alternatives": [
+          {
+            "exercise": "hack_squat",
+            "label": "Hack Squat",
+            "option_id": "hack_squat",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "goblet_squat",
+            "label": "Goblet Squat",
+            "option_id": "goblet_squat",
+            "policy": "tracking_only"
+          }
+        ],
+        "default_policy": "tracking_only",
+        "primary": "squat"
+      },
       "identity": {
         "item_id": "a1.t1",
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "squat.t1",
         "progression_rule": "gzcl.t1",
-        "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
+        "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
         "slot_id": "a1.t1"
       },
       "item_id": "a1.t1",
@@ -188,12 +207,37 @@
         "required_for_completion": true
       },
       "exercise": "bench",
+      "exercise_options": {
+        "allow_runtime_swap": true,
+        "alternatives": [
+          {
+            "exercise": "dumbbell_bench",
+            "label": "Dumbbell Bench",
+            "option_id": "dumbbell_bench",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "dumbbell_incline",
+            "label": "Dumbbell Incline",
+            "option_id": "dumbbell_incline",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "incline_bench",
+            "label": "Incline Bench",
+            "option_id": "incline_bench",
+            "policy": "tracking_only"
+          }
+        ],
+        "default_policy": "tracking_only",
+        "primary": "bench"
+      },
       "identity": {
         "item_id": "a1.t2",
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "bench.t2",
         "progression_rule": "gzcl.t2",
-        "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
+        "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
         "slot_id": "a1.t2"
       },
       "item_id": "a1.t2",
@@ -304,7 +348,7 @@
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "lat_pulldown.t3",
         "progression_rule": "gzcl.t3",
-        "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
+        "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
         "slot_id": "a1.t3"
       },
       "item_id": "a1.t3",
@@ -341,7 +385,7 @@
     }
   ],
   "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
-  "rendered_session_hash": "sha256:d835059f8ae8baef2603c610ce462a072976101ce56f24b9fdd4a10a0a41b5d3",
+  "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
   "schema_version": "0.1",
   "session_id": "a1",
   "suggested_date": null,

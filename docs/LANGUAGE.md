@@ -169,6 +169,19 @@ exercise_options {
 `policy` is `tracking_only` (default) or `progression_equivalent`. A bare alternative node (no
 `alternatives { }` wrapper) is also accepted.
 
+**Built-in swaps.** Every template ships default, `tracking_only` swaps for the main barbell
+lifts, so they always carry approved alternatives even when you don't author `exercise_options`:
+
+| Lift | Built-in alternatives |
+| --- | --- |
+| `squat` | Hack Squat, Goblet Squat |
+| `bench` | Dumbbell Bench, Dumbbell Incline, Incline Bench |
+| `deadlift` | Romanian Deadlift, Dumbbell Romanian Deadlift |
+| `press` | Dumbbell Press, Landmine Press |
+
+An `exercise_options` entry for a slot replaces the built-in list for that slot — author it when you
+want to curate, extend, or suppress the defaults.
+
 ---
 
 ## Patch files (`patches/*.fitspec`) — Implemented

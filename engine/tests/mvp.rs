@@ -193,6 +193,132 @@ fn gzclp_accessory_start_seeds_t3_lane() {
 }
 
 #[test]
+fn main_lifts_carry_builtin_swap_alternatives() {
+    let compiled = compiled_gzclp();
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+
+    // A1 session: squat (t1), bench (t2), lat_pulldown accessory (t3).
+    let squat = rendered
+        .items
+        .iter()
+        .find(|item| item.item_id == "a1.t1")
+        .unwrap();
+    let squat_options = squat.exercise_options.as_ref().unwrap();
+    assert_eq!(squat_options.primary, "squat");
+    let squat_swaps: Vec<&str> = squat_options
+        .alternatives
+        .iter()
+        .map(|alt| alt.exercise.as_str())
+        .collect();
+    assert_eq!(squat_swaps, ["hack_squat", "goblet_squat"]);
+    assert!(
+        squat_options
+            .alternatives
+            .iter()
+            .all(|alt| alt.policy == knurled_core::SwapPolicy::TrackingOnly)
+    );
+
+    let bench = rendered
+        .items
+        .iter()
+        .find(|item| item.item_id == "a1.t2")
+        .unwrap();
+    let bench_swaps: Vec<&str> = bench
+        .exercise_options
+        .as_ref()
+        .unwrap()
+        .alternatives
+        .iter()
+        .map(|alt| alt.exercise.as_str())
+        .collect();
+    assert_eq!(
+        bench_swaps,
+        ["dumbbell_bench", "dumbbell_incline", "incline_bench"]
+    );
+
+    // The T3 accessory is not a main barbell lift, so it gets no built-in swaps
+    // unless the plan curates them.
+    let accessory = rendered
+        .items
+        .iter()
+        .find(|item| item.item_id == "a1.t3")
+        .unwrap();
+    assert!(accessory.exercise_options.is_none());
+
+    // Press and deadlift land in the B1 session.
+    let b1 = render_next(
+        &compiled,
+        &reduce_input(
+            &compiled,
+            &state,
+            &rendered,
+            &synthetic_execution_input(&rendered, "all-pass", 0),
+        )
+        .unwrap()
+        .new_state,
+    )
+    .unwrap();
+    let press_swaps: Vec<&str> = b1
+        .items
+        .iter()
+        .find(|item| item.item_id == "b1.t1")
+        .unwrap()
+        .exercise_options
+        .as_ref()
+        .unwrap()
+        .alternatives
+        .iter()
+        .map(|alt| alt.exercise.as_str())
+        .collect();
+    assert_eq!(press_swaps, ["dumbbell_press", "landmine_press"]);
+    let deadlift_swaps: Vec<&str> = b1
+        .items
+        .iter()
+        .find(|item| item.item_id == "b1.t2")
+        .unwrap()
+        .exercise_options
+        .as_ref()
+        .unwrap()
+        .alternatives
+        .iter()
+        .map(|alt| alt.exercise.as_str())
+        .collect();
+    assert_eq!(deadlift_swaps, ["rdl", "dumbbell_rdl"]);
+}
+
+#[test]
+fn plan_exercise_options_override_builtin_swaps() {
+    let plan = gzclp_plan().replace(
+        "  accessories {\n    A1.T3 lat_pulldown\n    B1.T3 barbell_row\n    A2.T3 lat_pulldown\n    B2.T3 barbell_row\n  }\n",
+        "  accessories {\n    A1.T3 lat_pulldown\n    B1.T3 barbell_row\n    A2.T3 lat_pulldown\n    B2.T3 barbell_row\n  }\n\n  exercise_options {\n    slot \"A1.T2\" {\n      primary bench\n      close_grip_bench { label \"Close-Grip Bench\"; policy progression_equivalent }\n    }\n  }\n",
+    );
+    let lock = render_lockfile("gzcl.gzclp@1.0.0").unwrap();
+    let compiled = compile_plan(&plan, &lock, &[]).unwrap();
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+
+    let bench = rendered
+        .items
+        .iter()
+        .find(|item| item.item_id == "a1.t2")
+        .unwrap();
+    let swaps: Vec<&str> = bench
+        .exercise_options
+        .as_ref()
+        .unwrap()
+        .alternatives
+        .iter()
+        .map(|alt| alt.exercise.as_str())
+        .collect();
+    assert_eq!(
+        swaps,
+        ["close_grip_bench"],
+        "a plan's curated options replace the built-in defaults for that slot"
+    );
+}
+
+#[test]
 fn gzclp_first_accessory_attempt_sets_or_progresses_lane_load() {
     let compiled = compiled_gzclp();
     let state = create_initial_state(&compiled);
