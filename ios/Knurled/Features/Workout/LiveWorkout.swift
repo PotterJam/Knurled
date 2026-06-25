@@ -15,11 +15,6 @@ enum AdjustScope: CaseIterable, Hashable {
     }
 }
 
-enum SkippedExerciseState: Equatable {
-    case skipped
-    case partial
-}
-
 @MainActor
 @Observable
 final class LiveSet: Identifiable {
@@ -62,10 +57,6 @@ final class LiveItem: Identifiable {
     var performedExercise: String?
     var swapLabel: String?
     var swapPolicy: SwapPolicy?
-    /// When true the exercise is skipped for this session: it drops out of the active cursor
-    /// (so the next set everywhere becomes the one after it) and is excluded from the inputs
-    /// sent to the engine. A skipped *required* exercise keeps the finish a partial (§24).
-    var skipped: Bool = false
 
     init(item: RenderedItem) {
         self.id = item.itemId
@@ -80,13 +71,9 @@ final class LiveItem: Identifiable {
     var isAmrap: Bool { item.executionContract.recommendedInput == InputMode.amrapFinalSet }
     var required: Bool { item.executionContract.requiredForCompletion }
     var prescribedLoad: String? { item.prescription.sets.first?.load }
-    var isComplete: Bool { !skipped && sets.allSatisfy(\.logged) }
+    var isComplete: Bool { sets.allSatisfy(\.logged) }
     var anyLogged: Bool { sets.contains(where: \.logged) }
-    var anyWarmupActivity: Bool { warmups.contains { $0.logged || $0.bypassed } }
-    var anyActivity: Bool { anyLogged || anyWarmupActivity }
     var isAdjusted: Bool { sets.contains(where: \.isAdjusted) }
-    var loggedCount: Int { sets.filter(\.logged).count }
-    var skippedState: SkippedExerciseState { anyActivity ? .partial : .skipped }
     var visibleWarmups: [LiveSet] {
         guard warmups.contains(where: \.logged) else { return warmups }
         return warmups.filter { !$0.bypassed }
@@ -229,10 +216,15 @@ final class LiveWorkout: Identifiable {
     }
 
     func executionInput(status: String, timestamp: String) -> ExecutionInput {
+        // An exercise the user never started is simply omitted (its equipment may have been busy,
+        // or they chose to leave it out) — the same effect skipping used to have. A fully logged
+        // exercise sends its real input; one only partially logged sends just the sets recorded.
         let isComplete = status == ExecutionStatus.complete
-        let inputs = isComplete
-            ? items.filter { !$0.skipped }.map { $0.itemInput() }
-            : items.filter(\.anyLogged).map { $0.partialInput() }
+        let inputs: [ItemInput] = items.compactMap { item in
+            if isComplete, item.isComplete { return item.itemInput() }
+            if item.anyLogged { return item.partialInput() }
+            return nil
+        }
         return ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
             status: status,

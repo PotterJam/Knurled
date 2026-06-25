@@ -32,37 +32,40 @@ struct LiveExerciseCard: View {
                 .foregroundStyle(.orange)
             }
 
-            if live.skipped {
-                skippedBody
-            } else {
-                if live.hasWarmups { warmupSection }
+            if live.hasWarmups { warmupSection }
 
-                VStack(spacing: 6) {
-                    ForEach(live.sets) { set in
-                        SetRowView(
-                            set: set,
-                            isAmrap: live.isAmrap,
-                            isLastSet: set.id == live.sets.last?.id,
-                            isCurrent: controller.isCurrent(set),
-                            onEdit: { editingSet = set },
-                            onLogged: { controller.didLogSetInApp(item: live) },
-                            onChanged: { controller.modelChanged() }
-                        )
-                        if set.id != live.sets.last?.id { Divider() }
-                    }
+            VStack(spacing: 6) {
+                ForEach(live.sets) { set in
+                    SetRowView(
+                        set: set,
+                        isAmrap: live.isAmrap,
+                        isLastSet: set.id == live.sets.last?.id,
+                        isCurrent: controller.isCurrent(set),
+                        onEdit: { editingSet = set },
+                        onLogged: { controller.didLogSetInApp(item: live) },
+                        onChanged: { controller.modelChanged() }
+                    )
+                    if set.id != live.sets.last?.id { Divider() }
                 }
-
-                footer
             }
+
+            footer
         }
         .knurledCard()
-        .opacity(live.skipped ? 0.55 : (isCurrentExercise ? 1 : 0.7))
+        .opacity(isCurrentExercise ? 1 : 0.7)
         .overlay {
             if isCurrentExercise {
                 RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
                     .strokeBorder(palette.accent, lineWidth: 2)
             }
         }
+        // Tapping an unfocused, unfinished card jumps the cursor onto it — the way to do exercises
+        // out of order (e.g. when the equipment you wanted is busy) now that there's no skip.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isCurrentExercise && !live.isComplete { controller.focus(live) }
+        }
+        .accessibilityHint(isCurrentExercise || live.isComplete ? "" : "Double tap to work on this exercise next")
         .sheet(isPresented: $showAdjust) { AdjustTodaySheet(live: live) }
         .sheet(isPresented: $showSwap) { SwapExerciseSheet(live: live) }
         .sheet(item: $editingSet) { set in SetDetailSheet(set: set) }
@@ -119,40 +122,12 @@ struct LiveExerciseCard: View {
             if live.isComplete {
                 Label("Done", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
-            } else {
-                Button(role: .destructive) {
-                    controller.setSkipped(live, true)
-                } label: {
-                    Label("Skip", systemImage: "forward.end")
-                }
-                .buttonStyle(.borderless)
+            } else if !isCurrentExercise {
+                Label("Tap to do next", systemImage: "hand.tap")
+                    .foregroundStyle(.secondary)
             }
         }
         .font(.footnote)
-    }
-
-    private var skippedBody: some View {
-        HStack(spacing: 12) {
-            Label(skippedTitle, systemImage: skippedSystemImage)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button {
-                controller.setSkipped(live, false)
-            } label: {
-                Label("Undo", systemImage: "arrow.uturn.backward")
-            }
-            .buttonStyle(.borderless)
-            .font(.footnote)
-        }
-    }
-
-    private var skippedTitle: String {
-        live.skippedState == .partial ? "Partial" : "Skipped"
-    }
-
-    private var skippedSystemImage: String {
-        live.skippedState == .partial ? "circle.lefthalf.filled" : "forward.end.fill"
     }
 
     private var swapPolicyText: String {
