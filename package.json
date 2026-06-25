@@ -7,9 +7,11 @@
     "test": "cargo test --workspace",
     "test:workbench": "node --test workbench/test/*.mjs",
     "serve": "cargo run -p knurled-cli -- serve",
+    "dev:workbench": "npm --prefix workbench run dev",
     "build:example": "cargo run -p knurled-cli -- build examples/gzclp-repo",
-    "build:workbench": "bash workbench/scripts/build-wasm.sh",
-    "deploy:workbench": "npx wrangler pages deploy workbench",
-    "deploy:workbench:preview": "npx wrangler pages deploy workbench --branch preview"
+    "build:wasm": "bash workbench/scripts/build-wasm.sh",
+    "build:workbench": "npm --prefix workbench install && npm --prefix workbench run build",
+    "deploy:workbench": "npm run build:workbench && npx wrangler pages deploy workbench/dist",
+    "deploy:workbench:preview": "npm run build:workbench && npx wrangler pages deploy workbench/dist --branch preview"
   }
 }

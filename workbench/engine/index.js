@@ -4,6 +4,12 @@
 //
 // The engine is the single source of truth: validation, build, simulation, and
 // history import all run here in Rust-compiled WASM, never reimplemented in JS.
+//
+// The `.wasm` is imported with Vite's `?url` suffix and handed to `init`
+// explicitly. This is the reliable way to load a wasm-bindgen `--target web`
+// package under Vite: Vite emits the binary as a hashed asset and gives us its
+// final URL, instead of relying on the glue's `new URL(..., import.meta.url)`
+// guess. The committed package in ./pkg/ keeps the site a zero-Rust static build.
 import init, {
   validate as wasmValidate,
   build as wasmBuild,
@@ -13,13 +19,14 @@ import init, {
   lock_for as wasmLockFor,
   engine_version as wasmEngineVersion,
 } from "./pkg/knurled_engine.js";
+import wasmUrl from "./pkg/knurled_engine_bg.wasm?url";
 
 let ready = null;
 
 /** Boots the WASM engine once; subsequent calls await the same promise. */
 export function initEngine() {
   if (!ready) {
-    ready = init().then(() => true);
+    ready = init({ module_or_path: wasmUrl }).then(() => true);
   }
   return ready;
 }

@@ -3,8 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.mjs",
-    "deploy:workbench": "npx wrangler pages deploy .",
-    "deploy:workbench:preview": "npx wrangler pages deploy . --branch preview"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.mjs"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.3"
+  },
+  "devDependencies": {
+    "vite": "^6.0.7",
+    "vite-plugin-solid": "^2.11.0"
   }
 }

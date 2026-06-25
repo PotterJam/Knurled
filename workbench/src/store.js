@@ -1,6 +1,14 @@
-// Single source of truth for the workbench. Holds the canonical plan text,
+// Single source of truth for the workbench document: the canonical plan text,
 // generated lock, patches, imported events, and UI/connection settings.
-// Persists to localStorage and notifies subscribers on change.
+//
+// Built on a SolidJS store so reads are fine-grained reactive — editing the raw
+// plan text only re-runs the computations that actually depend on it, instead of
+// re-rendering the whole shell (the old buildless version had to snapshot and
+// restore textarea selection because every keystroke rebuilt the DOM).
+//
+// State is persisted to localStorage and rehydrated on load.
+import { createRoot, createEffect } from "solid-js";
+import { createStore } from "solid-js/store";
 
 const KEY = "knurled.workbench.v2";
 
@@ -40,9 +48,6 @@ const defaults = () => ({
   ui: { historyNotice: null },
 });
 
-let state = load();
-const listeners = new Set();
-
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -53,29 +58,29 @@ function load() {
   return defaults();
 }
 
-function persist() {
-  try {
-    // Never persist the GitHub token outside its own dedicated key handling;
-    // here it lives only in localStorage on this device (spec §3A auth model).
-    localStorage.setItem(KEY, JSON.stringify(state));
-  } catch {
-    /* ignore quota / private-mode errors */
-  }
-}
+export const [state, setStore] = createStore(load());
 
-export function getState() {
-  return state;
-}
+// Persist on any change. Reading the whole tree via JSON.stringify subscribes the
+// effect to every property, so it re-runs whenever anything in the store changes.
+createRoot(() => {
+  createEffect(() => {
+    const snapshot = JSON.stringify(state);
+    try {
+      localStorage.setItem(KEY, snapshot);
+    } catch {
+      /* ignore quota / private-mode errors */
+    }
+  });
+});
 
+/** Merge a partial patch into the store at the top level (replacing given keys). */
 export function setState(patch) {
-  state = { ...state, ...patch };
-  persist();
-  emit();
+  setStore(patch);
 }
 
 export function resetPlan() {
   const next = defaults();
-  setState({
+  setStore({
     planText: next.planText,
     lock: next.lock,
     patches: next.patches,
@@ -83,13 +88,4 @@ export function resetPlan() {
     repoLabel: next.repoLabel,
     ui: next.ui,
   });
-}
-
-export function subscribe(fn) {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-function emit() {
-  for (const fn of listeners) fn(state);
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { commitFiles, loadRepo } from "../src/github.js";
+import { commitFiles, loadRepo } from "../src/lib/github.js";
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
