@@ -6,7 +6,8 @@ use crate::json::sha256_json;
 use crate::model::*;
 use crate::parser::{normalize_exercise, parse_lock, parse_patch, parse_plan};
 use crate::templates::{
-    builtin_template, lock_entry, parse_template_ref, template_display_name, template_hash,
+    builtin_template, default_exercise_alternatives, lock_entry, parse_template_ref,
+    template_display_name, template_hash,
 };
 
 const MAIN_LIFTS: [&str; 4] = ["squat", "bench", "press", "deadlift"];
@@ -1676,6 +1677,10 @@ fn rendered_item(
     slot: &TemplateSlot,
     spec: RenderedItemSpec<'_>,
 ) -> Result<RenderedItem> {
+    // A plan's own `exercise_options` for a slot win outright; otherwise fall
+    // back to the template's built-in swaps for the prescribed main lift, so the
+    // headline barbell lifts always carry approved alternatives even when the
+    // plan author never curated the slot.
     let exercise_options = compiled
         .exercise_options
         .get(&slot.slot_id.to_ascii_lowercase())
@@ -1684,6 +1689,15 @@ fn rendered_item(
             allow_runtime_swap: true,
             default_policy: SwapPolicy::TrackingOnly,
             alternatives: options.alternatives.clone(),
+        })
+        .or_else(|| {
+            let alternatives = default_exercise_alternatives(&spec.exercise);
+            (!alternatives.is_empty()).then(|| RenderedExerciseOptions {
+                primary: spec.exercise.clone(),
+                allow_runtime_swap: true,
+                default_policy: SwapPolicy::TrackingOnly,
+                alternatives,
+            })
         });
     Ok(RenderedItem {
         item_id: slot.slot_id.clone(),

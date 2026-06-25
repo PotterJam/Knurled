@@ -1,8 +1,8 @@
 use crate::error::{KnurledError, Result};
 use crate::json::sha256_json;
 use crate::model::{
-    BuiltinTemplate, ENGINE_VERSION, FiveThreeOneWeek, LockEntry, Map, RestPolicy,
-    TemplateIncrements, TemplateKind, TemplateLaneRules, TemplateSlot,
+    BuiltinTemplate, ENGINE_VERSION, ExerciseAlternative, FiveThreeOneWeek, LockEntry, Map,
+    RestPolicy, SwapPolicy, TemplateIncrements, TemplateKind, TemplateLaneRules, TemplateSlot,
 };
 
 pub const DEFAULT_TEMPLATE_VERSION: &str = "1.0.0";
@@ -94,6 +94,51 @@ pub fn template_display_name(id: &str) -> &str {
     builtin_template_info(id)
         .map(|info| info.display_name)
         .unwrap_or(id)
+}
+
+/// Built-in exercise swaps every template offers for the main barbell lifts,
+/// keyed by the resolved exercise name (`squat`/`bench`/`press`/`deadlift`).
+///
+/// These are the swaps a lifter always has on hand even when the plan author
+/// never spelled out `exercise_options` for a slot: a barbell bench can always
+/// be logged as a dumbbell bench, a deadlift as an RDL, and so on. A plan's own
+/// `exercise_options` for a slot take precedence over these defaults, so an
+/// author can still curate (or suppress) the list per slot.
+///
+/// All defaults are `tracking_only`: the substitute is recorded faithfully but
+/// does not drive the main lift's progression, since none of these movements
+/// loads identically to the barbell lift it stands in for.
+pub fn default_exercise_alternatives(exercise: &str) -> Vec<ExerciseAlternative> {
+    let alternatives: &[(&str, &str)] = match exercise.trim().to_ascii_lowercase().as_str() {
+        "bench" => &[
+            ("dumbbell_bench", "Dumbbell Bench"),
+            ("dumbbell_incline", "Dumbbell Incline"),
+            ("incline_bench", "Incline Bench"),
+        ],
+        "deadlift" => &[
+            ("rdl", "Romanian Deadlift"),
+            ("dumbbell_rdl", "Dumbbell Romanian Deadlift"),
+        ],
+        "squat" => &[
+            ("hack_squat", "Hack Squat"),
+            ("goblet_squat", "Goblet Squat"),
+        ],
+        "press" => &[
+            ("dumbbell_press", "Dumbbell Press"),
+            ("landmine_press", "Landmine Press"),
+        ],
+        _ => &[],
+    };
+
+    alternatives
+        .iter()
+        .map(|(exercise, label)| ExerciseAlternative {
+            option_id: (*exercise).to_owned(),
+            exercise: (*exercise).to_owned(),
+            label: (*label).to_owned(),
+            policy: SwapPolicy::TrackingOnly,
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
