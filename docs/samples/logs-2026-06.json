@@ -1,0 +1,31 @@
+{
+  "month": "2026-06",
+  "days": [
+    {
+      "date": "2026-06-22",
+      "program": "gzcl.gzclp",
+      "note": "starting novice LP"
+    },
+    {
+      "date": "2026-06-24",
+      "lifts": [
+        { "exercise": "squat", "weight": "82.5kg", "sets": [5, 5, 7] },
+        { "exercise": "bench", "weight": "45kg", "sets": [10, 10, 8] },
+        { "exercise": "lat_pulldown", "weight": "45kg", "sets": [15, 15, 22] }
+      ]
+    },
+    {
+      "date": "2026-06-26",
+      "lifts": [
+        { "exercise": "squat", "weight": "85kg", "sets": [5, 5, 3] },
+        { "exercise": "bench", "weight": "47.5kg", "sets": [10, 10, 9], "note": "felt strong" }
+      ]
+    },
+    {
+      "date": "2026-06-28",
+      "lifts": [
+        { "exercise": "squat", "weight": "70kg", "sets": [5, 5, 5], "note": "felt beat up — backed off (off day)" }
+      ]
+    }
+  ]
+}
