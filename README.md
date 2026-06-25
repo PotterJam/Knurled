@@ -58,17 +58,22 @@ adding or removing source files. See [`ios/README.md`](ios/README.md) for the fu
 
 ## Workbench
 
-The workbench is a **static, buildless site** that runs the real Rust engine in the
-browser via WebAssembly — it never reimplements progression logic in JS. The WASM
-artifacts in `workbench/engine/pkg/` are committed, so simply serving the `workbench/`
-directory (GitHub Pages, Cloudflare Pages, `knurled serve`, or any static host) works
-with no build step.
+The workbench is a **Vite + SolidJS** single-page app that runs the real Rust engine in
+the browser via WebAssembly — it never reimplements progression logic in JS. The WASM
+artifacts in `workbench/engine/pkg/` are committed, so the static site bundles with no
+Rust toolchain at site-build time; Vite emits the `.wasm` as a hashed asset.
+
+```bash
+npm run dev:workbench      # Vite dev server with hot reload
+npm run build:workbench    # build the static site into workbench/dist/
+cargo run -p knurled-cli -- serve --port 4321   # serve workbench/dist/ (build first)
+```
 
 `workbench/engine-wasm/` is a standalone wasm-bindgen crate (kept out of the root Cargo
 workspace, like the iOS FFI crate) that marshals the engine's in-memory functions —
 `compile_plan`, `build_outputs`, `simulate`, `history_import_events_from_str` — to the
-browser. The front-end (`workbench/src/`) is the only TypeScript-free, framework-free UI
-layer; all validation, build, simulation, and history import run in the engine.
+browser. The SolidJS front-end (`workbench/src/`) is purely UI and GitHub/file-workflow
+code; all validation, build, simulation, and history import run in the engine.
 
-See [`workbench/README.md`](workbench/README.md) for local serving, WASM rebuilds,
+See [`workbench/README.md`](workbench/README.md) for the dev server, WASM rebuilds,
 and Cloudflare Pages deployment.

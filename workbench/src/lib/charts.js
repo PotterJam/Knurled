@@ -1,5 +1,5 @@
-// Tiny dependency-free inline-SVG charts. Keeps the workbench buildless — no
-// charting library, no node_modules.
+// Tiny dependency-free inline-SVG charts — no charting library. Returns SVG
+// markup as a string; views render it via `innerHTML`.
 
 const NS = "http://www.w3.org/2000/svg";
 

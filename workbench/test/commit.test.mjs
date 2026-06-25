@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildCommitPlan } from "../src/commit.mjs";
+import { buildCommitPlan } from "../src/lib/commit.mjs";
 
 test("buildCommitPlan includes canonical and generated workbench files", () => {
   const state = {

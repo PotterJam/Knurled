@@ -189,7 +189,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn serve(port: u16) -> Result<(), Box<dyn std::error::Error>> {
-    let workbench = Path::new(env!("CARGO_MANIFEST_DIR")).join("../workbench");
+    // Serves the Vite build output. Run `npm run build:workbench` first (or use
+    // `npm run dev:workbench` for the hot-reloading dev server instead).
+    let workbench = Path::new(env!("CARGO_MANIFEST_DIR")).join("../workbench/dist");
+    if !workbench.exists() {
+        return Err(format!(
+            "workbench build not found at {}\nRun `npm run build:workbench` first, or use `npm run dev:workbench` for development.",
+            workbench.display()
+        )
+        .into());
+    }
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     println!("Knurled workbench: http://localhost:{port}");
 
