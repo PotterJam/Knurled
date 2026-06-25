@@ -273,9 +273,8 @@ pub fn render_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
 }
 
 /// Renders a specific session by id against the current state, independent of where the cursor
-/// currently points. A partial save advances the cursor to the next workout, so the snapshot a
-/// saved partial was logged against is no longer the "next" one — this lets the app re-render it
-/// to be resumed from history (§16/§19).
+/// currently points. Saved partials store their session id in the record, so the app can
+/// re-render that specific session when the user continues from history.
 pub fn render_session(
     compiled: &CompiledPlan,
     state: &StateProjection,
@@ -350,6 +349,16 @@ pub fn reduce_input(
         });
     }
 
+    if input.status == "partial" {
+        return Ok(ReductionResult {
+            validation,
+            results: Vec::new(),
+            effects: Vec::new(),
+            new_state: state.clone(),
+            next_workout: rendered_session.clone(),
+        });
+    }
+
     let mut new_state = state.clone();
     let mut results = Vec::new();
     let mut effects = Vec::new();
@@ -367,10 +376,8 @@ pub fn reduce_input(
     }
 
     apply_effects(&mut new_state, &effects);
-    // Advance to the next workout whenever the cursor is still sitting on the session being
-    // submitted — for a complete *or* a partial save (§16). Guarding on the cursor keeps this
-    // idempotent: continuing a saved partial (whose save already advanced the cursor) does not
-    // advance a second time.
+    // Advance to the next workout whenever the cursor is still sitting on the completed session
+    // being submitted. Partial saves returned earlier without moving state.
     if new_state
         .cursor
         .next_session
@@ -749,6 +756,13 @@ fn compute_warmups(
             &spec.exercise,
             parsed.value * (step.percentage as f64) / 100.0,
         );
+        if sets
+            .last()
+            .and_then(|set| set.load.as_deref())
+            .is_some_and(|load| value <= parse_load(load).value)
+        {
+            continue;
+        }
         sets.push(PrescribedSet {
             set: index,
             load: Some(format_load(value, parsed.unit)),
@@ -846,23 +860,20 @@ fn pick_warmup(
 /// lockfiles. A plan's own `warmup { … }` block overrides them.
 fn template_warmup_defaults(kind: &TemplateKind) -> WarmupPolicy {
     match kind {
-        // GZCLP / Starting Strength: Bay-Strength novice ramp — two empty-bar
-        // sets, then 45/65/85% of the work weight for 5/3/2.
+        // GZCLP / Starting Strength: compact novice ramp — one empty-bar set,
+        // then 65/80% of the work weight. Rendering skips a ramp step when it
+        // snaps to the same load as the previous warmup.
         TemplateKind::Gzclp | TemplateKind::StartingStrength => WarmupPolicy {
             default: Some(WarmupScheme {
-                empty_bar_sets: 2,
+                empty_bar_sets: 1,
                 empty_bar_reps: 5,
                 ramp: vec![
-                    WarmupStep {
-                        percentage: 45,
-                        reps: 5,
-                    },
                     WarmupStep {
                         percentage: 65,
                         reps: 3,
                     },
                     WarmupStep {
-                        percentage: 85,
+                        percentage: 80,
                         reps: 2,
                     },
                 ],

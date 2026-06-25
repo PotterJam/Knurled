@@ -81,6 +81,43 @@ import Foundation
         #expect(outcome.effects.contains { $0.op == "reset_load" && $0.to == "70kg" })
     }
 
+    @Test func partialSubmitWritesResumeMetadataWithoutProgressingState() async throws {
+        let (dir, repo, app, session, _) = try await Self.fixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let first = try #require(session.items.first)
+        let beforeLoad = repo.state?.lanes["squat.t1"]?.load
+        let input = ExecutionInput(
+            renderedSessionHash: session.renderedSessionHash,
+            status: ExecutionStatus.partial,
+            startedAt: "2026-06-24T10:00:00Z",
+            savedAt: "2026-06-24T10:45:00Z",
+            inputs: [
+                ItemInput(
+                    itemId: first.itemId,
+                    mode: InputMode.perSetReps,
+                    sets: [
+                        ActualSet(set: 1, load: first.prescription.sets.first?.load, reps: 5),
+                    ]
+                ),
+            ]
+        )
+
+        let outcome = try await app.submit(
+            session: session,
+            input: input,
+            mode: SubmitMode.advance,
+            in: repo,
+            timestamp: "2026-06-24T10:45:00Z"
+        )
+
+        #expect(outcome.validation.isValid)
+        #expect(outcome.recordDay.status == ExecutionStatus.partial)
+        #expect(outcome.recordDay.sessionId == session.sessionId)
+        #expect(outcome.recordDay.lifts.first?.itemId == first.itemId)
+        #expect(repo.state?.lanes["squat.t1"]?.load == beforeLoad)
+        #expect(repo.state?.cursor.nextSession == session.sessionId)
+    }
+
     private static func fixture() async throws -> (
         dir: URL,
         repo: ActiveRepo,

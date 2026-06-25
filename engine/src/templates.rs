@@ -96,8 +96,8 @@ pub fn template_display_name(id: &str) -> &str {
         .unwrap_or(id)
 }
 
-/// Built-in exercise swaps every template offers for the main barbell lifts,
-/// keyed by the resolved exercise name (`squat`/`bench`/`press`/`deadlift`).
+/// Built-in exercise swaps every template offers for common starter lifts,
+/// keyed by the resolved exercise name.
 ///
 /// These are the swaps a lifter always has on hand even when the plan author
 /// never spelled out `exercise_options` for a slot: a barbell bench can always
@@ -126,6 +126,16 @@ pub fn default_exercise_alternatives(exercise: &str) -> Vec<ExerciseAlternative>
         "press" => &[
             ("dumbbell_press", "Dumbbell Press"),
             ("landmine_press", "Landmine Press"),
+        ],
+        "lat_pulldown" => &[
+            ("pull_up", "Pull-up"),
+            ("chin_up", "Chin-up"),
+            ("neutral_grip_pulldown", "Neutral-Grip Pulldown"),
+        ],
+        "barbell_row" => &[
+            ("dumbbell_row", "DB Row"),
+            ("cable_row", "Cable Row"),
+            ("chest_supported_row", "Chest-Supported Row"),
         ],
         _ => &[],
     };

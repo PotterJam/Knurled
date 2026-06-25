@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{create_initial_state, reduce_input, render_next, synthetic_execution_input};
 use crate::error::Result;
-use crate::model::{CompiledPlan, Effect, ENGINE_VERSION, StateProjection};
+use crate::model::{CompiledPlan, ENGINE_VERSION, Effect, StateProjection};
 use crate::parser::normalize_exercise;
 use crate::record::DayRecord;
 
@@ -153,9 +153,15 @@ mod tests {
             let rendered = render_next(&compiled, &state).unwrap();
             let input = synthetic_execution_input(&rendered, "pass", i);
             let date = format!("2026-06-0{}", i + 1);
-            let outcome =
-                submit_session(&compiled, &state, &rendered, &input, SubmitMode::Advance, &date)
-                    .unwrap();
+            let outcome = submit_session(
+                &compiled,
+                &state,
+                &rendered,
+                &input,
+                SubmitMode::Advance,
+                &date,
+            )
+            .unwrap();
             days.push(outcome.record_day.clone());
             state = outcome.new_state;
         }

@@ -3,8 +3,7 @@ import SwiftUI
 struct LiveExerciseCard: View {
     let live: LiveItem
     let controller: WorkoutLiveController
-    @State private var showAdjust = false
-    @State private var showSwap = false
+    @State private var showChange = false
     @State private var editingSet: LiveSet?
 
     @Environment(\.knurledPalette) private var palette
@@ -66,8 +65,11 @@ struct LiveExerciseCard: View {
             if !isCurrentExercise && !live.isComplete { controller.focus(live) }
         }
         .accessibilityHint(isCurrentExercise || live.isComplete ? "" : "Double tap to work on this exercise next")
-        .sheet(isPresented: $showAdjust) { AdjustTodaySheet(live: live) }
-        .sheet(isPresented: $showSwap) { SwapExerciseSheet(live: live) }
+        .sheet(isPresented: $showChange) {
+            ChangeExerciseSheet(live: live) {
+                controller.modelChanged()
+            }
+        }
         .sheet(item: $editingSet) { set in SetDetailSheet(set: set) }
     }
 
@@ -108,16 +110,10 @@ struct LiveExerciseCard: View {
 
     @ViewBuilder private var footer: some View {
         HStack(spacing: 16) {
-            Button { showAdjust = true } label: {
-                Label("Adjust today", systemImage: "slider.horizontal.3")
+            Button { showChange = true } label: {
+                Label("Change", systemImage: "slider.horizontal.3")
             }
             .buttonStyle(.borderless)
-            if live.canSwap {
-                Button { showSwap = true } label: {
-                    Label("Swap", systemImage: "arrow.triangle.2.circlepath")
-                }
-                .buttonStyle(.borderless)
-            }
             Spacer()
             if live.isComplete {
                 Label("Done", systemImage: "checkmark.circle.fill")

@@ -32,7 +32,11 @@ struct HistoryHomeView: View {
             )
         } else {
             List(items) { item in
-                HistoryRow(item: item)
+                NavigationLink {
+                    HistoryDetailView(item: item)
+                } label: {
+                    HistoryRow(item: item)
+                }
             }
             .listStyle(.plain)
         }

@@ -46,28 +46,44 @@ struct FinishWorkoutView: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .navigationTitle("\(workout.session.displayName) Complete")
+            .navigationTitle(navigationTitle)
             .task { await compute() }
         }
+    }
+
+    private var navigationTitle: String {
+        isComplete ? "\(workout.session.displayName) Complete" : "Save \(workout.session.displayName)"
+    }
+
+    private var submitTitle: String {
+        isComplete ? "Submit Workout" : "Save Progress"
     }
 
     private func previewContent(_ outcome: ReductionResult) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: KnurledTheme.Spacing.l) {
-                Picker("Submit mode", selection: $mode) {
-                    ForEach(SubmitMode.allCases, id: \.self) { option in
-                        Text(option.title).tag(option)
+                if isComplete {
+                    Picker("Submit mode", selection: $mode) {
+                        ForEach(SubmitMode.allCases, id: \.self) { option in
+                            Text(option.title).tag(option)
+                        }
                     }
-                }
-                .pickerStyle(.segmented)
+                    .pickerStyle(.segmented)
 
-                Text(mode.subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Text(mode.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Logged sets will be saved without applying progression.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
                     Text("Effects").font(.headline)
-                    if mode == .advance {
+                    if !isComplete {
+                        Text("No progression changes.").foregroundStyle(.secondary)
+                    } else if mode == .advance {
                         ForEach(Array(outcome.results.enumerated()), id: \.offset) { _, result in
                             EffectResultRow(result: result, title: title(forSlot: result.slotId))
                         }
@@ -81,17 +97,19 @@ struct FinishWorkoutView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Next").font(.headline)
-                    Text(outcome.nextWorkout.displayName)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                if isComplete {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Next").font(.headline)
+                        Text(outcome.nextWorkout.displayName)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Button {
                     Task { await submit(outcome) }
                 } label: {
-                    Label("Submit Workout", systemImage: "arrow.up.circle.fill")
+                    Label(submitTitle, systemImage: "arrow.up.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)

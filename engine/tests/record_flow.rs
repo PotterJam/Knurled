@@ -3,11 +3,11 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use knurled_core::{
-    backtest_records_repo, init_training_repo, read_records, read_state, read_training_repo,
-    render_next, submit_repo, synthetic_execution_input, ValidationStatus,
-};
 use knurled_core::session::SubmitMode;
+use knurled_core::{
+    ValidationStatus, backtest_records_repo, init_training_repo, read_records, read_state,
+    read_training_repo, render_next, submit_repo, synthetic_execution_input,
+};
 
 fn temp_repo(name: &str) -> std::path::PathBuf {
     let nanos = SystemTime::now()

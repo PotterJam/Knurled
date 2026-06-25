@@ -41,8 +41,7 @@ final class LiveSet: Identifiable {
     }
 
     var isAdjusted: Bool {
-        guard let load, let prescribedLoad = prescribed.load else { return false }
-        return load != prescribedLoad
+        load != prescribed.load
     }
 }
 
@@ -51,6 +50,7 @@ final class LiveSet: Identifiable {
 final class LiveItem: Identifiable {
     let id: String
     let item: RenderedItem
+    let units: Units
     var warmups: [LiveSet]
     var sets: [LiveSet]
     var todayLoad: String?
@@ -58,9 +58,10 @@ final class LiveItem: Identifiable {
     var swapLabel: String?
     var swapPolicy: SwapPolicy?
 
-    init(item: RenderedItem) {
+    init(item: RenderedItem, units: Units) {
         self.id = item.itemId
         self.item = item
+        self.units = units
         self.warmups = item.prescription.warmups.map { LiveSet(prescribed: $0, defaultLoad: $0.load, isWarmup: true) }
         self.sets = item.prescription.sets.map { LiveSet(prescribed: $0, defaultLoad: $0.load) }
     }
@@ -71,6 +72,7 @@ final class LiveItem: Identifiable {
     var isAmrap: Bool { item.executionContract.recommendedInput == InputMode.amrapFinalSet }
     var required: Bool { item.executionContract.requiredForCompletion }
     var prescribedLoad: String? { item.prescription.sets.first?.load }
+    var currentLoad: String? { todayLoad ?? sets.first?.load ?? prescribedLoad }
     var isComplete: Bool { sets.allSatisfy(\.logged) }
     var anyLogged: Bool { sets.contains(where: \.logged) }
     var isAdjusted: Bool { sets.contains(where: \.isAdjusted) }
@@ -92,6 +94,7 @@ final class LiveItem: Identifiable {
         performedExercise = alternative.exercise
         swapLabel = alternative.label
         swapPolicy = alternative.policy
+        ensureBaseLoad(for: alternative.exercise)
     }
 
     func clearSwap() {
@@ -100,8 +103,42 @@ final class LiveItem: Identifiable {
         swapPolicy = nil
     }
 
+    func ensureBaseLoad(for exercise: String? = nil) {
+        guard sets.allSatisfy({ $0.load == nil }) else { return }
+        adjust(
+            load: Self.defaultBaseLoad(for: exercise ?? performedExercise ?? item.exercise, units: units),
+            scope: .wholeExercise,
+            from: sets.first?.id ?? 1
+        )
+    }
+
+    func restore(from lift: LiftRecord) {
+        if Self.normalized(lift.exercise) != Self.normalized(item.exercise) {
+            performedExercise = lift.exercise
+            if let alternative = item.exerciseOptions?.alternatives.first(where: {
+                Self.normalized($0.exercise) == Self.normalized(lift.exercise)
+            }) {
+                swapLabel = alternative.label
+                swapPolicy = alternative.policy
+            }
+        }
+
+        if let weight = lift.weight {
+            adjust(load: weight, scope: .wholeExercise, from: sets.first?.id ?? 1)
+        }
+
+        for (index, reps) in lift.sets.enumerated() where index < sets.count {
+            sets[index].reps = reps
+            sets[index].logged = true
+        }
+    }
+
     static func titleCase(_ exercise: String) -> String {
         exercise.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    static func normalized(_ exercise: String) -> String {
+        exercise.replacingOccurrences(of: " ", with: "_").lowercased()
     }
 
     func adjust(load: String?, scope: AdjustScope, from setNumber: Int) {
@@ -114,6 +151,25 @@ final class LiveItem: Identifiable {
             for set in sets { set.load = load }
         }
         todayLoad = load
+    }
+
+    static func defaultBaseLoad(for exercise: String, units: Units) -> String {
+        if isBodyweightExercise(exercise) {
+            return "0\(units.rawValue)"
+        }
+
+        return switch units {
+        case .kg: "20kg"
+        case .lb: "45lb"
+        }
+    }
+
+    static func isBodyweightExercise(_ exercise: String) -> Bool {
+        let normalized = normalized(exercise)
+        return normalized.contains("pull_up")
+            || normalized.contains("pullup")
+            || normalized.contains("chin_up")
+            || normalized.contains("chinup")
     }
 
     /// Optional work that was started but not completed still sends its logged sets, so a user
@@ -165,11 +221,41 @@ final class LiveWorkout: Identifiable {
     let startedAt: String
     var items: [LiveItem]
 
-    init(repo: ActiveRepo, session: RenderedSession) {
+    init(repo: ActiveRepo, session: RenderedSession, restoring record: DayRecord? = nil) {
         self.repo = repo
         self.session = session
-        self.startedAt = Self.timestamp()
-        self.items = session.items.map { LiveItem(item: $0) }
+        self.startedAt = record?.savedAt ?? Self.timestamp()
+        let units = repo.plan?.plan.units ?? .kg
+        self.items = session.items.map { LiveItem(item: $0, units: units) }
+        if let record { restore(record) }
+    }
+
+    private func restore(_ record: DayRecord) {
+        var restoredItemIDs = Set<String>()
+        for lift in record.lifts {
+            guard let item = item(matching: lift, excluding: restoredItemIDs) else { continue }
+            item.restore(from: lift)
+            restoredItemIDs.insert(item.id)
+        }
+    }
+
+    private func item(matching lift: LiftRecord, excluding restoredItemIDs: Set<String>) -> LiveItem? {
+        if let itemID = lift.itemId,
+           let exact = items.first(where: { $0.id == itemID }) {
+            return exact
+        }
+        let exercise = Self.normalized(lift.exercise)
+        return items.first {
+            if restoredItemIDs.contains($0.id) { return false }
+            if Self.normalized($0.item.exercise) == exercise { return true }
+            return $0.item.exerciseOptions?.alternatives.contains {
+                Self.normalized($0.exercise) == exercise
+            } == true
+        }
+    }
+
+    private static func normalized(_ exercise: String) -> String {
+        LiveItem.normalized(exercise)
     }
 
     var requiredItems: [LiveItem] { items.filter(\.required) }
@@ -177,6 +263,8 @@ final class LiveWorkout: Identifiable {
     var allRequiredComplete: Bool { requiredItems.allSatisfy(\.isComplete) }
     var anyLogged: Bool { items.contains(where: \.anyLogged) }
     var canFinish: Bool { allRequiredComplete }
+    var canSaveProgress: Bool { anyLogged && !allRequiredComplete }
+    var canSubmit: Bool { anyLogged }
     var finishStatus: String {
         allRequiredComplete ? ExecutionStatus.complete : ExecutionStatus.partial
     }

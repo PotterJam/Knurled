@@ -157,8 +157,7 @@ fn adjusted_today_does_not_progress_future_lane() {
         Some("80kg")
     );
     assert_eq!(
-        result.results[0].outcome,
-        "adjusted_today",
+        result.results[0].outcome, "adjusted_today",
         "bad-day load changes are logged without silently rewriting future state"
     );
 }
@@ -229,14 +228,24 @@ fn main_lifts_carry_builtin_swap_alternatives() {
         ["dumbbell_bench", "dumbbell_incline", "incline_bench"]
     );
 
-    // The T3 accessory is not a main barbell lift, so it gets no built-in swaps
-    // unless the plan curates them.
+    // The starter T3 accessories also carry practical built-in swaps.
     let accessory = rendered
         .items
         .iter()
         .find(|item| item.item_id == "a1.t3")
         .unwrap();
-    assert!(accessory.exercise_options.is_none());
+    let accessory_swaps: Vec<&str> = accessory
+        .exercise_options
+        .as_ref()
+        .unwrap()
+        .alternatives
+        .iter()
+        .map(|alt| alt.exercise.as_str())
+        .collect();
+    assert_eq!(
+        accessory_swaps,
+        ["pull_up", "chin_up", "neutral_grip_pulldown"]
+    );
 
     // Press and deadlift land in the B1 session.
     let b1 = render_next(
@@ -277,6 +286,23 @@ fn main_lifts_carry_builtin_swap_alternatives() {
         .map(|alt| alt.exercise.as_str())
         .collect();
     assert_eq!(deadlift_swaps, ["rdl", "dumbbell_rdl"]);
+
+    let row_swaps: Vec<&str> = b1
+        .items
+        .iter()
+        .find(|item| item.item_id == "b1.t3")
+        .unwrap()
+        .exercise_options
+        .as_ref()
+        .unwrap()
+        .alternatives
+        .iter()
+        .map(|alt| alt.exercise.as_str())
+        .collect();
+    assert_eq!(
+        row_swaps,
+        ["dumbbell_row", "cable_row", "chest_supported_row"]
+    );
 }
 
 #[test]

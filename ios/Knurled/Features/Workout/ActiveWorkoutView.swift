@@ -11,8 +11,8 @@ struct ActiveWorkoutView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
 
-    init(repo: ActiveRepo, session: RenderedSession) {
-        _workout = State(initialValue: LiveWorkout(repo: repo, session: session))
+    init(repo: ActiveRepo, session: RenderedSession, restoring record: DayRecord? = nil) {
+        _workout = State(initialValue: LiveWorkout(repo: repo, session: session, restoring: record))
     }
 
     var body: some View {
@@ -87,14 +87,22 @@ struct ActiveWorkoutView: View {
             Button {
                 showFinish = true
             } label: {
-                Label("Finish", systemImage: "flag.checkered")
+                Label(submitTitle, systemImage: submitIcon)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!workout.canFinish || isSaving)
+            .disabled(!workout.canSubmit || isSaving)
         }
         .controlSize(.large)
         .padding()
         .background(.bar)
+    }
+
+    private var submitTitle: String {
+        workout.canSaveProgress ? "Save Progress" : "Finish"
+    }
+
+    private var submitIcon: String {
+        workout.canSaveProgress ? "tray.and.arrow.down.fill" : "flag.checkered"
     }
 }

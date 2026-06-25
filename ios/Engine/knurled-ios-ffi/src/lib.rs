@@ -232,8 +232,8 @@ pub extern "C" fn knurled_submit(
 }
 
 /// Re-renders a specific session by id against the repo's current state, ignoring the cursor.
-/// A saved partial advances the cursor to the next workout, so resuming it from history needs the
-/// session re-rendered explicitly (spec §16/§19).
+/// Saved partials store a session id in the record, so resuming one from history needs that
+/// session re-rendered explicitly.
 #[unsafe(no_mangle)]
 pub extern "C" fn knurled_render_session(
     dir: *const c_char,

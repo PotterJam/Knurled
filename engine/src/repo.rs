@@ -206,16 +206,15 @@ pub fn read_records(repo_path: impl AsRef<Path>) -> Result<Vec<DayRecord>> {
     files.sort();
 
     let mut days = Vec::new();
-    for path in files
-        .into_iter()
-        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
-    {
+    for path in files.into_iter().filter(|path| {
+        path.extension()
+            .is_some_and(|extension| extension == "json")
+    }) {
         let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
-        let month: LogMonth =
-            serde_json::from_str(&text).map_err(|source| KnurledError::Json {
-                path: path.clone(),
-                source,
-            })?;
+        let month: LogMonth = serde_json::from_str(&text).map_err(|source| KnurledError::Json {
+            path: path.clone(),
+            source,
+        })?;
         days.extend(month.days);
     }
     days.sort_by(|left, right| left.date.cmp(&right.date));

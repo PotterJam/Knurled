@@ -98,11 +98,10 @@ fed into progression — a missed or modified warmup can't pass or fail a lift.
 ```kdl
 warmup {
   default {
-    empty_bar 2 5            // 2 sets of 5 with just the bar
+    empty_bar 1 5            // 1 set of 5 with just the bar
     ramp {
-      step 45 5              // 45% of the basis load x5
-      step 65 3
-      step 85 2
+      step 65 3              // 65% of the basis load x3
+      step 80 2
     }
     basis top_set           // top_set (default) | working_weight | training_max
   }
@@ -123,9 +122,10 @@ and a plan's `warmup` overrides the template's built-in default. Each scheme is:
 
 The number of warmup sets (empty-bar sets plus ramp steps) and their reps are fully configurable,
 so different lifts, tiers, and program phases carry different warmup volume. Built-in defaults:
-GZCLP and Starting Strength ship the Bay-Strength novice ramp (2×5 empty bar, then 45/65/85% of
-the work weight); 5/3/1 ships the canonical 40/50/60% of the training max. Warmup loads are
-rounded by the same equipment-aware logic as working loads.
+GZCLP and Starting Strength ship a compact novice ramp (1×5 empty bar, then 65/80% of the work
+weight, skipping a step when rounding would repeat the previous warmup load); 5/3/1 ships the
+canonical 40/50/60% of the training max. Warmup loads are rounded by the same equipment-aware
+logic as working loads.
 
 ### `equipment`
 

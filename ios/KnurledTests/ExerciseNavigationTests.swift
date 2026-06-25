@@ -86,6 +86,8 @@ import Foundation
 
         #expect(!untouched.isComplete)
         #expect(!workout.allRequiredComplete)
+        #expect(workout.canSubmit)
+        #expect(workout.canSaveProgress)
         #expect(workout.finishStatus == ExecutionStatus.partial)
 
         let input = workout.finishInput(timestamp: "2026-06-24T11:00:00Z")
@@ -104,8 +106,43 @@ import Foundation
 
         let input = workout.finishInput(timestamp: "2026-06-24T11:00:00Z")
         let itemInput = try #require(input.inputs.first { $0.itemId == item.id })
+        #expect(workout.canSubmit)
+        #expect(workout.canSaveProgress)
         #expect(input.status == ExecutionStatus.partial)
         #expect(itemInput.sets.map(\.set) == [item.sets[0].id])
+    }
+
+    @Test func savedPartialRecordRestoresLoggedSets() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let source = try #require(workout.requiredItems.first)
+        let record = DayRecord(
+            date: "2026-06-24",
+            status: ExecutionStatus.partial,
+            sessionId: workout.session.sessionId,
+            savedAt: "2026-06-24T10:45:00Z",
+            lifts: [
+                LiftRecord(
+                    itemId: source.id,
+                    exercise: source.item.exercise,
+                    weight: "77.5kg",
+                    sets: [5, 4]
+                ),
+            ]
+        )
+
+        let restored = LiveWorkout(repo: workout.repo, session: workout.session, restoring: record)
+        let restoredItem = try #require(restored.items.first { $0.id == source.id })
+
+        #expect(restored.startedAt == "2026-06-24T10:45:00Z")
+        #expect(restoredItem.sets[0].logged)
+        #expect(restoredItem.sets[0].reps == 5)
+        #expect(restoredItem.sets[0].load == "77.5kg")
+        #expect(restoredItem.sets[1].logged)
+        #expect(restoredItem.sets[1].reps == 4)
+        #expect(!restoredItem.sets[2].logged)
+        #expect(restored.canSubmit)
+        #expect(restored.canSaveProgress)
     }
 
     @Test func bypassedWarmupsDisappearAfterLaterWarmupIsDone() async throws {

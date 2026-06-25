@@ -76,18 +76,16 @@ fn gzclp_ships_a_bay_strength_default_warmup() {
     let squat = item(&session, "a1.t1");
     let warmups = &squat.prescription.warmups;
 
-    // Two empty-bar sets, then 45/65/85% of the 80kg work weight.
-    assert_eq!(warmups.len(), 5);
+    // One empty-bar set, then 65/80% of the 80kg work weight.
+    assert_eq!(warmups.len(), 3);
     assert_eq!(warmups[0].load.as_deref(), Some("20kg"));
     assert_eq!(warmups[0].target_reps, 5);
-    assert_eq!(warmups[1].load.as_deref(), Some("20kg"));
-    // 45% of 80 = 36 -> nearest 2.5 = 35; 65% = 52 -> 52.5; 85% = 68 -> 67.5.
-    assert_eq!(warmups[2].load.as_deref(), Some("35kg"));
-    assert_eq!(warmups[2].percentage, Some(45));
-    assert_eq!(warmups[3].load.as_deref(), Some("52.5kg"));
-    assert_eq!(warmups[4].load.as_deref(), Some("67.5kg"));
-    assert_eq!(warmups[4].percentage, Some(85));
-    assert_eq!(warmups[4].target_reps, 2);
+    // 65% of 80 = 52 -> nearest 2.5 = 52.5; 80% = 64 -> 65.
+    assert_eq!(warmups[1].load.as_deref(), Some("52.5kg"));
+    assert_eq!(warmups[1].percentage, Some(65));
+    assert_eq!(warmups[2].load.as_deref(), Some("65kg"));
+    assert_eq!(warmups[2].percentage, Some(80));
+    assert_eq!(warmups[2].target_reps, 2);
 
     // Warmups never leak into the working sets.
     assert_eq!(squat.prescription.sets.len(), 5);
@@ -98,6 +96,27 @@ fn gzclp_ships_a_bay_strength_default_warmup() {
             .iter()
             .all(|set| set.percentage.is_none())
     );
+}
+
+#[test]
+fn compact_default_warmup_skips_duplicate_ramp_loads() {
+    let plan = gzclp_plan(
+        r#"
+  starts {
+    squat "30kg"
+    bench "55kg"
+    press "37.5kg"
+    deadlift "100kg"
+  }
+"#,
+    );
+    let session = render(&plan, GZCLP);
+    let warmups = &item(&session, "a1.t1").prescription.warmups;
+
+    assert_eq!(warmups.len(), 2);
+    assert_eq!(warmups[0].load.as_deref(), Some("20kg"));
+    assert_eq!(warmups[1].load.as_deref(), Some("25kg"));
+    assert_eq!(warmups[1].percentage, Some(80));
 }
 
 #[test]

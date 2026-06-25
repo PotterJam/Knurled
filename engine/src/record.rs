@@ -9,7 +9,9 @@
 //!
 //! This module is the single owner of the log format. Clients (CLI, workbench,
 //! iOS) serialize and parse through here instead of hand-rolling JSON so the
-//! shape cannot drift between platforms.
+//! shape cannot drift between platforms. A saved partial carries minimal resume
+//! metadata (`status`, `session_id`, and per-lift `item_id`) so clients can
+//! reopen it without reintroducing replay-ledger fields.
 
 use std::collections::BTreeMap;
 
@@ -24,6 +26,10 @@ use crate::json::compact_pretty_json;
 /// optional keys and are ignored by the engine.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LiftRecord {
+    /// Rendered workout item id. Present for saved partials so clients can put
+    /// recorded sets back onto the exact card when continuing later.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_id: Option<String>,
     pub exercise: String,
     /// Working weight as authored, e.g. `"82.5kg"`. Optional for bodyweight or
     /// metric-only efforts (a run interval carries metrics, not a weight).
@@ -46,6 +52,7 @@ impl LiftRecord {
     /// A plain strength lift: exercise, working weight, reps per set.
     pub fn new(exercise: impl Into<String>, weight: impl Into<String>, sets: Vec<u32>) -> Self {
         Self {
+            item_id: None,
             exercise: exercise.into(),
             weight: Some(weight.into()),
             sets,
@@ -63,6 +70,16 @@ impl LiftRecord {
 pub struct DayRecord {
     /// ISO date, `"YYYY-MM-DD"`.
     pub date: String,
+    /// Present for a saved in-progress workout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// Rendered session id, e.g. `"a1"`. Present when `status` is `"partial"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub saved_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
     /// Human-facing program-boundary marker, e.g. `"531.basic"`. Present when
     /// this date starts a new program or marks a switch.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -78,6 +95,10 @@ impl DayRecord {
     pub fn workout(date: impl Into<String>, lifts: Vec<LiftRecord>) -> Self {
         Self {
             date: date.into(),
+            status: None,
+            session_id: None,
+            saved_at: None,
+            completed_at: None,
             program: None,
             note: None,
             lifts,
@@ -88,6 +109,10 @@ impl DayRecord {
     pub fn program_marker(date: impl Into<String>, program: impl Into<String>) -> Self {
         Self {
             date: date.into(),
+            status: None,
+            session_id: None,
+            saved_at: None,
+            completed_at: None,
             program: Some(program.into()),
             note: None,
             lifts: Vec::new(),

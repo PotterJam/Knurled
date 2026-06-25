@@ -74,6 +74,15 @@ pub fn submit_session(
         });
     }
 
+    if input.status == "partial" {
+        return Ok(SubmitOutcome {
+            validation,
+            record_day,
+            new_state: state.clone(),
+            effects: Vec::new(),
+        });
+    }
+
     let (new_state, effects) = match mode {
         SubmitMode::Advance => {
             let reduced = reduce_input(compiled, state, rendered_session, input)?;
@@ -182,6 +191,7 @@ fn build_record_day(
             .clone()
             .unwrap_or_else(|| item.exercise.clone());
         lifts.push(LiftRecord {
+            item_id: (input.status == "partial").then(|| item.item_id.clone()),
             exercise,
             weight: performed_weight(item, item_input),
             sets: performed_reps(item, item_input),
@@ -189,7 +199,15 @@ fn build_record_day(
             note: None,
         });
     }
-    DayRecord::workout(date, lifts)
+    let mut day = DayRecord::workout(date, lifts);
+    if input.status == "partial" {
+        day.status = Some(input.status.clone());
+        day.session_id = Some(rendered_session.session_id.clone());
+        day.saved_at = input.saved_at.clone();
+    } else {
+        day.completed_at = input.completed_at.clone();
+    }
+    day
 }
 
 fn find_input<'a>(input: &'a ExecutionInput, item_id: &str) -> Option<&'a ItemInput> {
@@ -288,9 +306,15 @@ mod tests {
         let rendered = render_next(&compiled, &state).unwrap();
         let input = passing_input(&rendered);
 
-        let outcome =
-            submit_session(&compiled, &state, &rendered, &input, SubmitMode::Advance, "2026-06-24")
-                .unwrap();
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::Advance,
+            "2026-06-24",
+        )
+        .unwrap();
 
         assert_eq!(outcome.validation.status, ValidationStatus::Valid);
         assert_eq!(outcome.record_day.date, "2026-06-24");
@@ -307,9 +331,15 @@ mod tests {
         let rendered = render_next(&compiled, &state).unwrap();
         let input = passing_input(&rendered);
 
-        let outcome =
-            submit_session(&compiled, &state, &rendered, &input, SubmitMode::OffDay, "2026-06-24")
-                .unwrap();
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::OffDay,
+            "2026-06-24",
+        )
+        .unwrap();
 
         // Lanes unchanged: targets, stages, and fail-counts do not move.
         assert_eq!(outcome.new_state.lanes, state.lanes);
@@ -340,12 +370,70 @@ mod tests {
         let lane = rendered.items[0].progression_lane.clone();
         state.lanes.entry(lane.clone()).or_default().load = Some("82.5kg".into());
 
-        let outcome =
-            submit_session(&compiled, &state, &rendered, &input, SubmitMode::Reset, "2026-06-24")
-                .unwrap();
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::Reset,
+            "2026-06-24",
+        )
+        .unwrap();
 
         let lane_state = &outcome.new_state.lanes[&lane];
         assert_eq!(lane_state.load.as_deref(), Some("40kg"));
         assert!(outcome.effects.iter().any(|e| e.op == "reset_load"));
+    }
+
+    #[test]
+    fn partial_save_records_resume_metadata_without_moving_state() {
+        let compiled = gzclp();
+        let state = create_initial_state(&compiled);
+        let rendered = render_next(&compiled, &state).unwrap();
+        let first_item = &rendered.items[0];
+        let input = ExecutionInput {
+            kind: "execution_input".into(),
+            schema_version: crate::model::SCHEMA_VERSION.into(),
+            rendered_session_hash: rendered.rendered_session_hash.clone(),
+            status: "partial".into(),
+            started_at: Some("2026-06-24T10:00:00Z".into()),
+            completed_at: None,
+            saved_at: Some("2026-06-24T10:45:00Z".into()),
+            inputs: vec![ItemInput {
+                item_id: first_item.item_id.clone(),
+                mode: "per_set_reps".into(),
+                final_set_reps: None,
+                sets: vec![crate::model::ActualSet {
+                    set: 1,
+                    load: first_item.prescription.sets[0].load.clone(),
+                    reps: first_item.prescription.sets[0].target_reps,
+                    metrics: Default::default(),
+                }],
+                load: None,
+                performed_exercise: None,
+                swap_reason: None,
+                swap_policy: None,
+            }],
+        };
+
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::Advance,
+            "2026-06-24",
+        )
+        .unwrap();
+
+        assert_eq!(outcome.validation.status, ValidationStatus::Valid);
+        assert_eq!(outcome.new_state, state);
+        assert!(outcome.effects.is_empty());
+        assert_eq!(outcome.record_day.status.as_deref(), Some("partial"));
+        assert_eq!(outcome.record_day.session_id.as_deref(), Some("a1"));
+        assert_eq!(
+            outcome.record_day.lifts[0].item_id.as_deref(),
+            Some(first_item.item_id.as_str())
+        );
     }
 }

@@ -47,6 +47,10 @@ enum SubmitMode: String, Codable, Sendable, Hashable, CaseIterable {
 
 struct DayRecord: Codable, Sendable, Hashable, Identifiable {
     var date: String
+    var status: String?
+    var sessionId: String?
+    var savedAt: String?
+    var completedAt: String?
     var program: String?
     var note: String?
     var lifts: [LiftRecord]
@@ -54,11 +58,24 @@ struct DayRecord: Codable, Sendable, Hashable, Identifiable {
     var id: String { date }
 
     enum CodingKeys: String, CodingKey {
-        case date, program, note, lifts
+        case date, status, sessionId, savedAt, completedAt, program, note, lifts
     }
 
-    init(date: String, program: String? = nil, note: String? = nil, lifts: [LiftRecord] = []) {
+    init(
+        date: String,
+        status: String? = nil,
+        sessionId: String? = nil,
+        savedAt: String? = nil,
+        completedAt: String? = nil,
+        program: String? = nil,
+        note: String? = nil,
+        lifts: [LiftRecord] = []
+    ) {
         self.date = date
+        self.status = status
+        self.sessionId = sessionId
+        self.savedAt = savedAt
+        self.completedAt = completedAt
         self.program = program
         self.note = note
         self.lifts = lifts
@@ -67,6 +84,10 @@ struct DayRecord: Codable, Sendable, Hashable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         date = try container.decode(String.self, forKey: .date)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
+        savedAt = try container.decodeIfPresent(String.self, forKey: .savedAt)
+        completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
         program = try container.decodeIfPresent(String.self, forKey: .program)
         note = try container.decodeIfPresent(String.self, forKey: .note)
         lifts = try container.decodeIfPresent([LiftRecord].self, forKey: .lifts) ?? []
@@ -75,6 +96,10 @@ struct DayRecord: Codable, Sendable, Hashable, Identifiable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(date, forKey: .date)
+        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(sessionId, forKey: .sessionId)
+        try container.encodeIfPresent(savedAt, forKey: .savedAt)
+        try container.encodeIfPresent(completedAt, forKey: .completedAt)
         try container.encodeIfPresent(program, forKey: .program)
         try container.encodeIfPresent(note, forKey: .note)
         if !lifts.isEmpty { try container.encode(lifts, forKey: .lifts) }
@@ -82,6 +107,7 @@ struct DayRecord: Codable, Sendable, Hashable, Identifiable {
 }
 
 struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
+    var itemId: String?
     var exercise: String
     var weight: String?
     var sets: [Int]
@@ -95,16 +121,18 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case exercise, weight, sets, metrics, note
+        case itemId, exercise, weight, sets, metrics, note
     }
 
     init(
+        itemId: String? = nil,
         exercise: String,
         weight: String? = nil,
         sets: [Int] = [],
         metrics: [String: String] = [:],
         note: String? = nil
     ) {
+        self.itemId = itemId
         self.exercise = exercise
         self.weight = weight
         self.sets = sets
@@ -114,6 +142,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        itemId = try container.decodeIfPresent(String.self, forKey: .itemId)
         exercise = try container.decode(String.self, forKey: .exercise)
         weight = try container.decodeIfPresent(String.self, forKey: .weight)
         sets = try container.decodeIfPresent([Int].self, forKey: .sets) ?? []
@@ -123,6 +152,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(itemId, forKey: .itemId)
         try container.encode(exercise, forKey: .exercise)
         try container.encodeIfPresent(weight, forKey: .weight)
         if !sets.isEmpty { try container.encode(sets, forKey: .sets) }
