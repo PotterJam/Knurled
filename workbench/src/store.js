@@ -1,5 +1,5 @@
 // Single source of truth for the workbench document: the canonical plan text,
-// generated lock, patches, imported events, and UI/connection settings.
+// generated lock, patches, lean records/current state, and UI/connection settings.
 //
 // Built on a SolidJS store so reads are fine-grained reactive — editing the raw
 // plan text only re-runs the computations that actually depend on it, instead of

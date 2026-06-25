@@ -1,61 +1,81 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import { workbench } from "../workbench.js";
 import { titleCase } from "../lib/format.js";
 
-function mergeEvents(existing, incoming) {
+function normalizeDays(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.days)) return value.days;
+  if (value?.date) return [value];
+  throw new Error("Paste a DayRecord, a DayRecord array, or a LogMonth with a days array.");
+}
+
+function mergeRecords(existing, incoming) {
   const merged = [...(existing || [])];
-  const seen = new Set(merged.map((event) => event.id).filter(Boolean));
+  const indexByDate = new Map(merged.map((day, index) => [day.date, index]));
   let added = 0;
-  for (const event of incoming || []) {
-    if (event.id && seen.has(event.id)) continue;
-    if (event.id) seen.add(event.id);
-    merged.push(event);
-    added++;
+  let replaced = 0;
+
+  for (const day of incoming || []) {
+    if (!day?.date) throw new Error("Every DayRecord needs a date.");
+    if (indexByDate.has(day.date)) {
+      merged[indexByDate.get(day.date)] = day;
+      replaced++;
+    } else {
+      indexByDate.set(day.date, merged.length);
+      merged.push(day);
+      added++;
+    }
   }
-  return { events: merged, added };
+
+  merged.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  return { records: merged, added, replaced };
 }
 
-function importSetSummary(set) {
-  return [set.load, set.reps ? `${set.reps} reps` : ""].filter(Boolean).join(" x ");
+function liftSummary(lift) {
+  const name = titleCase(lift.exercise || "Exercise");
+  const weight = lift.weight ? ` ${lift.weight}` : "";
+  const sets = (lift.sets || []).length ? ` ${(lift.sets || []).join("/")}` : "";
+  return `${name}${weight}${sets}`;
 }
 
-function importExerciseSummary(result) {
-  const name = titleCase(result.performed_exercise || result.slot_id || "Exercise");
-  const sets = (result.actual || []).slice(0, 4).map(importSetSummary).filter(Boolean);
-  const more = (result.actual || []).length > sets.length ? ` +${result.actual.length - sets.length} sets` : "";
-  return `${name}: ${sets.join(", ")}${more}`;
+function recordDetail(day) {
+  const lifts = (day.lifts || []).slice(0, 4).map(liftSummary);
+  const more = (day.lifts || []).length > lifts.length ? ` · +${day.lifts.length - lifts.length} lifts` : "";
+  return [day.program ? `Program ${day.program}` : "", lifts.join(" · ") + more, day.note].filter(Boolean).join(" · ");
 }
+
+const sampleMonth = JSON.stringify(
+  {
+    month: "2026-06",
+    days: [{ date: "2026-06-24", lifts: [{ exercise: "squat", weight: "80kg", sets: [5, 5, 7] }] }],
+  },
+  null,
+  2,
+);
 
 export default function History() {
   const [text, setText] = createSignal("");
-  const [source, setSource] = createSignal("hevy");
-  // { draft } | { error } | null
   const [outcome, setOutcome] = createSignal(null);
 
   const notice = () => workbench.state.ui?.historyNotice;
+  const records = createMemo(() => workbench.state.records || []);
 
   const preview = () => {
     try {
-      setOutcome({ draft: workbench.importHistory(text(), source()) });
+      setOutcome({ days: normalizeDays(JSON.parse(text())) });
     } catch (err) {
       setOutcome({ error: err.message });
     }
   };
 
-  const accept = (draft) => {
-    const merged = mergeEvents(workbench.state.events, draft.events);
-    const skipped = draft.events.length - merged.added;
+  const accept = (days) => {
+    const merged = mergeRecords(records(), days);
     const historyNotice = {
       kind: "ok",
-      title: "Import added",
-      message:
-        skipped === 0
-          ? `Added ${merged.added} imported session event${merged.added === 1 ? "" : "s"} to plan data.`
-          : `Added ${merged.added} new session event${merged.added === 1 ? "" : "s"}; skipped ${skipped} duplicate${
-              skipped === 1 ? "" : "s"
-            }.`,
+      title: "Records updated",
+      message: `Added ${merged.added} day${merged.added === 1 ? "" : "s"} and replaced ${merged.replaced}.`,
     };
-    workbench.setState({ events: merged.events, ui: { ...workbench.state.ui, historyNotice } });
+    workbench.setState({ records: merged.records, ui: { ...workbench.state.ui, historyNotice } });
   };
 
   let dropEl;
@@ -73,7 +93,7 @@ export default function History() {
           <div class="card-head">
             <h3>{notice().title}</h3>
             <div class="row">
-              <button onClick={() => workbench.setView("git")}>Commit imported data</button>
+              <button onClick={() => workbench.setView("git")}>Commit records</button>
               <button class="ghost" onClick={() => workbench.setView("backtest")}>Review backtest</button>
             </div>
           </div>
@@ -83,11 +103,10 @@ export default function History() {
 
       <div class="card">
         <div class="card-head">
-          <h3>Import history</h3>
+          <h3>Records</h3>
+          <span class="pill ok">{records().length} days</span>
         </div>
-        <p class="muted small">
-          Paste or drop a CSV/TSV export (e.g. Hevy). The engine parses it — nothing is reimplemented here.
-        </p>
+        <p class="muted small">Paste or drop a DayRecord, a DayRecord array, or a monthly log JSON file.</p>
         <div
           class="dropzone"
           ref={dropEl}
@@ -98,17 +117,11 @@ export default function History() {
           onDragLeave={() => dropEl.classList.remove("drag-over")}
           onDrop={onDrop}
         >
-          Drop a .csv / .tsv here, or paste below
+          Drop a .json log here, or paste below
         </div>
-        <textarea
-          spellcheck={false}
-          placeholder={"completed_at,exercise,set,reps,load\n2026-01-02,squat,1,5,80kg"}
-          value={text()}
-          onInput={(e) => setText(e.target.value)}
-        />
+        <textarea spellcheck={false} placeholder={sampleMonth} value={text()} onInput={(e) => setText(e.target.value)} />
         <div class="row">
-          <label>Source <input value={source()} onInput={(e) => setSource(e.target.value)} /></label>
-          <button onClick={preview}>Preview import</button>
+          <button onClick={preview}>Preview records</button>
         </div>
       </div>
 
@@ -122,43 +135,48 @@ export default function History() {
           }
         >
           {(() => {
-            const draft = outcome().draft;
+            const days = outcome().days || [];
             return (
               <div class="card">
                 <div class="card-head">
-                  <h4>
-                    Parsed {draft.events.length} session events · {draft.imported_sets} sets from {draft.input_rows} rows
-                  </h4>
-                  <button onClick={() => accept(draft)}>Add to plan data</button>
+                  <h4>Parsed {days.length} day records</h4>
+                  <button onClick={() => accept(days)}>Merge records</button>
                 </div>
-                <div class="timeline import-preview">
-                  <For each={draft.events.slice(0, 40)}>
-                    {(ev) => {
-                      const results = ev.results || [];
-                      const setCount = results.reduce((sum, r) => sum + (r.actual || []).length, 0);
-                      const date = (ev.completed_at || "").replace("T00:00:00Z", "");
-                      const detail = results.slice(0, 4).map(importExerciseSummary).join(" · ");
-                      const more = results.length > 4 ? ` · +${results.length - 4} exercises` : "";
-                      return (
-                        <div class="import-row">
-                          <div class="import-main">
-                            <strong>{ev.reason || ev.session_id || ev.id}</strong>
-                            <span class="muted small">{date}</span>
-                          </div>
-                          <span class="muted small">
-                            {results.length} exercises · {setCount} sets
-                          </span>
-                          <span class="import-detail">{detail + more}</span>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </div>
+                <RecordList records={days.slice(0, 40)} />
               </div>
             );
           })()}
         </Show>
       </Show>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Current timeline</h3>
+          <button class="ghost" onClick={() => setText(JSON.stringify(records(), null, 2))}>Load as JSON</button>
+        </div>
+        <Show when={records().length} fallback={<p class="muted small">No recorded days yet.</p>}>
+          <RecordList records={records()} />
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+function RecordList(props) {
+  return (
+    <div class="timeline import-preview">
+      <For each={props.records}>
+        {(day) => (
+          <div class="import-row">
+            <div class="import-main">
+              <strong>{day.date}</strong>
+              <span class="muted small">{day.program || "workout"}</span>
+            </div>
+            <span class="muted small">{(day.lifts || []).length} lifts</span>
+            <span class="import-detail">{recordDetail(day)}</span>
+          </div>
+        )}
+      </For>
     </div>
   );
 }

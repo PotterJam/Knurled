@@ -11,6 +11,11 @@ test("buildCommitPlan includes canonical and generated workbench files", () => {
       { filename: "inactive.fitspec", text: "patch inactive", active: false, sha: "old-patch" },
       { filename: "draft.fitspec", text: "patch draft", active: false },
     ],
+    currentState: { cursor: { next: "B1" } },
+    records: [
+      { date: "2026-06-24", lifts: [{ exercise: "squat", weight: "80kg", sets: [5, 5, 7] }] },
+      { date: "2026-06-22", program: "gzcl.gzclp", lifts: [] },
+    ],
   };
   const result = {
     state: { cursor: { next: "A1" } },
@@ -27,6 +32,7 @@ test("buildCommitPlan includes canonical and generated workbench files", () => {
       "plan.fitspec",
       "fitspec.lock",
       "state/current.json",
+      "logs/2026/06.json",
       "build/current.ir.json",
       "build/next-workout.json",
       "build/validation.json",
@@ -35,5 +41,6 @@ test("buildCommitPlan includes canonical and generated workbench files", () => {
   );
   assert.deepEqual(plan.deletions, ["patches/inactive.fitspec"]);
   assert.equal(plan.message, "Update gzcl.gzclp plan via workbench");
-  assert.match(plan.files.find((file) => file.path === "state/current.json").text, /"cursor"/);
+  assert.match(plan.files.find((file) => file.path === "state/current.json").text, /"B1"/);
+  assert.match(plan.files.find((file) => file.path === "logs/2026/06.json").text, /"squat"/);
 });

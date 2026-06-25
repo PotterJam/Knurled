@@ -2,7 +2,7 @@
 
 A [Vite](https://vite.dev) + [SolidJS](https://solidjs.com) single-page app that runs
 the real Rust engine in the browser via WebAssembly. It does not reimplement progression
-logic in JavaScript — validation, build, simulation, and history import all run in the
+logic in JavaScript — validation, build, simulation, submit, and backtest all run in the
 engine.
 
 ## Layout
@@ -10,7 +10,7 @@ engine.
 - `index.html` — Vite entry.
 - `src/main.jsx` — mounts the Solid app.
 - `src/App.jsx` — shell (nav, status strip, view routing), boots the engine.
-- `src/store.js` — persisted document state (plan text, lock, patches, events) on a Solid store.
+- `src/store.js` — persisted document state (plan text, lock, patches, records, current state) on a Solid store.
 - `src/workbench.js` — app-level reactive state and the single derived engine build.
 - `src/views/*.jsx` — one component per view.
 - `src/lib/` — framework-free helpers (`fitspec`, `github`, `commit`, `charts`).

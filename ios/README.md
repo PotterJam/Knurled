@@ -3,7 +3,7 @@
 The Knurled workout **player** for iOS — a thin SwiftUI front-end over the Rust
 `knurled-core` engine. It shows the next prescribed workout, captures what actually
 happened with low friction, validates/reduces through the real engine, and commits
-training events back to a user-owned GitHub repository.
+training records back to a user-owned GitHub repository.
 
 > **Design rule:** the app is a thin UI over engine output. No training logic — progression,
 > effects, rest prescriptions, validation — is reimplemented in Swift. Everything comes from
@@ -67,38 +67,30 @@ Swift talks to it through the `WorkoutEngine` protocol:
   `effect_preview.{pass,fail,adjusted_today}`.
 - Each connected repo is a working directory under Application Support
   (`Knurled/repos/<owner>-<name>/`) mirroring the repo tree.
-- **Submit:** the live session builds an `ExecutionInput` → `knurled_reduce_input` → a
-  **consequence-first effect preview** → on confirm, append the event JSON line to
-  `logs/<yyyy>/<mm>.jsonl`, then `knurled_build_repo(write:true)` regenerates
-  `state/current.json` + `build/*.json` deterministically, then one GitHub commit of every
-  changed file. The engine is the only source of effects.
-- **Skip / correction** events are authored in Swift (user intent), appended, and re-folded by
-  the engine on rebuild — the original log is never rewritten.
+- **Submit:** the live session builds an `ExecutionInput` → `knurled_reduce_input` for the
+  **consequence-first effect preview** → on confirm, `knurled_submit` writes
+  `state/current.json` and upserts a `DayRecord` into `logs/<yyyy>/<mm>.json`, then one GitHub
+  commit of every changed file. The engine is the only source of progression effects.
+- **Record edits:** monthly log files are mutable human records. Swift reads them as
+  `LogMonth` / `DayRecord` / `LiftRecord`; the engine never replays them.
 
 ## ADR 0007 migration — Swift port checklist
 
 The Rust core moved to the logs-as-record model ([ADR 0007](../docs/adr/0007-logs-as-record-state-as-truth.md)):
 the training log is a human-facing record the engine never replays, `state/current.json` is the
 authored-forward source of truth, and the event/replay/correction/continuation machinery is gone.
-The **FFI is already ported** (`knurled_reduce_input` is now preview-only and returns
-`results` instead of an `event`; new `knurled_submit` advances state + appends the record). The
-Swift app still speaks the old event model and must be migrated (Xcode required to build/verify):
+The FFI and Swift app are ported:
 
-- **Models:** replace `Models/Events.swift` (`TrainingEvent` etc.) with `DayRecord` / `LiftRecord`
-  / `LogMonth` and `SubmitOutcome` mirroring `engine/src/record.rs` + `session.rs`. Drop the
-  correction/continuation/skip-event types.
-- **`Repo/LogReader.swift`:** read `logs/<yyyy>/<mm>.json` (a `LogMonth` with `days[]`) instead of
-  line-delimited `.jsonl` events; replace `appendEvent(line:)` with read-modify-write upsert of a
-  `DayRecord` into its month file (the engine's `append_day_record` is the reference).
-- **`Engine/RustWorkoutEngine.swift` + `WorkoutEngine.swift`:** add `submit(dir, renderedSnapshot,
-  input, mode, date)` calling `knurled_submit`; `reduce` becomes a preview only (no persistence).
-- **`App/AppModel+Commit.swift`:** Submit = `knurled_submit` (writes state + record) → one GitHub
-  commit. Delete `AppModel+Skip.swift` / `AppModel+Correct.swift` (skip/correct are now just state
-  intent / record edits; off-day + reset are submit modes).
-- **History (`Features/History/*`, `Features/Data/LiftProgressData.swift`):** drive off `records`
-  (DayRecord[]) instead of replayed events; partial/edited/skip badges retire.
-- **Tests (`KnurledTests/`):** `CorrectionTests`/`ContinueTests`/`SkipTests` cover removed flows —
-  replace with advance/off-day/reset submit tests; update `EngineRoundTripTests` to the record shape.
+- **Models:** `Models/Events.swift` now contains `DayRecord` / `LiftRecord` / `LogMonth`,
+  `SubmitMode`, `SubmitOutcome`, and preview `ReductionResult`.
+- **`Repo/LogReader.swift`:** reads and upserts `logs/<yyyy>/<mm>.json` monthly records.
+- **`Engine/RustWorkoutEngine.swift` + `WorkoutEngine.swift`:** expose preview-only `reduce` and
+  persistent `submit(dir, renderedSnapshot, input, mode, date)`.
+- **Submit flow:** `AppModel+Commit` calls `knurled_submit`, refreshes generated outputs, then
+  pushes one GitHub commit.
+- **History/Data:** both drive from `DayRecord[]`; partial/edited/skip badges are retired.
+- **Tests:** removed correction/continue/skip event suites; added advance/off-day/reset submit
+  coverage and record-shape round trips.
 
 ## Features
 
@@ -106,15 +98,14 @@ Swift app still speaks the old event model and must be migrated (Xcode required 
 |------|--------|-------|
 | Foundation (project, xcframework, models, 4-tab shell) | ✅ | decodes the bundled GZCLP fixtures |
 | Next Workout + plan/validation status | ✅ | keeps last-valid snapshot on invalid remote |
-| Read-only player + History (All/Workouts/Skips, partial/edited badges) | ✅ | |
+| Read-only player + History (All/Workouts/Programs) | ✅ | History reads monthly records |
 | Active logging | ✅ | per-set target always shown; straight-set Done/Missed; AMRAP wheel on the final set; set-detail edit; tap ✓ to undo a set |
 | Adjust-today | ✅ | per set / remaining / whole exercise; `adjusted_today`, no auto-progress |
 | Finish → effect preview → submit | ✅ | engine `reduce` then commit |
-| Partial + continue | ✅ | Pause/Save partial event |
-| Corrections | ✅ | edit logged reps from History → `session_corrected` → re-fold |
 | Exercise swaps | ✅ | approved alternatives from rendered `exercise_options`, tracking-only by default |
 | Rest timer + Live Activity | ✅ | engine-prescribed rest auto-starts after each **non-final** set; ActivityKit lock-screen + Dynamic Island via `KnurledRestActivity` |
-| Skips + offline push | ✅ | push-forward skip; pending-push flag when a commit can't reach GitHub |
+| Off-day + reset submit modes | ✅ | record-only off-day; reset performed loads as baselines |
+| Offline push | ✅ | pending-push flag when a commit can't reach GitHub |
 | GitHub sync | ✅* | device-flow sign-in, repo picker, pull, one-commit push, sync |
 
 `*` GitHub auth and push compile and present, but need a registered OAuth App **client ID** to
@@ -151,8 +142,8 @@ xcodebuild -scheme Knurled -destination 'platform=iOS Simulator,name=iPhone 16' 
   file lands in `Knurled.xcodeproj`. The project globs `Knurled/`, but the generated `.pbxproj`
   is gitignored, so the file is invisible to the build until you regenerate.
 
-The app boots straight onto the bundled `gzclp-repo` sample, so every read/log/skip/correct
-flow is usable in the simulator without GitHub.
+The app boots straight onto the bundled `gzclp-repo` sample, so read/log/submit flows are usable
+in the simulator without GitHub.
 
 ## GitHub setup (optional)
 
@@ -185,7 +176,7 @@ ios/
     Features/                      Onboarding · Workout · History · Plan · Settings
     Resources/Fixtures/gzclp-repo  bundled sample repo (previews + offline demo)
   KnurledRestActivity/             Live Activity widget extension (ActivityKit)
-  KnurledTests/                    Swift Testing — decoding, FFI round-trip, §40 acceptance, skip/correct/swap/github
+  KnurledTests/                    Swift Testing — decoding, FFI round-trip, §40 acceptance, submit/swap/github
 ```
 
 ## Tests
@@ -196,6 +187,6 @@ ios/
 - **FFI round-trip** — validate/build/reduce a synthetic input.
 - **§40 acceptance** — AMRAP numeric input, straight-set miss, adjust-today, completed-session
   cursor advance.
-- **Event round-trips** — skip advances the cursor; a correction re-folds outcomes without
-  rewriting the original log; a swap records performed/prescribed/policy.
+- **Record round-trips** — submit writes `logs/<yyyy>/<mm>.json`; swap records
+  performed/prescribed/policy in preview results.
 - **GitHub** — commit-message templates and changed-file discovery.

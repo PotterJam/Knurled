@@ -2,8 +2,8 @@
 // touches ./pkg directly — everything goes through these helpers, which unwrap
 // the { ok, data } | { ok, error } envelope and throw on engine errors.
 //
-// The engine is the single source of truth: validation, build, simulation, and
-// history import all run here in Rust-compiled WASM, never reimplemented in JS.
+// The engine is the single source of truth: validation, build, simulation,
+// submit, and backtest all run here in Rust-compiled WASM.
 //
 // The `.wasm` is imported with Vite's `?url` suffix and handed to `init`
 // explicitly. This is the reliable way to load a wasm-bindgen `--target web`

@@ -10,7 +10,7 @@
 //!
 //! No training logic lives here. The browser has no filesystem, so we bind the
 //! engine's **in-memory** functions (`compile_plan`, `build_outputs`,
-//! `simulate`, `history_import_events_from_str`, …) rather than the `*_repo`
+//! `simulate`, `submit_session`, `backtest`, …) rather than the `*_repo`
 //! helpers that read directories. The JS loader (`workbench/engine/index.js`)
 //! unwraps the envelope and throws on `ok:false`.
 

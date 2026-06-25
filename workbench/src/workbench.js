@@ -5,7 +5,7 @@
 // drilling or a context provider.
 //
 // The engine is the only semantic authority: `build` recomputes by calling the
-// Rust/WASM engine whenever the plan text, lock, patches, or events change.
+// Rust/WASM engine whenever the plan text, lock, patches, or current state change.
 import { createRoot, createSignal, createMemo } from "solid-js";
 import { state, setState, resetPlan } from "./store.js";
 import { engine } from "../engine/index.js";
@@ -33,10 +33,16 @@ function effectiveLock() {
 function recompute() {
   const lock = effectiveLock();
   try {
-    return { result: engine.build(state.planText, lock, state.patches, state.events), error: null, lock };
+    return { result: engine.build(state.planText, lock, state.patches, state.currentState), error: null, lock };
   } catch (e) {
     return { result: null, error: e.message, lock };
   }
+}
+
+function upsertRecord(records, day) {
+  const merged = [...(records || []).filter((record) => record.date !== day.date), day];
+  merged.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  return merged;
 }
 
 export const workbench = createRoot(() => {
@@ -53,7 +59,7 @@ export const workbench = createRoot(() => {
   // depends on `ready()` to avoid calling into the WASM engine before it has
   // booted (which would cache a failure forever). Once ready flips, it recomputes
   // and from then on re-runs only when a store field it reads (planText, lock,
-  // patches, events) changes.
+  // patches, currentState) changes.
   const build = createMemo(() => {
     if (!ready()) return { result: null, error: null, lock: "" };
     return recompute();
@@ -87,8 +93,24 @@ export const workbench = createRoot(() => {
     setPlanModel: (model) => setState({ planText: serializePlan(model) }),
     addCustomExercise: (ex) => setCustomExercises((list) => [...list, ex]),
     simulate: (weeks, strategy) =>
-      engine.simulate(state.planText, build().lock, state.patches, state.events, weeks, strategy),
-    importHistory: (text, source) => engine.importHistory(text, source, "auto"),
+      engine.simulate(state.planText, build().lock, state.patches, state.currentState, weeks, strategy),
+    backtestRecords: () => engine.backtestRecords(state.planText, build().lock, state.patches, state.records),
+    submit: (input, mode = "advance", date) => {
+      const outcome = engine.submit(state.planText, build().lock, state.patches, state.currentState, input, mode, date);
+      if (outcome.validation?.status === "valid") {
+        const historyNotice = {
+          kind: "ok",
+          title: "Session recorded",
+          message: `Recorded ${outcome.record_day?.date || date} and updated current state.`,
+        };
+        setState({
+          currentState: outcome.new_state,
+          records: upsertRecord(state.records, outcome.record_day),
+          ui: { ...state.ui, historyNotice },
+        });
+      }
+      return outcome;
+    },
 
     github: {
       connect: async (config = state.github) => {
