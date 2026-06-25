@@ -58,25 +58,30 @@ struct LiftProgressData {
             workouts.append(WorkoutSample(date: date, eventOrder: eventOrder, e1RMsByLift: e1RMsByLift))
         }
 
-        let recentWorkouts = workouts
+        let sortedWorkouts = workouts
             .sorted { lhs, rhs in
                 if lhs.date == rhs.date { return lhs.eventOrder < rhs.eventOrder }
                 return lhs.date < rhs.date
             }
-            .suffix(max(1, workoutLimit))
 
-        let loggedSamples = recentWorkouts.enumerated().flatMap { offset, workout in
-            let workoutIndex = offset + 1
-            return workout.e1RMsByLift.map { lift, e1RMkg in
-                LiftSample(
-                    lift: lift,
-                    date: calendar.startOfDay(for: workout.date),
-                    workoutIndex: workoutIndex,
-                    e1RMkg: e1RMkg,
-                    estimated: true
-                )
+        let loggedSamples = CoreLift.allCases.flatMap { lift in
+            sortedWorkouts
+                .compactMap { workout -> (date: Date, e1RMkg: Double)? in
+                    guard let e1RMkg = workout.e1RMsByLift[lift] else { return nil }
+                    return (workout.date, e1RMkg)
+                }
+                .suffix(max(1, workoutLimit))
+                .enumerated()
+                .map { offset, sample in
+                    LiftSample(
+                        lift: lift,
+                        date: calendar.startOfDay(for: sample.date),
+                        workoutIndex: offset + 1,
+                        e1RMkg: sample.e1RMkg,
+                        estimated: true
+                    )
+                }
             }
-        }
         if !loggedSamples.isEmpty {
             return LiftProgressData(samples: loggedSamples.sorted(by: sampleComesBefore))
         }

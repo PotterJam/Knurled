@@ -141,6 +141,33 @@ import Foundation
         #expect(abs(data.samples[11].e1RMkg - 130.6667) < 0.001)
     }
 
+    @Test func importedHistoricalLiftIsNotDroppedByNewerOtherLiftWorkouts() throws {
+        let importedSquat = try Self.importedEvent(
+            id: "imported-squat",
+            completedAt: "2026-01-01T12:00:00Z",
+            exercise: "Squat",
+            load: "100kg"
+        )
+        let newerBenchEvents = try (0..<12).map { index in
+            try Self.importedEvent(
+                id: "newer-bench-\(index)",
+                completedAt: "2026-02-\(String(format: "%02d", index + 1))T12:00:00Z",
+                exercise: "Bench Press",
+                load: "\(70 + index)kg"
+            )
+        }
+
+        let data = LiftProgressData.build(
+            events: [importedSquat] + newerBenchEvents,
+            state: nil,
+            units: .kg,
+            calendar: Self.utcCalendar
+        )
+
+        #expect(data.samples.contains { $0.lift == .squat })
+        #expect(data.samples.filter { $0.lift == .bench }.count == 12)
+    }
+
     @Test func recentLoggedSamplesSuppressCurrentLoadFallback() throws {
         let stateJSON = """
         {
