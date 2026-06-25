@@ -17,11 +17,11 @@ Canonical:
 - `plan.fitspec`
 - `fitspec.lock`
 - `patches/*.fitspec`
-- `logs/**/*.jsonl`
+- `logs/**/*.json`
+- `state/current.json`
 
 Derived but committed for MVP:
 
-- `state/current.json`
 - `build/current.ir.json`
 - `build/next-workout.json`
 - `build/validation.json`
@@ -40,10 +40,10 @@ This Rust implementation covers the executable MVP spine:
 - Adjusted-today behavior that does not silently change future state.
 - Runtime swap metadata with tracking-only policy support.
 - Exercise replacement patches.
-- Replay, partial/continuation handling, state adjustment events, simulation, generated-file freshness, and backtest report plumbing.
+- Submit-time state updates, monthly records, simulation, generated-file freshness, and record-based backtest plumbing.
 - Static workbench running the real engine in-browser via WASM (`workbench/engine-wasm/`,
-  committed glue in `workbench/engine/pkg/`): engine-backed validation, build, simulation,
-  history import, a drag-and-drop program builder, and GitHub PAT read/write.
+  committed glue in `workbench/engine/pkg/`): engine-backed validation, build, submit,
+  simulation, backtest, a drag-and-drop program builder, and GitHub PAT read/write.
 
 The next risky areas are richer patch semantics, full correction-event folding, OAuth/GitHub
 App auth for the workbench (PAT read/write exists today), and generated Swift adapter packages.

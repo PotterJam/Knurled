@@ -46,6 +46,27 @@ import Foundation
         #expect(repo.remote?.headCommit == "pulled-head")
     }
 
+    @Test func zeroSizeRepositoryStillConnectsWhenPullSucceeds() async throws {
+        let fake = PullingGitHubClient()
+        let github = GitHubStore(makeClient: { _ in fake })
+        github.authenticateForTesting(token: "token")
+        let app = AppModel(github: github)
+        let githubRepo = GitHubRepo(
+            id: 1,
+            name: "gym",
+            fullName: "owner/gym",
+            defaultBranch: "main",
+            private: true,
+            size: 0
+        )
+
+        try await app.connect(repo: githubRepo)
+
+        #expect(await fake.pullCount == 1)
+        #expect(app.activeRepo?.displayName == "owner/gym")
+        #expect(app.activeRepo?.remote?.headCommit == "pulled-head")
+    }
+
     // `all` feeds the initial commit; its paths must be repo-relative and readable back via
     // `dir.appending(path:)` even when the working dir is a /var symlink (regression: paths
     // were coming back absolute on device, so the first commit read nothing).
@@ -148,6 +169,34 @@ import Foundation
         #expect(updated.contains("  accessories {"))
         #expect(!updated.contains("80kg"))
     }
+
+    @Test func initialNumbersResetGeneratedStateBeforeFirstCommit() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let engine = RustWorkoutEngine()
+        let template = StarterTemplate(reference: "gzcl.gzclp@1.0.0", title: "GZCLP", subtitle: "")
+        let spec = InitialTrainingNumbers.spec(for: template)
+        let numbers = InitialTrainingNumbers(
+            spec: spec,
+            units: .lb,
+            values: [
+                "squat": "200",
+                "bench": "135",
+                "press": "85",
+                "deadlift": "245",
+            ]
+        )
+
+        try await engine.initRepo(dir: dir, template: template.reference)
+        try AppModel.apply(initialNumbers: numbers, to: dir)
+        let outputs = try await engine.build(dir: dir, write: true)
+        let squat = outputs.nextWorkout?.items.first { $0.progressionLane == "squat.t1" }
+
+        #expect(outputs.state.lanes["squat.t1"]?.load == "200lb")
+        #expect(squat?.prescription.sets.first?.load == "200lb")
+    }
 }
 
 private extension GitHubTests {
@@ -224,6 +273,54 @@ private actor FakeGitHubClient: GitHubClientProtocol {
         calls.commitMessages.append(message)
         calls.commitFiles.append(files)
         return "pushed-head"
+    }
+
+    func commitInitial(
+        owner: String,
+        repo: String,
+        branch: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String {
+        "initial-head"
+    }
+}
+
+private actor PullingGitHubClient: GitHubClientProtocol {
+    private(set) var pullCount = 0
+
+    func currentUser() async throws -> GitHubUser {
+        GitHubUser(login: "test")
+    }
+
+    func repositories() async throws -> [GitHubRepo] {
+        []
+    }
+
+    func createRepository(name: String, isPrivate: Bool) async throws -> GitHubRepo {
+        GitHubRepo(id: 1, name: name, fullName: "test/\(name)", defaultBranch: "main", private: isPrivate, size: 1)
+    }
+
+    func pull(owner: String, repo: String, branch: String, into dir: URL) async throws -> String {
+        pullCount += 1
+        let source = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: source) }
+        try? FileManager.default.removeItem(at: dir)
+        try FileManager.default.copyItem(at: source, to: dir)
+        return "pulled-head"
+    }
+
+    func commit(
+        owner: String,
+        repo: String,
+        branch: String,
+        baseCommit: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String {
+        "pushed-head"
     }
 
     func commitInitial(

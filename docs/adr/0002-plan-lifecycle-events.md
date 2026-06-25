@@ -1,6 +1,6 @@
 # ADR 0002 — Track plan/program lifecycle as canonical events
 
-- Status: Accepted
+- Status: Reconciled by [ADR 0007](0007-logs-as-record-state-as-truth.md)
 - Date: 2026-06-24
 
 ## Context

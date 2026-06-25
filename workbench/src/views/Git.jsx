@@ -117,7 +117,7 @@ export default function Git() {
         </div>
         <p class="muted small">
           Writes one atomic Git commit: plan.fitspec, fitspec.lock, state/current.json, build/*.json, active patches,
-          and imported logs. Blocked unless valid.
+          and monthly records. Blocked unless valid.
         </p>
         <Show when={feedback()}>
           <Show

@@ -1,6 +1,6 @@
 # ADR 0006 — Keep committing generated `build/` artifacts for now, despite noisy workout diffs
 
-- Status: Accepted (temporary)
+- Status: Amended by [ADR 0007](0007-logs-as-record-state-as-truth.md)
 - Date: 2026-06-24
 
 ## Context

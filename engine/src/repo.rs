@@ -195,8 +195,7 @@ pub fn write_state(repo_path: impl AsRef<Path>, state: &StateProjection) -> Resu
     fs::write(&path, pretty_json(state)?).map_err(|source| io_error(&path, source))
 }
 
-/// Read every day record under `logs/**/*.json`, in chronological order. JSONL
-/// files (the legacy event log) are ignored.
+/// Read every day record under `logs/**/*.json`, in chronological order.
 pub fn read_records(repo_path: impl AsRef<Path>) -> Result<Vec<DayRecord>> {
     let logs_dir = repo_path.as_ref().join("logs");
     if !logs_dir.exists() {
@@ -406,7 +405,7 @@ fn initial_gzclp_files(reference: &TemplateRef) -> Result<BTreeMap<String, Strin
         ("fitspec.lock".into(), render_lockfile(&reference.normalized)?),
         (
             "README.md".into(),
-            "# Knurled Training Repo\n\nCanonical files are `plan.fitspec`, `fitspec.lock`, `patches/*.fitspec`, and `logs/**/*.jsonl`.\nGenerated files live in `state/` and `build/`.\n".into(),
+            "# Knurled Training Repo\n\nCanonical files are `plan.fitspec`, `fitspec.lock`, `patches/*.fitspec`, `logs/**/*.json`, and `state/current.json`.\nGenerated files live in `build/`.\n".into(),
         ),
     ]))
 }

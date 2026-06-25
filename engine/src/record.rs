@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{KnurledError, Result};
-use crate::json::pretty_json;
+use crate::json::compact_pretty_json;
 
 /// One performed lift within a day: the exercise, the working weight it was done
 /// at, and the reps achieved per set. Open, units-explicit metrics (`rpe`,
@@ -121,7 +121,7 @@ impl LogMonth {
     /// Serialize to the canonical pretty JSON written to disk (trailing newline,
     /// stable key order).
     pub fn to_pretty_json(&self) -> Result<String> {
-        pretty_json(self)
+        compact_pretty_json(self)
     }
 
     /// Insert a day, or replace the existing day with the same date. Days are
@@ -130,7 +130,11 @@ impl LogMonth {
     /// operation in this model (ADR 0007): the record is mutable, single-author,
     /// and never a ledger.
     pub fn upsert_day(&mut self, day: DayRecord) {
-        match self.days.iter().position(|existing| existing.date == day.date) {
+        match self
+            .days
+            .iter()
+            .position(|existing| existing.date == day.date)
+        {
             Some(index) => self.days[index] = day,
             None => self.days.push(day),
         }
@@ -176,6 +180,7 @@ fn split_date(date: &str) -> Result<(&str, &str, &str)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::json::pretty_json;
 
     fn squat_day() -> DayRecord {
         DayRecord::workout(
@@ -210,7 +215,9 @@ mod tests {
         let text = month.to_pretty_json().unwrap();
         assert!(text.ends_with('\n'));
         // Lean shape: reps as a bare array, no replay scaffolding.
-        assert!(text.contains("\"sets\": [\n"));
+        assert!(text.contains("\"lifts\": [\n        { \"exercise\""));
+        assert!(text.contains(r#"{ "exercise": "squat", "sets": [5, 5, 3], "weight": "82.5kg" }"#));
+        assert!(!text.contains("\"sets\": [\n"));
         assert!(!text.contains("plan_hash"));
         assert!(!text.contains("rendered_session_hash"));
         let parsed = LogMonth::parse(&text).unwrap();
@@ -226,7 +233,11 @@ mod tests {
         ));
         month.upsert_day(squat_day()); // earlier date inserted after
         assert_eq!(
-            month.days.iter().map(|d| d.date.as_str()).collect::<Vec<_>>(),
+            month
+                .days
+                .iter()
+                .map(|d| d.date.as_str())
+                .collect::<Vec<_>>(),
             ["2026-06-24", "2026-06-26"]
         );
 

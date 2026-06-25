@@ -35,11 +35,12 @@ cargo run -p knurled-cli -- init examples/gzclp-repo --template gzcl.gzclp
 cargo run -p knurled-cli -- init examples/ss-phase3-repo --template starting-strength.phase3
 cargo run -p knurled-cli -- validate examples/gzclp-repo
 cargo run -p knurled-cli -- preview examples/gzclp-repo --weeks 4
-cargo run -p knurled-cli -- import-history examples/gzclp-repo hevy.csv --source hevy
+cargo run -p knurled-cli -- submit examples/gzclp-repo input.json --date 2026-06-25
+cargo run -p knurled-cli -- backtest-records examples/gzclp-repo
 cargo run -p knurled-cli -- serve --port 4321
 ```
 
-The MVP command is named `knurled`. It intentionally keeps the FitSpec file model from the spec: `plan.fitspec`, `fitspec.lock`, `patches/*.fitspec`, `logs/**/*.jsonl`, generated `state/current.json`, and generated `build/*.json`.
+The MVP command is named `knurled`. It intentionally keeps the FitSpec file model from the spec: `plan.fitspec`, `fitspec.lock`, `patches/*.fitspec`, `logs/**/*.json`, `state/current.json`, and generated `build/*.json`.
 
 ## Building the iOS app
 
@@ -56,6 +57,13 @@ Re-run `build-xcframework.sh` after any change to `engine/` or `ios/Engine/knurl
 (the framework is a compiled snapshot of the Rust core), and re-run `xcodegen generate` after
 adding or removing source files. See [`ios/README.md`](ios/README.md) for the full workflow.
 
+To rebuild every generated engine artifact in one pass:
+
+```bash
+npm run build:engine-artifacts   # workbench WASM + iOS KnurledCore.xcframework
+npm run build:all                # engine artifacts + workbench/dist/
+```
+
 ## Workbench
 
 The workbench is a **Vite + SolidJS** single-page app that runs the real Rust engine in
@@ -65,15 +73,17 @@ Rust toolchain at site-build time; Vite emits the `.wasm` as a hashed asset.
 
 ```bash
 npm run dev:workbench      # Vite dev server with hot reload
+npm run build:wasm         # rebuild the committed WASM engine package
 npm run build:workbench    # build the static site into workbench/dist/
+npm run deploy:workbench:fresh  # rebuild WASM, build the site, deploy with Wrangler
 cargo run -p knurled-cli -- serve --port 4321   # serve workbench/dist/ (build first)
 ```
 
 `workbench/engine-wasm/` is a standalone wasm-bindgen crate (kept out of the root Cargo
 workspace, like the iOS FFI crate) that marshals the engine's in-memory functions —
-`compile_plan`, `build_outputs`, `simulate`, `history_import_events_from_str` — to the
+`compile_plan`, `build_outputs`, `simulate`, `submit_session`, and `backtest` — to the
 browser. The SolidJS front-end (`workbench/src/`) is purely UI and GitHub/file-workflow
-code; all validation, build, simulation, and history import run in the engine.
+code; all validation, build, simulation, submit, and backtest logic runs in the engine.
 
 See [`workbench/README.md`](workbench/README.md) for the dev server, WASM rebuilds,
 and Cloudflare Pages deployment.

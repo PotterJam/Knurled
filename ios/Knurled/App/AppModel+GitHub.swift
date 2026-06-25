@@ -191,6 +191,13 @@ extension AppModel {
         plan = Self.replacingPlanUnits(in: plan, with: initialNumbers.units)
         plan = try Self.replacingInitialNumberBlock(in: plan, with: initialNumbers)
         try plan.write(to: planURL, atomically: true, encoding: .utf8)
+
+        // `initRepo` wrote state from template defaults; drop it so build derives from the
+        // edited first-workout numbers.
+        let stateURL = dir.appending(path: "state/current.json")
+        if FileManager.default.fileExists(atPath: stateURL.path(percentEncoded: false)) {
+            try FileManager.default.removeItem(at: stateURL)
+        }
     }
 
     static func replacingPlanUnits(in plan: String, with units: Units) -> String {

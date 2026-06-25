@@ -10,7 +10,11 @@
     "dev:workbench": "npm --prefix workbench run dev",
     "build:example": "cargo run -p knurled-cli -- build examples/gzclp-repo",
     "build:wasm": "bash workbench/scripts/build-wasm.sh",
+    "build:ios-engine": "bash ios/scripts/build-xcframework.sh",
+    "build:engine-artifacts": "bash scripts/build-engine-artifacts.sh",
     "build:workbench": "npm --prefix workbench install && npm --prefix workbench run build",
+    "build:all": "npm run build:engine-artifacts && npm run build:workbench",
+    "deploy:workbench:fresh": "npm run build:wasm && npm run deploy:workbench",
     "deploy:workbench": "npm run build:workbench && npx wrangler pages deploy workbench/dist",
     "deploy:workbench:preview": "npm run build:workbench && npx wrangler pages deploy workbench/dist --branch preview"
   }

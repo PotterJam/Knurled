@@ -1,6 +1,6 @@
 # ADR 0005 - Historical workout import uses a flat staging format and non-progressive session events
 
-- Status: Accepted
+- Status: Superseded by [ADR 0007](0007-logs-as-record-state-as-truth.md)
 - Date: 2026-06-24
 
 ## Context

@@ -1,5 +1,10 @@
 # Knurled Editing, Git, Language and Workbench MVP
 
+> **Historical draft.** The repo/log sections in this MVP spec predate
+> [ADR 0007](adr/0007-logs-as-record-state-as-truth.md). The current repo
+> contract is [repo-contract.md](repo-contract.md): monthly `logs/YYYY/MM.json`
+> records plus `state/current.json` as the source of truth.
+
 ![Knurled logo](./Knurled_logo.png)
 
 ## Authoring layer for the Knurled Git-backed training system

@@ -22,11 +22,10 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
    weight, reps — wrapped in `plan_hash` / `template_hash` / `rendered_session_hash` / `program` /
    `prescribed` / `outcome` / `continues_event_id` / `corrects_event_id` / `results_added` /
    `changes`. All of that exists so the past can be *replayed deterministically*.
-3. **The format is a contract reimplemented three times.** Rust (`repo.rs` reader, `import.rs`
-   writer), Swift (`ios/Knurled/Repo/LogReader.swift`), and JS (`workbench/src/lib/commit.mjs`,
-   `github.js`) each hand-roll read/write — and they already diverge (iOS writes monthly
-   `logs/<yyyy>/<mm>.jsonl`; the workbench writes flat import files). The engine exposes no log
-   writer over WASM/FFI, so clients invent their own.
+3. **The format is a contract reimplemented three times.** Rust, Swift, and JS each had to
+   hand-roll read/write behavior around the same event log, and client behavior had already
+   started to diverge. The engine exposed no log writer over WASM/FFI, so clients invented
+   their own.
 4. **The one thing replay-from-logs uniquely buys, we don't need.** Re-deriving state from history
    and reinterpreting old sessions under a changed plan only matter if the past must stay
    replayable. For a single-author, Git-backed personal training tool it does not: Git already

@@ -82,13 +82,12 @@ struct GitHubRepo: Codable, Sendable, Identifiable, Hashable {
     let fullName: String
     let defaultBranch: String
     let `private`: Bool
-    /// Repository size in KB. GitHub reports 0 for a repo with no commits, which lets us
-    /// offer to initialize it before attempting a pull that would 409.
+    /// Repository size in KB from GitHub's list endpoint. This is display metadata only:
+    /// small repositories can report 0 KB even when they have commits, so emptiness must be
+    /// determined by attempting to read the branch and handling GitHub's empty-repo 409.
     var size: Int?
 
     var owner: String { String(fullName.split(separator: "/").first ?? "") }
-
-    var isEmpty: Bool { (size ?? 0) == 0 }
 }
 
 struct GitHubCreateRepoRequest: Encodable {

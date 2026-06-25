@@ -8,23 +8,22 @@ cargo run -p knurled-cli -- validate my-training
 cargo run -p knurled-cli -- build my-training
 cargo run -p knurled-cli -- preview my-training --weeks 4
 cargo run -p knurled-cli -- simulate my-training --weeks 8 --strategy all-pass
-cargo run -p knurled-cli -- replay my-training --write-state
 cargo run -p knurled-cli -- check-generated my-training
-cargo run -p knurled-cli -- backtest my-training
-cargo run -p knurled-cli -- import-history my-training hevy.csv --source hevy
+cargo run -p knurled-cli -- submit my-training input.json --date 2026-06-25
+cargo run -p knurled-cli -- backtest-records my-training
 cargo run -p knurled-cli -- serve --port 4321
 ```
 
 The spec calls the early command `fitspec`; this implementation uses the product-facing `knurled` name while preserving the FitSpec file model.
 
-## Historical Import
+## Records
 
-`import-history` ingests the `history-flat-v1` CSV/TSV staging format documented in
-`docs/adr/0005-historical-workout-import.md`. It writes non-progressive `session_imported` events to
-`logs/imports/<source>.jsonl`, so past workouts are retained without advancing today's plan cursor.
+Completed sessions are submitted as `ExecutionInput` JSON built against the current rendered workout.
+The engine writes lean monthly records under `logs/YYYY/MM.json` and advances `state/current.json`
+according to the selected mode.
 
 ```bash
-cargo run -p knurled-cli -- import-history my-training hevy.csv --source hevy
-cargo run -p knurled-cli -- import-history my-training strengthlevels.tsv --source strengthlevels --delimiter tsv
-cargo run -p knurled-cli -- import-history my-training history.csv --dry-run
+cargo run -p knurled-cli -- submit my-training input.json --date 2026-06-25 --mode advance
+cargo run -p knurled-cli -- submit my-training input.json --date 2026-06-25 --mode off-day
+cargo run -p knurled-cli -- backtest-records my-training
 ```
