@@ -10,16 +10,21 @@
 // package under Vite: Vite emits the binary as a hashed asset and gives us its
 // final URL, instead of relying on the glue's `new URL(..., import.meta.url)`
 // guess. The committed package in ./pkg/ keeps the site a zero-Rust static build.
-import init, {
-  validate as wasmValidate,
-  build as wasmBuild,
-  simulate_plan as wasmSimulate,
-  import_history as wasmImportHistory,
-  builtin_template_catalog as wasmTemplates,
-  lock_for as wasmLockFor,
-  engine_version as wasmEngineVersion,
-} from "./pkg/knurled_engine.js";
+// Namespace import: new exports (submit, backtest_records) and the state-based
+// build/simulate signatures land when the committed pkg is regenerated with
+// workbench/scripts/build-wasm.sh. Importing the namespace (rather than named
+// bindings) keeps the bundle building even before that rebuild — a missing
+// export is just `undefined` until the pkg catches up.
+import init, * as wasm from "./pkg/knurled_engine.js";
 import wasmUrl from "./pkg/knurled_engine_bg.wasm?url";
+
+function wasmCall(name, ...args) {
+  const fn = wasm[name];
+  if (typeof fn !== "function") {
+    throw new Error(`engine export "${name}" is unavailable — rebuild workbench/engine/pkg (build-wasm.sh)`);
+  }
+  return fn(...args);
+}
 
 let ready = null;
 
@@ -46,24 +51,31 @@ function unwrap(jsonString) {
 
 const patchesJson = (patches = []) =>
   JSON.stringify(patches.filter((p) => p.active !== false).map((p) => ({ filename: p.filename, text: p.text })));
-const eventsJson = (events = []) => JSON.stringify(events);
+// state/current.json is the source of truth (ADR 0007); "" means initial state.
+const stateJson = (state) => (state == null ? "" : JSON.stringify(state));
 
 export const engine = {
   validate: (planText, lockText = "", patches = []) =>
-    unwrap(wasmValidate(planText, lockText, patchesJson(patches))),
+    unwrap(wasmCall("validate", planText, lockText, patchesJson(patches))),
 
-  build: (planText, lockText = "", patches = [], events = []) =>
-    unwrap(wasmBuild(planText, lockText, patchesJson(patches), eventsJson(events))),
+  // Render the next workout from `state` (or initial state when null).
+  build: (planText, lockText = "", patches = [], state = null) =>
+    unwrap(wasmCall("build", planText, lockText, patchesJson(patches), stateJson(state))),
 
-  simulate: (planText, lockText = "", patches = [], events = [], weeks = 8, strategy = "all-pass") =>
-    unwrap(wasmSimulate(planText, lockText, patchesJson(patches), eventsJson(events), weeks, strategy)),
+  simulate: (planText, lockText = "", patches = [], state = null, weeks = 8, strategy = "all-pass") =>
+    unwrap(wasmCall("simulate_plan", planText, lockText, patchesJson(patches), stateJson(state), weeks, strategy)),
 
-  importHistory: (text, source = "manual", delimiter = "auto") =>
-    unwrap(wasmImportHistory(text, source, delimiter)),
+  // Submit a finished session: mode is "advance" | "off_day" | "reset".
+  submit: (planText, lockText = "", patches = [], state = null, input = {}, mode = "advance", date) =>
+    unwrap(wasmCall("submit", planText, lockText, patchesJson(patches), stateJson(state), JSON.stringify(input), mode, date)),
 
-  templateCatalog: () => unwrap(wasmTemplates()),
+  // Backtest the plan over recorded days (replay-free projection).
+  backtestRecords: (planText, lockText = "", patches = [], records = []) =>
+    unwrap(wasmCall("backtest_records", planText, lockText, patchesJson(patches), JSON.stringify(records))),
 
-  lockFor: (templateRef) => unwrap(wasmLockFor(templateRef)),
+  templateCatalog: () => unwrap(wasmCall("builtin_template_catalog")),
 
-  version: () => unwrap(wasmEngineVersion()),
+  lockFor: (templateRef) => unwrap(wasmCall("lock_for", templateRef)),
+
+  version: () => unwrap(wasmCall("engine_version")),
 };

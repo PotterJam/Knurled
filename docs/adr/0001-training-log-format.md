@@ -1,6 +1,6 @@
 # ADR 0001 — Training log stays an event log; generalise the performed unit for hybrid training
 
-- Status: Accepted
+- Status: Superseded by [ADR 0007](0007-logs-as-record-state-as-truth.md)
 - Date: 2026-06-24
 
 ## Context

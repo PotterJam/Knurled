@@ -23,9 +23,15 @@ char *knurled_build_repo(const char *dir, int write);
 char *knurled_init_repo(const char *dir, const char *template_ref);
 
 /* Reduces an execution_input against the rendered session snapshot captured when the
- * workout started (passed as JSON), not the repo's current next workout.
- * -> reduction result (validation, event, effects, new_state, next_workout) */
+ * workout started (passed as JSON), not the repo's current next workout. Preview only —
+ * nothing is persisted. -> reduction result (validation, results, effects, new_state, next_workout) */
 char *knurled_reduce_input(const char *dir, const char *rendered_session_json, const char *execution_input_json);
+
+/* Submits a finished session against its rendered-session snapshot (ADR 0007): advances
+ * state per mode ("advance" | "off_day" | "reset"), writes state/current.json, and appends
+ * the day to logs/<yyyy>/<mm>.json. On invalid input nothing is written.
+ * -> submit outcome (validation, record_day, new_state, effects) */
+char *knurled_submit(const char *dir, const char *rendered_session_json, const char *execution_input_json, const char *mode, const char *date);
 
 /* Re-renders a specific session by id against the repo's current state, ignoring the cursor,
  * so a saved partial can be resumed from history after the cursor has advanced. -> rendered session */

@@ -4,10 +4,15 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-use crate::core::{PatchFile, build_outputs, compile_plan, replay_events, simulate};
+use crate::backtest::{BacktestProjection, backtest};
+use crate::core::{
+    PatchFile, build_outputs, compile_plan, create_initial_state, render_next, simulate,
+};
 use crate::error::{KnurledError, Result};
 use crate::json::pretty_json;
 use crate::model::*;
+use crate::record::{DayRecord, LogMonth, month_key, month_path};
+use crate::session::{SubmitMode, SubmitOutcome, submit_session};
 use crate::templates::{TemplateRef, parse_template_ref, render_lockfile};
 
 #[derive(Debug, Clone)]
@@ -16,7 +21,6 @@ pub struct TrainingRepo {
     pub plan_text: String,
     pub lock_text: String,
     pub patch_files: Vec<PatchFile>,
-    pub events: Vec<TrainingEvent>,
     pub compiled: CompiledPlan,
 }
 
@@ -34,7 +38,6 @@ pub fn read_training_repo(repo_path: impl AsRef<Path>) -> Result<TrainingRepo> {
     let plan_text = read_required(&plan_path)?;
     let lock_text = read_optional(&lock_path)?.unwrap_or_default();
     let patch_files = read_patch_files(&root)?;
-    let events = read_log_events(&root)?;
     let compiled = compile_plan(&plan_text, &lock_text, &patch_files)?;
 
     Ok(TrainingRepo {
@@ -42,7 +45,6 @@ pub fn read_training_repo(repo_path: impl AsRef<Path>) -> Result<TrainingRepo> {
         plan_text,
         lock_text,
         patch_files,
-        events,
         compiled,
     })
 }
@@ -88,18 +90,22 @@ pub fn validate_repo(repo_path: impl AsRef<Path>) -> Result<ValidationReport> {
 }
 
 pub fn build_repo(repo_path: impl AsRef<Path>, write: bool) -> Result<BuildOutputs> {
-    let repo = read_training_repo(repo_path)?;
-    let outputs = build_outputs(&repo.compiled, &repo.events)?;
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let state = read_state(root)?;
+    let outputs = build_outputs(&repo.compiled, &state)?;
     if write {
-        write_generated_files(&repo.root, &outputs)?;
+        write_generated_files(root, &outputs)?;
     }
     Ok(outputs)
 }
 
 pub fn preview_repo(repo_path: impl AsRef<Path>, weeks: u32) -> Result<PreviewReport> {
-    let repo = read_training_repo(repo_path)?;
-    let outputs = build_outputs(&repo.compiled, &repo.events)?;
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let state = read_state(root)?;
     if weeks <= 1 {
+        let outputs = build_outputs(&repo.compiled, &state)?;
         Ok(PreviewReport {
             kind: "preview_report".into(),
             schema_version: SCHEMA_VERSION.into(),
@@ -107,7 +113,7 @@ pub fn preview_repo(repo_path: impl AsRef<Path>, weeks: u32) -> Result<PreviewRe
             final_state: None,
         })
     } else {
-        let report = simulate(&repo.compiled, &outputs.state, weeks, "all-pass")?;
+        let report = simulate(&repo.compiled, &state, weeks, "all-pass")?;
         Ok(PreviewReport {
             kind: "preview_report".into(),
             schema_version: SCHEMA_VERSION.into(),
@@ -117,37 +123,28 @@ pub fn preview_repo(repo_path: impl AsRef<Path>, weeks: u32) -> Result<PreviewRe
     }
 }
 
-pub fn replay_repo(repo_path: impl AsRef<Path>, write: bool) -> Result<StateProjection> {
-    let repo = read_training_repo(repo_path)?;
-    let state = replay_events(&repo.compiled, &repo.events);
-    if write {
-        let state_dir = repo.root.join("state");
-        fs::create_dir_all(&state_dir).map_err(|source| io_error(&state_dir, source))?;
-        fs::write(state_dir.join("current.json"), pretty_json(&state)?)
-            .map_err(|source| io_error(state_dir.join("current.json"), source))?;
-    }
-    Ok(state)
-}
-
 pub fn simulate_repo(
     repo_path: impl AsRef<Path>,
     weeks: u32,
     strategy: &str,
 ) -> Result<SimulationReport> {
-    let repo = read_training_repo(repo_path)?;
-    let outputs = build_outputs(&repo.compiled, &repo.events)?;
-    simulate(&repo.compiled, &outputs.state, weeks, strategy)
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let state = read_state(root)?;
+    simulate(&repo.compiled, &state, weeks, strategy)
 }
 
 pub fn check_generated_repo(repo_path: impl AsRef<Path>) -> Result<GeneratedFileReport> {
-    let repo = read_training_repo(repo_path)?;
-    let outputs = build_outputs(&repo.compiled, &repo.events)?;
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let state = read_state(root)?;
+    let outputs = build_outputs(&repo.compiled, &state)?;
     let expected = generated_file_map(&outputs)?;
     let mut changed = Vec::new();
     let mut missing = Vec::new();
 
     for (relative_path, expected_text) in expected {
-        let path = repo.root.join(&relative_path);
+        let path = root.join(&relative_path);
         if !path.exists() {
             missing.push(relative_path);
             continue;
@@ -171,33 +168,106 @@ pub fn check_generated_repo(repo_path: impl AsRef<Path>) -> Result<GeneratedFile
     })
 }
 
-pub fn backtest_repo(repo_path: impl AsRef<Path>) -> Result<BacktestReport> {
-    let repo = read_training_repo(&repo_path)?;
-    let generated = check_generated_repo(&repo_path)?;
-    let state = replay_events(&repo.compiled, &repo.events);
-    Ok(BacktestReport {
-        kind: "backtest_report".into(),
-        schema_version: SCHEMA_VERSION.into(),
-        status: if generated.status == "current" {
-            "passed".into()
-        } else {
-            "failed".into()
-        },
-        events_replayed: repo.events.len(),
-        corrections_applied: repo
-            .events
-            .iter()
-            .filter(|event| event.kind == "session_corrected")
-            .count(),
-        skips: repo
-            .events
-            .iter()
-            .filter(|event| event.kind == "session_skipped")
-            .count(),
-        state_projection: "rebuilt".into(),
-        generated_files: generated,
-        cursor: state.cursor,
-    })
+// --- State-primary record flow (ADR 0007) -------------------------------------
+//
+// `state/current.json` is the source of truth and `logs/<yyyy>/<mm>.json` is an
+// append/edit-in-place record the engine never replays. These helpers read and
+// write that pair directly.
+
+/// Read `state/current.json`, or derive the program's initial state when the
+/// repo has not recorded anything yet.
+pub fn read_state(repo_path: impl AsRef<Path>) -> Result<StateProjection> {
+    let root = repo_path.as_ref();
+    let path = root.join("state").join("current.json");
+    if let Some(text) = read_optional(&path)? {
+        serde_json::from_str(&text).map_err(|source| KnurledError::Json { path, source })
+    } else {
+        let repo = read_training_repo(root)?;
+        Ok(create_initial_state(&repo.compiled))
+    }
+}
+
+/// Write `state/current.json` (the source of truth).
+pub fn write_state(repo_path: impl AsRef<Path>, state: &StateProjection) -> Result<()> {
+    let dir = repo_path.as_ref().join("state");
+    fs::create_dir_all(&dir).map_err(|source| io_error(&dir, source))?;
+    let path = dir.join("current.json");
+    fs::write(&path, pretty_json(state)?).map_err(|source| io_error(&path, source))
+}
+
+/// Read every day record under `logs/**/*.json`, in chronological order. JSONL
+/// files (the legacy event log) are ignored.
+pub fn read_records(repo_path: impl AsRef<Path>) -> Result<Vec<DayRecord>> {
+    let logs_dir = repo_path.as_ref().join("logs");
+    if !logs_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    collect_files(&logs_dir, &mut files)?;
+    files.sort();
+
+    let mut days = Vec::new();
+    for path in files
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+    {
+        let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
+        let month: LogMonth =
+            serde_json::from_str(&text).map_err(|source| KnurledError::Json {
+                path: path.clone(),
+                source,
+            })?;
+        days.extend(month.days);
+    }
+    days.sort_by(|left, right| left.date.cmp(&right.date));
+    Ok(days)
+}
+
+/// Insert or replace a day in its month file (`logs/<yyyy>/<mm>.json`), keeping
+/// the file pretty-printed and chronological. Returns the repo-relative path.
+pub fn append_day_record(repo_path: impl AsRef<Path>, day: DayRecord) -> Result<String> {
+    let relative = month_path(&day.date)?;
+    let path = repo_path.as_ref().join(&relative);
+    let mut month = match read_optional(&path)? {
+        Some(text) => LogMonth::parse(&text)?,
+        None => LogMonth::new(month_key(&day.date)?),
+    };
+    month.upsert_day(day);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| io_error(parent, source))?;
+    }
+    fs::write(&path, month.to_pretty_json()?).map_err(|source| io_error(&path, source))?;
+    Ok(relative)
+}
+
+/// Submit a finished session against the next workout: advance `state` per
+/// `mode` and append the day to the record. On invalid input nothing is
+/// written; the returned outcome carries the validation errors.
+pub fn submit_repo(
+    repo_path: impl AsRef<Path>,
+    input: &ExecutionInput,
+    mode: SubmitMode,
+    date: &str,
+) -> Result<SubmitOutcome> {
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let state = read_state(root)?;
+    let rendered = render_next(&repo.compiled, &state)?;
+    let outcome = submit_session(&repo.compiled, &state, &rendered, input, mode, date)?;
+    if outcome.validation.status == ValidationStatus::Valid {
+        write_state(root, &outcome.new_state)?;
+        append_day_record(root, outcome.record_day.clone())?;
+    }
+    Ok(outcome)
+}
+
+/// Backtest the repo's plan over its recorded days (the opt-in, replay-free
+/// projection of ADR 0007).
+pub fn backtest_records_repo(repo_path: impl AsRef<Path>) -> Result<BacktestProjection> {
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let days = read_records(root)?;
+    backtest(&repo.compiled, &days)
 }
 
 pub fn write_generated_files(root: impl AsRef<Path>, outputs: &BuildOutputs) -> Result<()> {
@@ -270,38 +340,6 @@ fn read_patch_files(root: &Path) -> Result<Vec<PatchFile>> {
             Ok(PatchFile { filename, text })
         })
         .collect()
-}
-
-fn read_log_events(root: &Path) -> Result<Vec<TrainingEvent>> {
-    let logs_dir = root.join("logs");
-    if !logs_dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut files = Vec::new();
-    collect_files(&logs_dir, &mut files)?;
-    files.sort();
-
-    let mut events = Vec::new();
-    for path in files.into_iter().filter(|path| {
-        path.extension()
-            .is_some_and(|extension| extension == "jsonl")
-    }) {
-        let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
-        for (index, line) in text.lines().enumerate() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            events.push(
-                serde_json::from_str(line).map_err(|source| KnurledError::Jsonl {
-                    path: path.clone(),
-                    line: index + 1,
-                    source,
-                })?,
-            );
-        }
-    }
-    Ok(events)
 }
 
 fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {

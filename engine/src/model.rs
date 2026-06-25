@@ -599,67 +599,14 @@ pub struct ExecutionInputValidation {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReductionResult {
     pub validation: ExecutionInputValidation,
-    pub event: Option<TrainingEvent>,
+    /// Per-lift outcomes (pass/fail and the progression each triggered). In the
+    /// logs-as-record model (ADR 0007) this is surfaced for the consequence
+    /// preview and folded into the lean record by the caller; it is no longer
+    /// wrapped in an event.
+    pub results: Vec<ExerciseResult>,
     pub effects: Vec<Effect>,
     pub new_state: StateProjection,
     pub next_workout: RenderedSession,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TrainingEvent {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub schema_version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub program: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plan_hash: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub template_hash: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rendered_session_hash: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub engine_version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub started_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub saved_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub results: Vec<ExerciseResult>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub results_added: Vec<ExerciseResult>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub effects: Vec<Effect>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub continues_event_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub corrects_event_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub policy: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lane: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub change: Option<StateChange>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cursor: Option<CursorChange>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changes: Vec<CorrectionChange>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub change_kind: Option<String>,
-    #[serde(rename = "from", skip_serializing_if = "Option::is_none")]
-    pub from_plan: Option<PlanChangeRef>,
-    #[serde(rename = "to", skip_serializing_if = "Option::is_none")]
-    pub to_plan: Option<PlanChangeRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -686,52 +633,10 @@ pub struct ExerciseResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StateChange {
-    pub load: Option<LoadChange>,
-    pub stage: Option<StageChange>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LoadChange {
-    pub from: Option<String>,
-    pub to: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StageChange {
-    pub from: Option<String>,
-    pub to: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CursorChange {
-    pub next_session: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CorrectionChange {
-    pub path: String,
-    pub before: serde_json::Value,
-    pub after: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PlanChangeRef {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plan_hash: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub template: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BuildOutputs {
     pub state: StateProjection,
     pub ir: serde_json::Value,
     pub next_workout: Option<RenderedSession>,
-    /// Saved partials that have not yet been continued, re-rendered against the current state so
-    /// the app can resume them from history even though the cursor has moved past them (§16/§19).
-    #[serde(default)]
-    pub resumable_sessions: Vec<RenderedSession>,
     pub validation: ValidationReport,
 }
 
@@ -743,20 +648,6 @@ pub struct GeneratedFileReport {
     pub status: String,
     pub changed: Vec<String>,
     pub missing: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BacktestReport {
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub schema_version: String,
-    pub status: String,
-    pub events_replayed: usize,
-    pub corrections_applied: usize,
-    pub skips: usize,
-    pub state_projection: String,
-    pub generated_files: GeneratedFileReport,
-    pub cursor: Cursor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -776,7 +667,6 @@ pub struct SimulatedSession {
     pub index: u32,
     pub session_id: String,
     pub display_name: String,
-    pub event_id: String,
     pub effects: Vec<Effect>,
 }
 

@@ -15,9 +15,9 @@
 //! unwraps the envelope and throws on `ok:false`.
 
 use knurled_core::{
-    ENGINE_VERSION, HistoryImportDelimiter, HistoryImportOptions, PatchFile, TrainingEvent,
-    build_outputs, builtin_template, builtin_templates, compile_plan,
-    history_import_events_from_str, render_lockfile, replay_events, simulate, validate_compiled,
+    CompiledPlan, DayRecord, ENGINE_VERSION, ExecutionInput, PatchFile, StateProjection, SubmitMode,
+    backtest, build_outputs, builtin_template, builtin_templates, compile_plan, create_initial_state,
+    render_lockfile, render_next, simulate, submit_session, validate_compiled,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -56,11 +56,13 @@ fn parse_patches(patches_json: &str) -> Result<Vec<PatchFile>, String> {
         .collect())
 }
 
-fn parse_events(events_json: &str) -> Result<Vec<TrainingEvent>, String> {
-    if events_json.trim().is_empty() {
-        return Ok(Vec::new());
+/// Resolve `state_json` against a compiled plan: parse it, or fall back to the
+/// program's initial state when empty (ADR 0007 — the browser holds `state`).
+fn resolve_state(compiled: &CompiledPlan, state_json: &str) -> Result<StateProjection, String> {
+    if state_json.trim().is_empty() {
+        return Ok(create_initial_state(compiled));
     }
-    serde_json::from_str(events_json).map_err(|error| format!("invalid events json: {error}"))
+    serde_json::from_str(state_json).map_err(|error| format!("invalid state json: {error}"))
 }
 
 /// Compile + validate a plan. Returns a `ValidationReport`.
@@ -76,15 +78,13 @@ pub fn validate(plan_text: &str, lock_text: &str, patches_json: &str) -> String 
     }
 }
 
-/// Compile + replay events + render. Returns `BuildOutputs`
-/// (`state`, `ir`, `next_workout`, `validation`) — the workbench's main call.
+/// Compile + render the next workout from `state` (ADR 0007). Returns
+/// `BuildOutputs` (`state`, `ir`, `next_workout`, `validation`) — the
+/// workbench's main call. An empty `state_json` means the program's initial
+/// state.
 #[wasm_bindgen]
-pub fn build(plan_text: &str, lock_text: &str, patches_json: &str, events_json: &str) -> String {
+pub fn build(plan_text: &str, lock_text: &str, patches_json: &str, state_json: &str) -> String {
     let patches = match parse_patches(patches_json) {
-        Ok(value) => value,
-        Err(error) => return fail(error),
-    };
-    let events = match parse_events(events_json) {
         Ok(value) => value,
         Err(error) => return fail(error),
     };
@@ -92,19 +92,23 @@ pub fn build(plan_text: &str, lock_text: &str, patches_json: &str, events_json: 
         Ok(value) => value,
         Err(error) => return fail(error),
     };
-    match build_outputs(&compiled, &events) {
+    let state = match resolve_state(&compiled, state_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    match build_outputs(&compiled, &state) {
         Ok(outputs) => ok(outputs),
         Err(error) => fail(error),
     }
 }
 
-/// Project the plan forward. Returns a `SimulationReport`.
+/// Project the plan forward from `state`. Returns a `SimulationReport`.
 #[wasm_bindgen]
 pub fn simulate_plan(
     plan_text: &str,
     lock_text: &str,
     patches_json: &str,
-    events_json: &str,
+    state_json: &str,
     weeks: u32,
     strategy: &str,
 ) -> String {
@@ -112,7 +116,37 @@ pub fn simulate_plan(
         Ok(value) => value,
         Err(error) => return fail(error),
     };
-    let events = match parse_events(events_json) {
+    let compiled = match compile_plan(plan_text, lock_text, &patches) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    let state = match resolve_state(&compiled, state_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    match simulate(&compiled, &state, weeks, strategy) {
+        Ok(report) => ok(report),
+        Err(error) => fail(error),
+    }
+}
+
+/// Submit a finished session (ADR 0007). The browser holds `state` and the
+/// record, so they are passed in and returned: this renders the next workout
+/// from `state_json`, reduces the input per `mode` (`advance` | `off_day` |
+/// `reset`), and returns a `SubmitOutcome` (`validation`, `record_day` to
+/// upsert into the month file, `new_state` to persist, `effects`). An empty
+/// `state_json` means the program's initial state.
+#[wasm_bindgen]
+pub fn submit(
+    plan_text: &str,
+    lock_text: &str,
+    patches_json: &str,
+    state_json: &str,
+    input_json: &str,
+    mode: &str,
+    date: &str,
+) -> String {
+    let patches = match parse_patches(patches_json) {
         Ok(value) => value,
         Err(error) => return fail(error),
     };
@@ -120,34 +154,62 @@ pub fn simulate_plan(
         Ok(value) => value,
         Err(error) => return fail(error),
     };
-    let state = replay_events(&compiled, &events);
-    match simulate(&compiled, &state, weeks, strategy) {
-        Ok(report) => ok(report),
+    let state: StateProjection = if state_json.trim().is_empty() {
+        create_initial_state(&compiled)
+    } else {
+        match serde_json::from_str(state_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid state json: {error}")),
+        }
+    };
+    let input: ExecutionInput = match serde_json::from_str(input_json) {
+        Ok(value) => value,
+        Err(error) => return fail(format!("invalid input json: {error}")),
+    };
+    let mode = match mode {
+        "off_day" => SubmitMode::OffDay,
+        "reset" => SubmitMode::Reset,
+        "advance" | "" => SubmitMode::Advance,
+        other => return fail(format!("unknown submit mode: {other:?}")),
+    };
+    let rendered = match render_next(&compiled, &state) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
+    };
+    match submit_session(&compiled, &state, &rendered, &input, mode, date) {
+        Ok(outcome) => ok(outcome),
         Err(error) => fail(error),
     }
 }
 
-/// Parse delimited history text into a `HistoryImportDraft` (events + per-row
-/// diagnostics), entirely in memory. `delimiter` is "auto" | "csv" | "tsv".
+/// Backtest the plan over recorded days (ADR 0007). `days_json` is a JSON array
+/// of day records (`logs/<yyyy>/<mm>.json` `days[]`). Returns a
+/// `BacktestProjection`.
 #[wasm_bindgen]
-pub fn import_history(text: &str, source: &str, delimiter: &str) -> String {
-    let delimiter = match delimiter {
-        "csv" => HistoryImportDelimiter::Csv,
-        "tsv" => HistoryImportDelimiter::Tsv,
-        _ => HistoryImportDelimiter::Auto,
+pub fn backtest_records(
+    plan_text: &str,
+    lock_text: &str,
+    patches_json: &str,
+    days_json: &str,
+) -> String {
+    let patches = match parse_patches(patches_json) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
     };
-    let options = HistoryImportOptions {
-        source: source.to_owned(),
-        delimiter,
-        dry_run: true,
+    let compiled = match compile_plan(plan_text, lock_text, &patches) {
+        Ok(value) => value,
+        Err(error) => return fail(error),
     };
-    match history_import_events_from_str(text, &options) {
-        // HistoryImportDraft is not Serialize; build the envelope from its fields.
-        Ok(draft) => ok(json!({
-            "events": draft.events,
-            "input_rows": draft.input_rows,
-            "imported_sets": draft.imported_sets,
-        })),
+    let days: Vec<DayRecord> = if days_json.trim().is_empty() {
+        Vec::new()
+    } else {
+        match serde_json::from_str(days_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid days json: {error}")),
+        }
+    };
+    match backtest(&compiled, &days) {
+        Ok(projection) => ok(projection),
         Err(error) => fail(error),
     }
 }

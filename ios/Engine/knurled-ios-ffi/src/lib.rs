@@ -17,9 +17,9 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    ENGINE_VERSION, ExecutionInput, RenderedSession, build_outputs, build_repo, builtin_templates,
-    init_training_repo, read_training_repo, reduce_input, render_session, validate_execution_input,
-    validate_repo,
+    ENGINE_VERSION, ExecutionInput, RenderedSession, SubmitMode, append_day_record, build_outputs,
+    build_repo, builtin_templates, init_training_repo, read_state, read_training_repo, reduce_input,
+    render_session, submit_session, validate_execution_input, validate_repo, write_state,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -148,14 +148,86 @@ pub extern "C" fn knurled_reduce_input(
             Ok(value) => value,
             Err(error) => return fail(error),
         };
-        let outputs = match build_outputs(&repo.compiled, &repo.events) {
+        let state = match read_state(dir) {
             Ok(value) => value,
             Err(error) => return fail(error),
         };
-        match reduce_input(&repo.compiled, &outputs.state, &rendered, &input) {
+        match reduce_input(&repo.compiled, &state, &rendered, &input) {
             Ok(result) => ok(result),
             Err(error) => fail(error),
         }
+    })
+}
+
+/// Submits a finished session against the rendered-session snapshot it was started from
+/// (ADR 0007): advances `state` per `mode` (`advance` | `off_day` | `reset`), persists
+/// `state/current.json`, and appends the day to `logs/<yyyy>/<mm>.json`. Returns the
+/// `SubmitOutcome` (`validation`, `record_day`, `new_state`, `effects`). On invalid input
+/// nothing is written.
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_submit(
+    dir: *const c_char,
+    rendered_session_json: *const c_char,
+    execution_input_json: *const c_char,
+    mode: *const c_char,
+    date: *const c_char,
+) -> *mut c_char {
+    guard("knurled_submit", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let rendered_json = match unsafe { borrow(rendered_session_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let input_json = match unsafe { borrow(execution_input_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let mode_str = match unsafe { borrow(mode) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let date = match unsafe { borrow(date) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let rendered: RenderedSession = match serde_json::from_str(rendered_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid rendered session: {error}")),
+        };
+        let input: ExecutionInput = match serde_json::from_str(input_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid execution input: {error}")),
+        };
+        let mode = match mode_str {
+            "off_day" => SubmitMode::OffDay,
+            "reset" => SubmitMode::Reset,
+            "advance" | "" => SubmitMode::Advance,
+            other => return fail(format!("unknown submit mode: {other:?}")),
+        };
+        let repo = match read_training_repo(dir) {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let state = match read_state(dir) {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let outcome = match submit_session(&repo.compiled, &state, &rendered, &input, mode, date) {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        if outcome.validation.status == knurled_core::ValidationStatus::Valid {
+            if let Err(error) = write_state(dir, &outcome.new_state) {
+                return fail(error);
+            }
+            if let Err(error) = append_day_record(dir, outcome.record_day.clone()) {
+                return fail(error);
+            }
+        }
+        ok(outcome)
     })
 }
 
@@ -180,11 +252,11 @@ pub extern "C" fn knurled_render_session(
             Ok(value) => value,
             Err(error) => return fail(error),
         };
-        let outputs = match build_outputs(&repo.compiled, &repo.events) {
+        let state = match read_state(dir) {
             Ok(value) => value,
             Err(error) => return fail(error),
         };
-        match render_session(&repo.compiled, &outputs.state, session_id) {
+        match render_session(&repo.compiled, &state, session_id) {
             Ok(rendered) => ok(rendered),
             Err(error) => fail(error),
         }
@@ -213,7 +285,11 @@ pub extern "C" fn knurled_validate_execution_input(
             Ok(value) => value,
             Err(error) => return fail(error),
         };
-        let outputs = match build_outputs(&repo.compiled, &repo.events) {
+        let state = match read_state(dir) {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let outputs = match build_outputs(&repo.compiled, &state) {
             Ok(value) => value,
             Err(error) => return fail(error),
         };

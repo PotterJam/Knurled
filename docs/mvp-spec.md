@@ -1090,6 +1090,12 @@ The engine validates this against the rendered session contract, then emits cano
 
 ## 18. Canonical training events
 
+> **Superseded by [ADR 0007](adr/0007-logs-as-record-state-as-truth.md).** The
+> event-sourced log and the §19 replay projection are no longer the model: logs
+> are a lean human-facing record the engine never replays, and `state` is the
+> authored-forward source of truth. The event shapes below are retained for
+> historical context only.
+
 Canonical event types:
 
 ```text

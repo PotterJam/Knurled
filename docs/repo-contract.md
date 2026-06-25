@@ -1,5 +1,11 @@
 # Training Repo Contract
 
+> **Updated by [ADR 0007](adr/0007-logs-as-record-state-as-truth.md).** Logs are
+> a human-facing record the engine never replays; `state/current.json` is the
+> authored-forward source of truth, not a projection of logs. The clauses below
+> reflect that model. The pre-ADR-0007 event-log/replay description survives in
+> [ADR 0001](adr/0001-training-log-format.md) for history.
+
 A valid Knurled training repo keeps user-owned source files separate from generated projections.
 
 ```text
@@ -25,13 +31,18 @@ my-training/
 
 `patches/*.fitspec` contains explicit future-plan changes.
 
-`logs/**/*.jsonl` contains canonical training events. Historical imports may write
-`session_imported` events under `logs/imports/*.jsonl`; these are retained as history but do not
-advance the active plan cursor.
+`logs/<yyyy>/<mm>.json` contains the training record: a pretty-printed month of dated day
+records (performed lifts, plus optional human-facing program-boundary markers). The record is
+*what happened*; the engine never replays it to compute state. It is the input to the opt-in
+backtest and to the human's history/charts.
 
-## Generated Files
+## State and Generated Files
 
-`state/current.json` is a projection from logs.
+`state/current.json` is the **source of truth** for where the lifter is: the active program plus
+the program-shaped progression cursor per lane (working load, stage, fail-count, or training
+max/week). It is authored forward — updated when a session is submitted (`advance`/`off day`/
+`reset`) — not re-derived from logs. Starting a new program, or restarting lighter after a
+layoff, is just re-authoring `state`.
 
 `build/current.ir.json` is the compiled plan.
 
@@ -39,4 +50,5 @@ advance the active plan cursor.
 
 `build/validation.json` is the validation report.
 
-Generated files are committed for MVP convenience, but they are not truth. `knurled check-generated` reports drift.
+`build/*` files derive from `state` + the compiled plan and are committed for MVP convenience.
+They are regenerated on demand; `knurled check-generated` reports drift.

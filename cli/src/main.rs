@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use knurled_core::{
-    HistoryImportDelimiter, HistoryImportOptions, backtest_repo, build_repo, check_generated_repo,
-    import_history_repo, init_training_repo, pretty_json, preview_repo, replay_repo, simulate_repo,
-    validate_repo,
+    ExecutionInput, SubmitMode, backtest_records_repo, build_repo, check_generated_repo,
+    init_training_repo, pretty_json, preview_repo, simulate_repo, submit_repo, validate_repo,
 };
 
 #[derive(Debug, Parser)]
@@ -47,31 +46,26 @@ enum Command {
         #[arg(long, default_value = "all-pass")]
         strategy: String,
     },
-    Replay {
-        #[arg(default_value = ".")]
-        repo: PathBuf,
-        #[arg(long)]
-        write_state: bool,
-    },
     CheckGenerated {
         #[arg(default_value = ".")]
         repo: PathBuf,
     },
-    Backtest {
+    /// Submit a finished session: advance state and append the day to the record (ADR 0007).
+    Submit {
+        repo: PathBuf,
+        /// Path to an ExecutionInput JSON built against the current next workout.
+        input: PathBuf,
+        /// ISO date (YYYY-MM-DD) the session was performed.
+        #[arg(long)]
+        date: String,
+        /// How the session moves state.
+        #[arg(long, value_enum, default_value_t = SubmitModeArg::Advance)]
+        mode: SubmitModeArg,
+    },
+    /// Backtest the plan over the recorded days (replay-free projection, ADR 0007).
+    BacktestRecords {
         #[arg(default_value = ".")]
         repo: PathBuf,
-    },
-    ImportHistory {
-        repo: PathBuf,
-        input: PathBuf,
-        #[arg(long, default_value = "history-flat-v1")]
-        format: String,
-        #[arg(long, default_value = "manual")]
-        source: String,
-        #[arg(long, value_enum, default_value_t = ImportDelimiterArg::Auto)]
-        delimiter: ImportDelimiterArg,
-        #[arg(long)]
-        dry_run: bool,
     },
     Serve {
         #[arg(long, default_value_t = 4321)]
@@ -80,18 +74,21 @@ enum Command {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
-enum ImportDelimiterArg {
-    Auto,
-    Csv,
-    Tsv,
+enum SubmitModeArg {
+    /// Run the program's progression rules.
+    Advance,
+    /// Record only; leave targets/stages/fails unchanged.
+    OffDay,
+    /// Make the performed loads the new baseline.
+    Reset,
 }
 
-impl From<ImportDelimiterArg> for HistoryImportDelimiter {
-    fn from(value: ImportDelimiterArg) -> Self {
+impl From<SubmitModeArg> for SubmitMode {
+    fn from(value: SubmitModeArg) -> Self {
         match value {
-            ImportDelimiterArg::Auto => HistoryImportDelimiter::Auto,
-            ImportDelimiterArg::Csv => HistoryImportDelimiter::Csv,
-            ImportDelimiterArg::Tsv => HistoryImportDelimiter::Tsv,
+            SubmitModeArg::Advance => SubmitMode::Advance,
+            SubmitModeArg::OffDay => SubmitMode::OffDay,
+            SubmitModeArg::Reset => SubmitMode::Reset,
         }
     }
 }
@@ -135,9 +132,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             println!("{}", pretty_json(&simulate_repo(repo, weeks, &strategy)?)?);
         }
-        Command::Replay { repo, write_state } => {
-            println!("{}", pretty_json(&replay_repo(repo, write_state)?)?);
-        }
         Command::CheckGenerated { repo } => {
             let report = check_generated_repo(repo)?;
             if report.status == "current" {
@@ -150,37 +144,22 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 std::process::exit(1);
             }
         }
-        Command::Backtest { repo } => {
-            let report = backtest_repo(repo)?;
-            println!("{}", pretty_json(&report)?);
-            if report.status != "passed" {
+        Command::Submit {
+            repo,
+            input,
+            date,
+            mode,
+        } => {
+            let text = fs::read_to_string(&input)?;
+            let execution_input: ExecutionInput = serde_json::from_str(&text)?;
+            let outcome = submit_repo(&repo, &execution_input, mode.into(), &date)?;
+            println!("{}", pretty_json(&outcome)?);
+            if outcome.validation.status != knurled_core::ValidationStatus::Valid {
                 std::process::exit(1);
             }
         }
-        Command::ImportHistory {
-            repo,
-            input,
-            format,
-            source,
-            delimiter,
-            dry_run,
-        } => {
-            if format != "history-flat-v1" {
-                return Err(format!(
-                    "unsupported import format {format:?}; expected history-flat-v1"
-                )
-                .into());
-            }
-            let report = import_history_repo(
-                repo,
-                input,
-                HistoryImportOptions {
-                    source,
-                    delimiter: delimiter.into(),
-                    dry_run,
-                },
-            )?;
-            println!("{}", pretty_json(&report)?);
+        Command::BacktestRecords { repo } => {
+            println!("{}", pretty_json(&backtest_records_repo(repo)?)?);
         }
         Command::Serve { port } => serve(port)?,
     }

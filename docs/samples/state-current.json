@@ -1,0 +1,12 @@
+{
+  "type": "state_projection",
+  "schema_version": "0.1",
+  "engine_version": "0.1.0",
+  "program": "gzcl.gzclp@1.0.0",
+  "cursor": { "next_session": "b2", "week": 1, "cycle": 1 },
+  "lanes": {
+    "squat.t1": { "load": "85kg", "stage": "5x3+" },
+    "bench.t2": { "load": "47.5kg", "stage": "3x10" },
+    "lat_pulldown.t3": { "load": "45kg", "stage": "amrap" }
+  }
+}

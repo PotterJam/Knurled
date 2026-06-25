@@ -75,6 +75,31 @@ Swift talks to it through the `WorkoutEngine` protocol:
 - **Skip / correction** events are authored in Swift (user intent), appended, and re-folded by
   the engine on rebuild — the original log is never rewritten.
 
+## ADR 0007 migration — Swift port checklist
+
+The Rust core moved to the logs-as-record model ([ADR 0007](../docs/adr/0007-logs-as-record-state-as-truth.md)):
+the training log is a human-facing record the engine never replays, `state/current.json` is the
+authored-forward source of truth, and the event/replay/correction/continuation machinery is gone.
+The **FFI is already ported** (`knurled_reduce_input` is now preview-only and returns
+`results` instead of an `event`; new `knurled_submit` advances state + appends the record). The
+Swift app still speaks the old event model and must be migrated (Xcode required to build/verify):
+
+- **Models:** replace `Models/Events.swift` (`TrainingEvent` etc.) with `DayRecord` / `LiftRecord`
+  / `LogMonth` and `SubmitOutcome` mirroring `engine/src/record.rs` + `session.rs`. Drop the
+  correction/continuation/skip-event types.
+- **`Repo/LogReader.swift`:** read `logs/<yyyy>/<mm>.json` (a `LogMonth` with `days[]`) instead of
+  line-delimited `.jsonl` events; replace `appendEvent(line:)` with read-modify-write upsert of a
+  `DayRecord` into its month file (the engine's `append_day_record` is the reference).
+- **`Engine/RustWorkoutEngine.swift` + `WorkoutEngine.swift`:** add `submit(dir, renderedSnapshot,
+  input, mode, date)` calling `knurled_submit`; `reduce` becomes a preview only (no persistence).
+- **`App/AppModel+Commit.swift`:** Submit = `knurled_submit` (writes state + record) → one GitHub
+  commit. Delete `AppModel+Skip.swift` / `AppModel+Correct.swift` (skip/correct are now just state
+  intent / record edits; off-day + reset are submit modes).
+- **History (`Features/History/*`, `Features/Data/LiftProgressData.swift`):** drive off `records`
+  (DayRecord[]) instead of replayed events; partial/edited/skip badges retire.
+- **Tests (`KnurledTests/`):** `CorrectionTests`/`ContinueTests`/`SkipTests` cover removed flows —
+  replace with advance/off-day/reset submit tests; update `EngineRoundTripTests` to the record shape.
+
 ## Features
 
 | Slice | Status | Notes |

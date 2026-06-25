@@ -11,14 +11,6 @@ test("buildCommitPlan includes canonical and generated workbench files", () => {
       { filename: "inactive.fitspec", text: "patch inactive", active: false, sha: "old-patch" },
       { filename: "draft.fitspec", text: "patch draft", active: false },
     ],
-    events: [
-      {
-        id: "evt_import_1",
-        type: "session_imported",
-        program: "history_import:hevy",
-        results: [],
-      },
-    ],
   };
   const result = {
     state: { cursor: { next: "A1" } },
@@ -39,7 +31,6 @@ test("buildCommitPlan includes canonical and generated workbench files", () => {
       "build/next-workout.json",
       "build/validation.json",
       "patches/active.fitspec",
-      "logs/imports/hevy.jsonl",
     ],
   );
   assert.deepEqual(plan.deletions, ["patches/inactive.fitspec"]);
