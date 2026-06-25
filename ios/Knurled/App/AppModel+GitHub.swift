@@ -129,6 +129,7 @@ extension AppModel {
     func createStarterRepository(
         name rawName: String,
         template: StarterTemplate,
+        initialNumbers: InitialTrainingNumbers,
         isPrivate: Bool = true
     ) async throws {
         guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
@@ -136,13 +137,21 @@ extension AppModel {
         guard Self.isValidRepositoryName(name) else { throw GitHubError.invalidRepositoryName }
 
         let githubRepo = try await client.createRepository(name: name, isPrivate: isPrivate)
-        try await initializeRepository(githubRepo: githubRepo, template: template)
+        try await initializeRepository(
+            githubRepo: githubRepo,
+            template: template,
+            initialNumbers: initialNumbers
+        )
     }
 
     /// Seeds an existing empty GitHub repository with a starter template: builds the template
     /// locally, makes the repo's first commit, and makes it the active repo. Shared by the
     /// create-new flow and the "begin an empty repo" flow.
-    func initializeRepository(githubRepo: GitHubRepo, template: StarterTemplate) async throws {
+    func initializeRepository(
+        githubRepo: GitHubRepo,
+        template: StarterTemplate,
+        initialNumbers: InitialTrainingNumbers
+    ) async throws {
         guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
         let dir = try repos.workingDirectory(for: slug)
@@ -150,6 +159,7 @@ extension AppModel {
             try FileManager.default.removeItem(at: dir)
         }
         try await engine.initRepo(dir: dir, template: template.reference)
+        try Self.apply(initialNumbers: initialNumbers, to: dir)
         _ = try await engine.build(dir: dir, write: true)
         let branch = githubRepo.defaultBranch.isEmpty ? "main" : githubRepo.defaultBranch
         let head = try await client.commitInitial(
@@ -173,6 +183,49 @@ extension AppModel {
         phase = .ready
         persistSelection()
         await github.loadRepos()
+    }
+
+    static func apply(initialNumbers: InitialTrainingNumbers, to dir: URL) throws {
+        let planURL = dir.appending(path: "plan.fitspec")
+        var plan = try String(contentsOf: planURL, encoding: .utf8)
+        plan = Self.replacingPlanUnits(in: plan, with: initialNumbers.units)
+        plan = try Self.replacingInitialNumberBlock(in: plan, with: initialNumbers)
+        try plan.write(to: planURL, atomically: true, encoding: .utf8)
+    }
+
+    static func replacingPlanUnits(in plan: String, with units: Units) -> String {
+        guard let range = plan.range(of: "\n  units ") else { return plan }
+        let lineEnd = plan[range.upperBound...].firstIndex(of: "\n") ?? plan.endIndex
+        var updated = plan
+        updated.replaceSubrange(range.upperBound..<lineEnd, with: units.rawValue)
+        return updated
+    }
+
+    static func replacingInitialNumberBlock(
+        in plan: String,
+        with initialNumbers: InitialTrainingNumbers
+    ) throws -> String {
+        let blockName = initialNumbers.spec.block.planBlockName
+        let startMarker = "  \(blockName) {\n"
+        guard let startRange = plan.range(of: startMarker) else {
+            throw GitHubError.badResponse("Template plan is missing a \(blockName) block.")
+        }
+        guard let closeRange = plan[startRange.upperBound...].range(of: "\n  }") else {
+            throw GitHubError.badResponse("Template plan has an unterminated \(blockName) block.")
+        }
+
+        let entries = try initialNumbers.planEntries()
+            .map { exercise, load in #"    \#(exercise) "\#(load)""# }
+            .joined(separator: "\n")
+        let replacement = """
+          \(blockName) {
+        \(entries)
+          }
+        """
+
+        var updated = plan
+        updated.replaceSubrange(startRange.lowerBound..<closeRange.upperBound, with: replacement)
+        return updated
     }
 
     private static func isValidRepositoryName(_ name: String) -> Bool {

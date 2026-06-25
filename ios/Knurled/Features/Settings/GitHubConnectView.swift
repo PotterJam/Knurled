@@ -9,6 +9,10 @@ struct GitHubConnectView: View {
     @State private var creatingRepo = false
     @State private var newRepoName = "my-training"
     @State private var newRepoTemplate: StarterTemplate?
+    @State private var newRepoUnits: Units = .kg
+    @State private var newRepoInitialValues: [String: String] = InitialTrainingNumbers.emptyValues(
+        for: InitialTrainingNumbers.spec(for: nil)
+    )
     @State private var newRepoPrivate = true
     @State private var emptyRepoToInitialize: GitHubRepo?
 
@@ -32,14 +36,21 @@ struct GitHubConnectView: View {
                 }
             }
             .sheet(item: $emptyRepoToInitialize) { repo in
-                InitializeEmptyRepoView(repo: repo) { template in
-                    try await app.initializeRepository(githubRepo: repo, template: template)
+                InitializeEmptyRepoView(repo: repo) { template, initialNumbers in
+                    try await app.initializeRepository(
+                        githubRepo: repo,
+                        template: template,
+                        initialNumbers: initialNumbers
+                    )
                     dismiss()
                 }
             }
             .task {
                 await app.loadStarterTemplates()
-                if newRepoTemplate == nil { newRepoTemplate = app.starterTemplates.first }
+                if newRepoTemplate == nil {
+                    newRepoTemplate = app.starterTemplates.first
+                    resetNewRepoInitialValues(for: newRepoTemplate)
+                }
             }
         }
     }
@@ -161,7 +172,18 @@ struct GitHubConnectView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
 
+            InitialTrainingNumbersEditor(
+                spec: newRepoInitialSpec,
+                units: $newRepoUnits,
+                values: $newRepoInitialValues
+            )
+            .onChange(of: newRepoTemplate) { _, template in
+                resetNewRepoInitialValues(for: template)
+            }
+
+            Section {
                 Button {
                     if let template = newRepoTemplate { createStarterRepo(template) }
                 } label: {
@@ -170,10 +192,23 @@ struct GitHubConnectView: View {
                         if creatingRepo { Spacer(); ProgressView() }
                     }
                 }
-                .disabled(creatingRepo || newRepoTemplate == nil || newRepoName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    creatingRepo ||
+                    newRepoTemplate == nil ||
+                    newRepoName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    !newRepoInitialNumbersComplete
+                )
             }
             errorSection
         }
+    }
+
+    private var newRepoInitialSpec: InitialTrainingNumbers.Spec {
+        InitialTrainingNumbers.spec(for: newRepoTemplate)
+    }
+
+    private var newRepoInitialNumbersComplete: Bool {
+        InitialTrainingNumbers.isComplete(values: newRepoInitialValues, for: newRepoInitialSpec)
     }
 
     private var selectedRepo: GitHubRepo? {
@@ -229,11 +264,17 @@ struct GitHubConnectView: View {
 
     private func createStarterRepo(_ template: StarterTemplate) {
         creatingRepo = true
+        let initialNumbers = InitialTrainingNumbers(
+            spec: newRepoInitialSpec,
+            units: newRepoUnits,
+            values: newRepoInitialValues
+        )
         Task {
             do {
                 try await app.createStarterRepository(
                     name: newRepoName,
                     template: template,
+                    initialNumbers: initialNumbers,
                     isPrivate: newRepoPrivate
                 )
                 dismiss()
@@ -243,17 +284,26 @@ struct GitHubConnectView: View {
             creatingRepo = false
         }
     }
+
+    private func resetNewRepoInitialValues(for template: StarterTemplate?) {
+        let spec = InitialTrainingNumbers.spec(for: template)
+        newRepoInitialValues = InitialTrainingNumbers.emptyValues(for: spec)
+    }
 }
 
 /// Sheet shown when the user connects to an existing GitHub repo that has no commits yet.
 /// Lets them pick a starter template and seed the empty repository from the app.
 private struct InitializeEmptyRepoView: View {
     let repo: GitHubRepo
-    let initialize: (StarterTemplate) async throws -> Void
+    let initialize: (StarterTemplate, InitialTrainingNumbers) async throws -> Void
 
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var template: StarterTemplate?
+    @State private var units: Units = .kg
+    @State private var initialValues: [String: String] = InitialTrainingNumbers.emptyValues(
+        for: InitialTrainingNumbers.spec(for: nil)
+    )
     @State private var isInitializing = false
     @State private var errorMessage: String?
 
@@ -282,7 +332,16 @@ private struct InitializeEmptyRepoView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-
+                }
+                InitialTrainingNumbersEditor(
+                    spec: initialSpec,
+                    units: $units,
+                    values: $initialValues
+                )
+                .onChange(of: template) { _, template in
+                    resetInitialValues(for: template)
+                }
+                Section {
                     Button {
                         if let template { initializeRepo(template) }
                     } label: {
@@ -291,7 +350,7 @@ private struct InitializeEmptyRepoView: View {
                             if isInitializing { Spacer(); ProgressView() }
                         }
                     }
-                    .disabled(isInitializing || template == nil)
+                    .disabled(isInitializing || template == nil || !initialNumbersComplete)
                 }
                 if let errorMessage {
                     Section {
@@ -308,21 +367,42 @@ private struct InitializeEmptyRepoView: View {
             }
             .task {
                 await app.loadStarterTemplates()
-                if template == nil { template = app.starterTemplates.first }
+                if template == nil {
+                    template = app.starterTemplates.first
+                    resetInitialValues(for: template)
+                }
             }
         }
+    }
+
+    private var initialSpec: InitialTrainingNumbers.Spec {
+        InitialTrainingNumbers.spec(for: template)
+    }
+
+    private var initialNumbersComplete: Bool {
+        InitialTrainingNumbers.isComplete(values: initialValues, for: initialSpec)
     }
 
     private func initializeRepo(_ template: StarterTemplate) {
         isInitializing = true
         errorMessage = nil
+        let initialNumbers = InitialTrainingNumbers(
+            spec: initialSpec,
+            units: units,
+            values: initialValues
+        )
         Task {
             do {
-                try await initialize(template)
+                try await initialize(template, initialNumbers)
             } catch {
                 errorMessage = error.localizedDescription
             }
             isInitializing = false
         }
+    }
+
+    private func resetInitialValues(for template: StarterTemplate?) {
+        let spec = InitialTrainingNumbers.spec(for: template)
+        initialValues = InitialTrainingNumbers.emptyValues(for: spec)
     }
 }

@@ -95,6 +95,69 @@ import Foundation
 
         #expect(request.value(forHTTPHeaderField: "User-Agent") == GitHub.userAgent)
     }
+
+    @Test func initialNumberSpecUsesVersionedTemplateReferences() {
+        let fiveThreeOne = StarterTemplate(
+            reference: "531.beginners@1.0.0",
+            title: "5/3/1 for Beginners",
+            subtitle: ""
+        )
+        let startingStrength = StarterTemplate(
+            reference: "starting-strength.phase3@1.0.0",
+            title: "Starting Strength Phase 3",
+            subtitle: ""
+        )
+
+        #expect(InitialTrainingNumbers.spec(for: fiveThreeOne).block == .trainingMaxes)
+        #expect(InitialTrainingNumbers.spec(for: startingStrength).fields.map(\.exercise).contains("power_clean"))
+    }
+
+    @Test func initialNumbersRewriteTemplatePlanBeforeFirstCommit() throws {
+        let template = StarterTemplate(reference: "gzcl.gzclp@1.0.0", title: "GZCLP", subtitle: "")
+        let spec = InitialTrainingNumbers.spec(for: template)
+        let numbers = InitialTrainingNumbers(
+            spec: spec,
+            units: .lb,
+            values: [
+                "squat": "200",
+                "bench": "135",
+                "press": "85",
+                "deadlift": "245",
+            ]
+        )
+        let plan = """
+        plan "My GZCLP" {
+          template "gzcl.gzclp" version="1.0.0"
+          units kg
+
+          starts {
+            squat "80kg"
+            bench "55kg"
+            press "37.5kg"
+            deadlift "100kg"
+          }
+
+          accessories {
+            A1.T3 lat_pulldown
+          }
+        }
+        """
+
+        let withUnits = AppModel.replacingPlanUnits(in: plan, with: .lb)
+        let updated = try AppModel.replacingInitialNumberBlock(in: withUnits, with: numbers)
+
+        #expect(updated.contains("\n  units lb\n"))
+        #expect(updated.contains("""
+          starts {
+            squat "200lb"
+            bench "135lb"
+            press "85lb"
+            deadlift "245lb"
+          }
+        """))
+        #expect(updated.contains("  accessories {"))
+        #expect(!updated.contains("80kg"))
+    }
 }
 
 private actor FakeGitHubClient: GitHubClientProtocol {
