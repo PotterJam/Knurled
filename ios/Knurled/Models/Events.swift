@@ -55,7 +55,10 @@ struct DayRecord: Codable, Sendable, Hashable, Identifiable {
     var note: String?
     var lifts: [LiftRecord]
 
-    var id: String { date }
+    /// A record is identified by its date *and* session, mirroring how the
+    /// engine keys the log (`LogMonth.upsert_day`): two sessions logged on one
+    /// date are distinct rows, and a continued partial reuses its session's id.
+    var id: String { sessionId.map { "\(date)#\($0)" } ?? date }
 
     enum CodingKeys: String, CodingKey {
         case date, status, sessionId, savedAt, completedAt, program, note, lifts
@@ -177,7 +180,10 @@ struct LogMonth: Codable, Sendable, Hashable {
     }
 
     mutating func upsert(day: DayRecord) {
-        if let index = days.firstIndex(where: { $0.date == day.date }) {
+        // Key by (date, session) so distinct sessions on one date coexist and a
+        // continued partial replaces exactly the session it resumes. Mirrors the
+        // engine's `upsert_day`.
+        if let index = days.firstIndex(where: { $0.date == day.date && $0.sessionId == day.sessionId }) {
             days[index] = day
         } else {
             days.append(day)

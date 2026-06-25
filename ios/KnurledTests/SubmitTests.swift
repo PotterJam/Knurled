@@ -118,6 +118,86 @@ import Foundation
         #expect(repo.state?.cursor.nextSession == session.sessionId)
     }
 
+    @Test func twoSessionsOnSameDateAreKeptAsSeparateRecords() async throws {
+        let (dir, repo, app, sessionA, inputA) = try await Self.fixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // Complete the first session on 2026-06-24.
+        _ = try await app.submit(
+            session: sessionA, input: inputA, mode: SubmitMode.advance,
+            in: repo, timestamp: "2026-06-24T11:00:00Z"
+        )
+
+        // Complete the next session on the *same* date.
+        let sessionB = try #require(repo.nextWorkout)
+        #expect(sessionB.sessionId != sessionA.sessionId)
+        let inputB = ExecutionInput(
+            renderedSessionHash: sessionB.renderedSessionHash,
+            status: ExecutionStatus.complete,
+            startedAt: "2026-06-24T17:00:00Z",
+            completedAt: "2026-06-24T18:00:00Z",
+            inputs: sessionB.items.map(Self.passingInput)
+        )
+        _ = try await app.submit(
+            session: sessionB, input: inputB, mode: SubmitMode.advance,
+            in: repo, timestamp: "2026-06-24T18:00:00Z"
+        )
+
+        // Both sessions survive: the second must not overwrite the first.
+        let onDate = repo.records.filter { $0.date == "2026-06-24" }
+        #expect(onDate.count == 2)
+        #expect(Set(onDate.compactMap(\.sessionId)) == [sessionA.sessionId, sessionB.sessionId])
+    }
+
+    @Test func continuingPartialReplacesItInPlaceAndProgresses() async throws {
+        let (dir, repo, app, session, _) = try await Self.fixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let first = try #require(session.items.first)
+
+        // Save a partial of the current session.
+        let partial = ExecutionInput(
+            renderedSessionHash: session.renderedSessionHash,
+            status: ExecutionStatus.partial,
+            startedAt: "2026-06-24T10:00:00Z",
+            savedAt: "2026-06-24T10:45:00Z",
+            inputs: [
+                ItemInput(
+                    itemId: first.itemId,
+                    mode: InputMode.perSetReps,
+                    sets: [ActualSet(set: 1, load: first.prescription.sets.first?.load, reps: 5)]
+                ),
+            ]
+        )
+        _ = try await app.submit(
+            session: session, input: partial, mode: SubmitMode.advance,
+            in: repo, timestamp: "2026-06-24T10:45:00Z"
+        )
+        #expect(repo.records.filter { $0.sessionId == session.sessionId }.count == 1)
+        #expect(repo.state?.cursor.nextSession == session.sessionId)
+
+        // Continue from history: re-render that session and complete it, landing
+        // on the partial's date (as LiveWorkout does for a restored workout).
+        let resumed = try await app.engine.renderSession(dir: repo.url, sessionId: session.sessionId)
+        let complete = ExecutionInput(
+            renderedSessionHash: resumed.renderedSessionHash,
+            status: ExecutionStatus.complete,
+            startedAt: "2026-06-24T10:45:00Z",
+            completedAt: "2026-06-24T11:30:00Z",
+            inputs: resumed.items.map(Self.passingInput)
+        )
+        _ = try await app.submit(
+            session: resumed, input: complete, mode: SubmitMode.advance,
+            in: repo, timestamp: "2026-06-24T11:30:00Z"
+        )
+
+        // The partial became a single completed record — not a duplicate — and
+        // the cursor advanced to the next workout.
+        let forSession = repo.records.filter { $0.sessionId == session.sessionId }
+        #expect(forSession.count == 1)
+        #expect(forSession.first?.status == nil)
+        #expect(repo.state?.cursor.nextSession != session.sessionId)
+    }
+
     private static func fixture() async throws -> (
         dir: URL,
         repo: ActiveRepo,

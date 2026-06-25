@@ -43,7 +43,7 @@ enum HistoryBuilder {
         if !record.lifts.isEmpty {
             let isPartial = record.status == ExecutionStatus.partial
             return HistoryItem(
-                id: record.date,
+                id: record.id,
                 title: title(for: record),
                 detail: detail(for: record, date: date),
                 status: isPartial ? "Partial" : "Recorded",
@@ -54,7 +54,7 @@ enum HistoryBuilder {
         }
         if let program = record.program {
             return HistoryItem(
-                id: record.date,
+                id: record.id,
                 title: program,
                 detail: date,
                 status: "Program",

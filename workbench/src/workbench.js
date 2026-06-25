@@ -40,7 +40,11 @@ function recompute() {
 }
 
 function upsertRecord(records, day) {
-  const merged = [...(records || []).filter((record) => record.date !== day.date), day];
+  // Key by (date, session) like the engine's `upsert_day`: two sessions on one
+  // date stay separate, and a continued partial replaces the session it resumes.
+  const sameRecord = (record) =>
+    record.date === day.date && (record.session_id ?? null) === (day.session_id ?? null);
+  const merged = [...(records || []).filter((record) => !sameRecord(record)), day];
   merged.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   return merged;
 }

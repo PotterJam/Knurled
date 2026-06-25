@@ -224,10 +224,22 @@ final class LiveWorkout: Identifiable {
     init(repo: ActiveRepo, session: RenderedSession, restoring record: DayRecord? = nil) {
         self.repo = repo
         self.session = session
-        self.startedAt = record?.savedAt ?? Self.timestamp()
+        self.startedAt = Self.startTimestamp(restoring: record)
         let units = repo.plan?.plan.units ?? .kg
         self.items = session.items.map { LiveItem(item: $0, units: units) }
         if let record { restore(record) }
+    }
+
+    /// The `startedAt` a resumed workout carries. A continued partial must finish
+    /// on the *same date* it was saved under, because the log keys a record by
+    /// (date, session): submitting on a different date would leave the partial
+    /// orphaned instead of replacing it in place. Keep the saved time when it
+    /// already falls on the record's date; otherwise pin to that date so the
+    /// completion lands on the right row.
+    private static func startTimestamp(restoring record: DayRecord?) -> String {
+        guard let record else { return timestamp() }
+        if let savedAt = record.savedAt, savedAt.hasPrefix(record.date) { return savedAt }
+        return "\(record.date)T12:00:00Z"
     }
 
     private func restore(_ record: DayRecord) {

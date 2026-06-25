@@ -200,9 +200,13 @@ fn build_record_day(
         });
     }
     let mut day = DayRecord::workout(date, lifts);
+    // Every workout record carries its session id: it is the stable identity a
+    // day is keyed by (`upsert_day`), so two different sessions on the same date
+    // stay distinct and a continued partial replaces exactly the session it
+    // resumes — never a sibling logged the same day.
+    day.session_id = Some(rendered_session.session_id.clone());
     if input.status == "partial" {
         day.status = Some(input.status.clone());
-        day.session_id = Some(rendered_session.session_id.clone());
         day.saved_at = input.saved_at.clone();
     } else {
         day.completed_at = input.completed_at.clone();

@@ -9,9 +9,12 @@
 //!
 //! This module is the single owner of the log format. Clients (CLI, workbench,
 //! iOS) serialize and parse through here instead of hand-rolling JSON so the
-//! shape cannot drift between platforms. A saved partial carries minimal resume
-//! metadata (`status`, `session_id`, and per-lift `item_id`) so clients can
-//! reopen it without reintroducing replay-ledger fields.
+//! shape cannot drift between platforms. Every workout record carries its
+//! `session_id` — the identity a day is keyed by, so two sessions logged the
+//! same date stay separate and a continued partial replaces the one it resumes.
+//! A saved partial additionally carries resume metadata (`status` and per-lift
+//! `item_id`) so clients can reopen it without reintroducing replay-ledger
+//! fields.
 
 use std::collections::BTreeMap;
 
@@ -73,7 +76,9 @@ pub struct DayRecord {
     /// Present for a saved in-progress workout.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
-    /// Rendered session id, e.g. `"a1"`. Present when `status` is `"partial"`.
+    /// Rendered session id, e.g. `"a1"`. Present on every workout record: it is
+    /// the identity a day is keyed by, so distinct sessions on one date coexist
+    /// and a continued partial replaces exactly the session it resumes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -149,16 +154,20 @@ impl LogMonth {
         compact_pretty_json(self)
     }
 
-    /// Insert a day, or replace the existing day with the same date. Days are
-    /// kept sorted by date so the file — and replay-free backtest reads — stay
-    /// chronological and Git-stable. Editing a day in place is a first-class
-    /// operation in this model (ADR 0007): the record is mutable, single-author,
-    /// and never a ledger.
+    /// Insert a day, or replace the existing record with the same `(date,
+    /// session_id)` identity. A day is keyed by date *and* session so two
+    /// different sessions logged on one date stay distinct, while continuing a
+    /// saved partial replaces exactly the session it resumes (same date, same
+    /// session id) rather than clobbering a sibling. Records are kept sorted by
+    /// date so the file — and replay-free backtest reads — stay chronological and
+    /// Git-stable; ties hold insertion order. Editing a record in place is a
+    /// first-class operation in this model (ADR 0007): the record is mutable,
+    /// single-author, and never a ledger.
     pub fn upsert_day(&mut self, day: DayRecord) {
         match self
             .days
             .iter()
-            .position(|existing| existing.date == day.date)
+            .position(|existing| existing.date == day.date && existing.session_id == day.session_id)
         {
             Some(index) => self.days[index] = day,
             None => self.days.push(day),
@@ -273,6 +282,71 @@ mod tests {
         ));
         assert_eq!(month.days.len(), 2);
         assert_eq!(month.days[0].lifts[0].sets, vec![5, 5, 5]);
+    }
+
+    #[test]
+    fn distinct_sessions_same_date_coexist_and_partial_replaces_in_place() {
+        let mut month = LogMonth::new("2026-06");
+
+        // Two different sessions on the same day must NOT collapse into one.
+        let mut a1 = DayRecord::workout(
+            "2026-06-24",
+            vec![LiftRecord::new("squat", "80kg", vec![5])],
+        );
+        a1.session_id = Some("a1".into());
+        let mut b1 = DayRecord::workout(
+            "2026-06-24",
+            vec![LiftRecord::new("bench", "55kg", vec![5])],
+        );
+        b1.session_id = Some("b1".into());
+        month.upsert_day(a1);
+        month.upsert_day(b1);
+        assert_eq!(
+            month.days.len(),
+            2,
+            "distinct sessions on one date must coexist"
+        );
+
+        // Saving a partial of a1, then completing it, replaces the a1 record in
+        // place — and leaves b1 untouched.
+        let mut a1_partial = DayRecord::workout(
+            "2026-06-24",
+            vec![LiftRecord::new("squat", "80kg", vec![3])],
+        );
+        a1_partial.session_id = Some("a1".into());
+        a1_partial.status = Some("partial".into());
+        month.upsert_day(a1_partial);
+        assert_eq!(month.days.len(), 2);
+
+        let mut a1_complete = DayRecord::workout(
+            "2026-06-24",
+            vec![LiftRecord::new("squat", "80kg", vec![5, 5, 5])],
+        );
+        a1_complete.session_id = Some("a1".into());
+        month.upsert_day(a1_complete);
+        assert_eq!(
+            month.days.len(),
+            2,
+            "completing the partial replaces, not appends"
+        );
+
+        let recorded_a1 = month
+            .days
+            .iter()
+            .find(|d| d.session_id.as_deref() == Some("a1"))
+            .unwrap();
+        assert_eq!(
+            recorded_a1.status, None,
+            "continued partial becomes complete"
+        );
+        assert_eq!(recorded_a1.lifts[0].sets, vec![5, 5, 5]);
+        // b1 survived the whole flow.
+        assert!(
+            month
+                .days
+                .iter()
+                .any(|d| d.session_id.as_deref() == Some("b1"))
+        );
     }
 
     #[test]

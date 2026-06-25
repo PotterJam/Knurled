@@ -9,19 +9,27 @@ function normalizeDays(value) {
   throw new Error("Paste a DayRecord, a DayRecord array, or a LogMonth with a days array.");
 }
 
+// A record's identity is its date *and* session (matching the engine's
+// `upsert_day`): two sessions on one date are distinct, and re-importing a
+// session replaces it in place.
+function recordKey(day) {
+  return `${day.date}#${day.session_id ?? ""}`;
+}
+
 function mergeRecords(existing, incoming) {
   const merged = [...(existing || [])];
-  const indexByDate = new Map(merged.map((day, index) => [day.date, index]));
+  const indexByKey = new Map(merged.map((day, index) => [recordKey(day), index]));
   let added = 0;
   let replaced = 0;
 
   for (const day of incoming || []) {
     if (!day?.date) throw new Error("Every DayRecord needs a date.");
-    if (indexByDate.has(day.date)) {
-      merged[indexByDate.get(day.date)] = day;
+    const key = recordKey(day);
+    if (indexByKey.has(key)) {
+      merged[indexByKey.get(key)] = day;
       replaced++;
     } else {
-      indexByDate.set(day.date, merged.length);
+      indexByKey.set(key, merged.length);
       merged.push(day);
       added++;
     }
