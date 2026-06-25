@@ -2137,7 +2137,7 @@ fn apply_state_adjustment(state: &mut StateProjection, event: &TrainingEvent) {
     }
 }
 
-fn advance_cursor(state: &mut StateProjection, rotation: &[String], session_id: &str) {
+pub(crate) fn advance_cursor(state: &mut StateProjection, rotation: &[String], session_id: &str) {
     let normalized = session_id.to_ascii_lowercase();
     let index = rotation
         .iter()
