@@ -30,7 +30,6 @@ struct NextWorkoutView: View {
     let repo: ActiveRepo
     let session: RenderedSession
     @Environment(AppModel.self) private var app
-    @State private var showSkip = false
     @State private var isSyncing = false
 
     var body: some View {
@@ -52,17 +51,7 @@ struct NextWorkoutView: View {
                 .controlSize(.large)
                 .padding(.top, KnurledTheme.Spacing.s)
 
-                Button {
-                    showSkip = true
-                } label: {
-                    Label("Skip this workout", systemImage: "forward.end")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .tint(.secondary)
-
-                Text("Completed this already? Open any workout from History to edit or continue.")
+                Text("Finish a workout as advance, off-day, or reset when you submit it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -70,9 +59,6 @@ struct NextWorkoutView: View {
             .padding()
         }
         .refreshable { await app.sync() }
-        .sheet(isPresented: $showSkip) {
-            SkipWorkoutSheet(repo: repo, session: session)
-        }
         .toolbar {
             if let plan = repo.plan {
                 ToolbarItem(placement: .topBarLeading) {

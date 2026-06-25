@@ -38,12 +38,30 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(ExecutionInputValidation.self, from: raw)
     }
 
-    func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionOutcome {
+    func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionResult {
         let sessionJSON = try encode(session)
         let inputJSON = try encode(input)
         let raw = try call(dir: dir, json1: sessionJSON, json2: inputJSON) { knurled_reduce_input($0, $1, $2) }
-        let result = try decode(ReductionResult.self, from: raw)
-        return ReductionOutcome(result: result, eventLine: Self.extractEventLine(from: raw))
+        return try decode(ReductionResult.self, from: raw)
+    }
+
+    func submit(
+        dir: URL,
+        session: RenderedSession,
+        input: ExecutionInput,
+        mode: SubmitMode,
+        date: String
+    ) throws -> SubmitOutcome {
+        let sessionJSON = try encode(session)
+        let inputJSON = try encode(input)
+        let raw = try call(
+            dir: dir,
+            json1: sessionJSON,
+            json2: inputJSON,
+            json3: mode.rawValue,
+            json4: date
+        ) { knurled_submit($0, $1, $2, $3, $4) }
+        return try decode(SubmitOutcome.self, from: raw)
     }
 
     // MARK: - FFI marshaling
@@ -96,6 +114,37 @@ actor RustWorkoutEngine: WorkoutEngine {
         }
     }
 
+    private func call(
+        dir: URL,
+        json1: String,
+        json2: String,
+        json3: String,
+        json4: String,
+        _ body: (
+            UnsafePointer<CChar>,
+            UnsafePointer<CChar>,
+            UnsafePointer<CChar>,
+            UnsafePointer<CChar>,
+            UnsafePointer<CChar>
+        ) -> UnsafeMutablePointer<CChar>?
+    ) throws -> String {
+        try dir.path(percentEncoded: false).withCString { cdir in
+            try json1.withCString { cjson1 in
+                try json2.withCString { cjson2 in
+                    try json3.withCString { cjson3 in
+                        try json4.withCString { cjson4 in
+                            guard let pointer = body(cdir, cjson1, cjson2, cjson3, cjson4) else {
+                                throw EngineError.emptyResponse
+                            }
+                            defer { knurled_string_free(pointer) }
+                            return String(cString: pointer)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func encode<T: Encodable>(_ value: T) throws -> String {
         let data = try KnurledCoding.encoder().encode(value)
         return String(decoding: data, as: UTF8.self)
@@ -113,16 +162,4 @@ actor RustWorkoutEngine: WorkoutEngine {
         return payload
     }
 
-    private static func extractEventLine(from raw: String) -> String? {
-        guard
-            let object = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
-            let data = object["data"] as? [String: Any],
-            let event = data["event"], !(event is NSNull),
-            let line = try? JSONSerialization.data(
-                withJSONObject: event,
-                options: [.withoutEscapingSlashes]
-            )
-        else { return nil }
-        return String(decoding: line, as: UTF8.self)
-    }
 }

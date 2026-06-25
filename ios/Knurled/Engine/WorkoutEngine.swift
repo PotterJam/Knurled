@@ -6,14 +6,16 @@ protocol WorkoutEngine: Sendable {
     func initRepo(dir: URL, template: String) async throws
     func validate(dir: URL) async throws -> ValidationReport
     func build(dir: URL, write: Bool) async throws -> BuildOutputs
-    func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) async throws -> ReductionOutcome
+    func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) async throws -> ReductionResult
+    func submit(
+        dir: URL,
+        session: RenderedSession,
+        input: ExecutionInput,
+        mode: SubmitMode,
+        date: String
+    ) async throws -> SubmitOutcome
     func validateInput(dir: URL, input: ExecutionInput) async throws -> ExecutionInputValidation
     func renderSession(dir: URL, sessionId: String) async throws -> RenderedSession
-}
-
-struct ReductionOutcome: Sendable {
-    var result: ReductionResult
-    var eventLine: String?
 }
 
 enum EngineError: Error, Sendable, LocalizedError {

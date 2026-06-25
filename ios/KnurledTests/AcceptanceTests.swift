@@ -35,7 +35,7 @@ import Foundation
         _ dir: URL,
         _ session: RenderedSession,
         override: [String: ItemInput]
-    ) async throws -> ReductionOutcome {
+    ) async throws -> ReductionResult {
         let input = ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
             status: ExecutionStatus.complete,
@@ -46,8 +46,8 @@ import Foundation
         return try await engine.reduce(dir: dir, session: session, input: input)
     }
 
-    private func result(_ outcome: ReductionOutcome, slot: String) -> ExerciseResult? {
-        outcome.result.event?.results.first { $0.slotId == slot }
+    private func result(_ outcome: ReductionResult, slot: String) -> ExerciseResult? {
+        outcome.results.first { $0.slotId == slot }
     }
 
     // §40.2 — AMRAP input saves numeric reps with no Done/Missed ambiguity.
@@ -106,6 +106,6 @@ import Foundation
         let squat = try #require(result(outcome, slot: "a1.t1"))
         #expect(squat.outcome == "adjusted_today")
         #expect(squat.effects.isEmpty)
-        #expect(outcome.result.newState.lanes["squat.t1"]?.load == "80kg")
+        #expect(outcome.newState.lanes["squat.t1"]?.load == "80kg")
     }
 }

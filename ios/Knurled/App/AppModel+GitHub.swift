@@ -30,11 +30,11 @@ struct StarterTemplate: Codable, Sendable, Hashable, Identifiable {
 enum GitHubChangedFiles {
     static func present(in dir: URL) -> [String] {
         var paths: [String] = []
-        // Logs follow the engine convention logs/<yyyy>/<mm>.jsonl; build the repo-relative
+        // Logs follow the engine convention logs/<yyyy>/<mm>.json; build the repo-relative
         // path from the trailing components to stay robust to /var -> /private symlinks.
         let logs = dir.appending(path: "logs", directoryHint: .isDirectory)
         if let enumerator = FileManager.default.enumerator(at: logs, includingPropertiesForKeys: nil) {
-            for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+            for case let url as URL in enumerator where url.pathExtension == "json" {
                 paths.append("logs/" + url.pathComponents.suffix(2).joined(separator: "/"))
             }
         }
@@ -301,7 +301,7 @@ extension AppModel {
         remote: GitHubRemote,
         client: any GitHubClientProtocol
     ) async throws {
-        let localLogs = Self.logLinesByRelativePath(in: repo.url)
+        let localLogs = Self.logFilesByRelativePath(in: repo.url)
         let remoteDir = FileManager.default.temporaryDirectory
             .appending(path: "KnurledSync-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: remoteDir) }
@@ -312,64 +312,55 @@ extension AppModel {
             branch: remote.branch,
             into: remoteDir
         )
-        let remoteLogs = Self.logLinesByRelativePath(in: remoteDir)
-        let localOnly = Self.localOnlyLogLines(local: localLogs, remote: remoteLogs)
+        let remoteLogs = Self.logFilesByRelativePath(in: remoteDir)
+        let localOnly = Self.localOnlyLogFiles(local: localLogs, remote: remoteLogs)
 
         try? FileManager.default.removeItem(at: repo.url)
         try FileManager.default.copyItem(at: remoteDir, to: repo.url)
-        try Self.appendLogLines(localOnly, to: repo.url)
+        try Self.writeLogFiles(localOnly, to: repo.url)
         repo.remote?.headCommit = latestHead
         _ = try await engine.build(dir: repo.url, write: true)
         try await push(repo: repo, message: "Sync pending Knurled changes")
     }
 
-    static func logLinesByRelativePath(in dir: URL) -> [String: [String]] {
+    static func logFilesByRelativePath(in dir: URL) -> [String: String] {
         let logs = dir.appending(path: "logs", directoryHint: .isDirectory)
         guard let enumerator = FileManager.default.enumerator(at: logs, includingPropertiesForKeys: nil) else {
             return [:]
         }
 
-        var result: [String: [String]] = [:]
-        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+        var result: [String: String] = [:]
+        for case let url as URL in enumerator where url.pathExtension == "json" {
             guard let path = GitHubChangedFiles.repoRelativePath(for: url, root: dir),
                   let text = try? String(contentsOf: url, encoding: .utf8)
             else { continue }
-            let lines = text.split(whereSeparator: \.isNewline)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-            if !lines.isEmpty { result[path] = lines }
+            result[path] = text
         }
         return result
     }
 
-    static func localOnlyLogLines(
-        local: [String: [String]],
-        remote: [String: [String]]
-    ) -> [(path: String, line: String)] {
-        var localOnly: [(path: String, line: String)] = []
-        for (path, lines) in local {
-            let remoteLines = Set(remote[path] ?? [])
-            for line in lines where !remoteLines.contains(line) {
-                localOnly.append((path: path, line: line))
-            }
+    static func localOnlyLogFiles(
+        local: [String: String],
+        remote: [String: String]
+    ) -> [(path: String, text: String)] {
+        var localOnly: [(path: String, text: String)] = []
+        for (path, text) in local where remote[path] != text {
+            localOnly.append((path: path, text: text))
         }
 
         return localOnly.sorted { lhs, rhs in
-            lhs.path == rhs.path ? lhs.line < rhs.line : lhs.path < rhs.path
+            lhs.path < rhs.path
         }
     }
 
-    static func appendLogLines(_ lines: [(path: String, line: String)], to dir: URL) throws {
-        for (path, line) in lines {
+    static func writeLogFiles(_ files: [(path: String, text: String)], to dir: URL) throws {
+        for (path, text) in files {
             let url = dir.appending(path: path)
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            var contents = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-            if !contents.isEmpty && !contents.hasSuffix("\n") { contents += "\n" }
-            contents += line + "\n"
-            try contents.write(to: url, atomically: true, encoding: .utf8)
+            try text.write(to: url, atomically: true, encoding: .utf8)
         }
     }
 }

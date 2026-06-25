@@ -10,13 +10,13 @@ import Foundation
         defer { try? FileManager.default.removeItem(at: dir) }
         let engine = RustWorkoutEngine()
         _ = try await engine.build(dir: dir, write: true)
-        try LogReader().appendEvent(line: "{\"id\":\"x\",\"type\":\"session_skipped\",\"session_id\":\"a1\"}", dir: dir, timestamp: "2026-06-24T09:00:00Z")
+        try LogReader().upsert(day: Self.recordDay(), dir: dir)
 
         let files = Set(GitHubChangedFiles.present(in: dir))
         #expect(files.contains("state/current.json"))
         #expect(files.contains("build/current.ir.json"))
         #expect(files.contains("build/next-workout.json"))
-        #expect(files.contains("logs/2026/06.jsonl"))
+        #expect(files.contains("logs/2026/06.json"))
         #expect(!files.contains("build/ir.json"))
     }
 
@@ -28,7 +28,7 @@ import Foundation
         let dir = try SampleRepo.makeWorkingCopy()
         defer { try? FileManager.default.removeItem(at: dir) }
         _ = try await app.engine.build(dir: dir, write: true)
-        try LogReader().appendEvent(line: "{\"id\":\"x\",\"type\":\"session_skipped\",\"session_id\":\"a1\"}", dir: dir, timestamp: "2026-06-24T09:00:00Z")
+        try LogReader().upsert(day: Self.recordDay(), dir: dir)
 
         let repo = ActiveRepo(displayName: "owner/repo", url: dir, isSample: false)
         repo.remote = GitHubRemote(owner: "owner", name: "repo", branch: "main", headCommit: "base")
@@ -71,20 +71,10 @@ import Foundation
     }
 
     @Test func commitMessagesFollowTemplates() {
-        func event(_ type: String) -> TrainingEvent {
-            TrainingEvent(
-                id: "e", type: type, schemaVersion: nil, program: nil, sessionId: "a1",
-                planHash: nil, templateHash: nil, renderedSessionHash: nil, engineVersion: nil,
-                startedAt: nil, completedAt: nil, savedAt: nil, status: nil,
-                results: [], resultsAdded: [], effects: [], continuesEventId: nil,
-                correctsEventId: nil, reason: nil, policy: nil, lane: nil, change: nil,
-                cursor: nil, changes: []
-            )
-        }
-        let ts = "2026-06-24T09:00:00Z"
-        #expect(AppModel.commitMessage(for: event("session_completed"), timestamp: ts) == "Complete A1 - 2026-06-24")
-        #expect(AppModel.commitMessage(for: event("session_skipped"), timestamp: ts) == "Skip A1 - push forward - 2026-06-24")
-        #expect(AppModel.commitMessage(for: event("session_corrected"), timestamp: ts) == "Correct A1 - 2026-06-24")
+        let session = RenderedSession.minimalForTesting(sessionId: "a1")
+        #expect(AppModel.commitMessage(session: session, mode: .advance, date: "2026-06-24") == "Complete A1 - 2026-06-24")
+        #expect(AppModel.commitMessage(session: session, mode: .offDay, date: "2026-06-24") == "Record off-day A1 - 2026-06-24")
+        #expect(AppModel.commitMessage(session: session, mode: .reset, date: "2026-06-24") == "Reset A1 - 2026-06-24")
     }
 
     @Test func githubCommonHeadersIncludeUserAgent() throws {
@@ -157,6 +147,42 @@ import Foundation
         """))
         #expect(updated.contains("  accessories {"))
         #expect(!updated.contains("80kg"))
+    }
+}
+
+private extension GitHubTests {
+    static func recordDay() -> DayRecord {
+        DayRecord(
+            date: "2026-06-24",
+            program: nil,
+            note: nil,
+            lifts: [
+                LiftRecord(
+                    exercise: "squat",
+                    weight: "80kg",
+                    sets: [5, 5, 5],
+                    metrics: [:],
+                    note: nil
+                ),
+            ]
+        )
+    }
+}
+
+private extension RenderedSession {
+    static func minimalForTesting(sessionId: String) -> RenderedSession {
+        RenderedSession(
+            type: "rendered_session",
+            schemaVersion: "0.1",
+            engineVersion: "0.1.0",
+            sessionId: sessionId,
+            displayName: sessionId.uppercased(),
+            suggestedDate: nil,
+            planHash: "sha256:plan",
+            templateHash: "sha256:template",
+            renderedSessionHash: "sha256:rendered",
+            items: []
+        )
     }
 }
 

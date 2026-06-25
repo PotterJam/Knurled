@@ -18,7 +18,7 @@ import Foundation
         let t1 = try #require(session.items.first)
         #expect(t1.display.title == "Squat T1")
         #expect(t1.progressionLane == "squat.t1")
-        #expect(t1.prescription.sets.count == 3)
+        #expect(t1.prescription.sets.count == 5)
         #expect(t1.prescription.sets.last?.amrap == true)
         #expect(t1.executionContract.recommendedInput == "amrap_final_set")
         #expect(t1.effectPreview.pass.first?.op == "increase_load")

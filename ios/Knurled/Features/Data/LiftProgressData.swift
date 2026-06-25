@@ -31,7 +31,7 @@ struct LiftProgressData {
     }
 
     static func build(
-        events: [TrainingEvent],
+        records: [DayRecord],
         state: StateProjection?,
         units: Units,
         calendar: Calendar = .current,
@@ -39,28 +39,25 @@ struct LiftProgressData {
     ) -> LiftProgressData {
         var workouts: [WorkoutSample] = []
 
-        for (eventOrder, event) in events.enumerated() {
-            guard isWorkoutEvent(event) else { continue }
-            guard let date = parseDate(
-                event.completedAt ?? event.savedAt ?? event.startedAt
-            ) else { continue }
+        for (recordOrder, record) in records.enumerated() {
+            guard !record.lifts.isEmpty, let date = parseDate(record.date) else { continue }
 
             var e1RMsByLift: [CoreLift: Double] = [:]
 
-            for result in event.workoutResults {
-                guard let lift = lift(from: result),
-                      let top = topSet(result.actual, units: units) else { continue }
+            for liftRecord in record.lifts {
+                guard let lift = CoreLift.from(exercise: liftRecord.exercise),
+                      let top = topSet(liftRecord, units: units) else { continue }
                 let e1rm = OneRepMax.epley(loadKg: top.loadKg, reps: top.reps)
                 e1RMsByLift[lift] = max(e1RMsByLift[lift] ?? 0, e1rm)
             }
 
             guard !e1RMsByLift.isEmpty else { continue }
-            workouts.append(WorkoutSample(date: date, eventOrder: eventOrder, e1RMsByLift: e1RMsByLift))
+            workouts.append(WorkoutSample(date: date, recordOrder: recordOrder, e1RMsByLift: e1RMsByLift))
         }
 
         let sortedWorkouts = workouts
             .sorted { lhs, rhs in
-                if lhs.date == rhs.date { return lhs.eventOrder < rhs.eventOrder }
+                if lhs.date == rhs.date { return lhs.recordOrder < rhs.recordOrder }
                 return lhs.date < rhs.date
             }
 
@@ -105,37 +102,19 @@ struct LiftProgressData {
 
     private struct WorkoutSample {
         let date: Date
-        let eventOrder: Int
+        let recordOrder: Int
         let e1RMsByLift: [CoreLift: Double]
     }
 
     /// The heaviest logged set (by load), with its reps. Sets without a parseable
     /// load are ignored.
-    private static func topSet(_ sets: [ActualSet], units: Units) -> (loadKg: Double, reps: Int)? {
-        sets
-            .compactMap { set -> (loadKg: Double, reps: Int)? in
-                guard let load = set.load,
-                      let kg = OneRepMax.kilograms(fromLoad: load, defaultUnit: units)
-                else { return nil }
-                return (kg, set.reps)
-            }
-            .max { $0.loadKg < $1.loadKg }
-    }
-
-    private static func isWorkoutEvent(_ event: TrainingEvent) -> Bool {
-        event.type == "session_completed"
-            || event.type == "session_continued"
-            || event.type == "session_saved"
-            || event.type == "session_imported"
-    }
-
-    private static func lift(from result: ExerciseResult) -> CoreLift? {
-        if let lane = result.progressionLane {
-            guard lane.hasSuffix(".t1") else { return nil }
-            return CoreLift.from(lane: lane)
-        }
-        return CoreLift.from(exercise: result.performedExercise)
-            ?? CoreLift.from(exercise: result.prescribedExercise)
+    private static func topSet(_ lift: LiftRecord, units: Units) -> (loadKg: Double, reps: Int)? {
+        guard let load = lift.weight,
+              let kg = OneRepMax.kilograms(fromLoad: load, defaultUnit: units)
+        else { return nil }
+        return lift.sets
+            .map { (loadKg: kg, reps: $0) }
+            .max { $0.reps < $1.reps }
     }
 
     private static func sampleComesBefore(_ lhs: LiftSample, _ rhs: LiftSample) -> Bool {
@@ -149,6 +128,13 @@ struct LiftProgressData {
 
     private static func parseDate(_ iso: String?) -> Date? {
         guard let iso else { return nil }
+        if iso.count == 10 {
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.date(from: iso)
+        }
         let withFraction = ISO8601DateFormatter()
         withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = withFraction.date(from: iso) { return date }

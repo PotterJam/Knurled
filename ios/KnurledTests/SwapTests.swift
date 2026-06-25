@@ -49,7 +49,7 @@ import Foundation
         )
         let outcome = try await engine.reduce(dir: dir, session: session, input: input)
 
-        let result = try #require(outcome.result.event?.results.first { $0.slotId == "a1.t3" })
+        let result = try #require(outcome.results.first { $0.slotId == "a1.t3" })
         #expect(result.performedExercise == "chin_up")
         #expect(result.prescribedExercise == "lat_pulldown")
         #expect(result.swapPolicy == .trackingOnly)

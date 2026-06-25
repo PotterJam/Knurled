@@ -11,8 +11,8 @@ struct ActiveWorkoutView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
 
-    init(repo: ActiveRepo, session: RenderedSession, resuming: TrainingEvent? = nil) {
-        _workout = State(initialValue: LiveWorkout(repo: repo, session: session, resuming: resuming))
+    init(repo: ActiveRepo, session: RenderedSession) {
+        _workout = State(initialValue: LiveWorkout(repo: repo, session: session))
     }
 
     var body: some View {
@@ -85,15 +85,6 @@ struct ActiveWorkoutView: View {
     private var bottomBar: some View {
         HStack(spacing: KnurledTheme.Spacing.m) {
             Button {
-                Task { await savePartial() }
-            } label: {
-                Label("Pause / Save", systemImage: "pause.circle")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .disabled(!workout.anyLogged || isSaving)
-
-            Button {
                 showFinish = true
             } label: {
                 Label("Finish", systemImage: "flag.checkered")
@@ -105,25 +96,5 @@ struct ActiveWorkoutView: View {
         .controlSize(.large)
         .padding()
         .background(.bar)
-    }
-
-    private func savePartial() async {
-        isSaving = true
-        defer { isSaving = false }
-        let timestamp = LiveWorkout.timestamp()
-        let input = workout.executionInput(status: ExecutionStatus.partial, timestamp: timestamp)
-        guard !input.inputs.isEmpty else { dismiss(); return }
-        do {
-            let outcome = try await app.engine.reduce(dir: workout.repo.url, session: workout.session, input: input)
-            try await app.commit(
-                outcome: outcome,
-                in: workout.repo,
-                timestamp: timestamp,
-                continuesFrom: workout.continuesFrom
-            )
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
     }
 }

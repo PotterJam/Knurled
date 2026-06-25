@@ -12,7 +12,7 @@ final class ActiveRepo: Identifiable {
     var outputs: BuildOutputs?
     var lastValidOutputs: BuildOutputs?
     var plan: PlanIR?
-    var events: [TrainingEvent] = []
+    var records: [DayRecord] = []
     var isRefreshing = false
     var loadError: String?
     var remote: GitHubRemote?
@@ -30,7 +30,6 @@ final class ActiveRepo: Identifiable {
     }
 
     var nextWorkout: RenderedSession? { displayOutputs?.nextWorkout }
-    var resumableSessions: [RenderedSession] { displayOutputs?.resumableSessions ?? [] }
     var state: StateProjection? { displayOutputs?.state }
     var validation: ValidationReport? { outputs?.validation }
     var isValid: Bool { outputs?.validation.isValid ?? false }
@@ -43,7 +42,7 @@ final class ActiveRepo: Identifiable {
             outputs = built
             if built.validation.isValid { lastValidOutputs = built }
             plan = try? PlanIR.load(dir: url)
-            events = logs.events(dir: url)
+            records = logs.records(dir: url)
             loadError = nil
         } catch {
             loadError = error.localizedDescription

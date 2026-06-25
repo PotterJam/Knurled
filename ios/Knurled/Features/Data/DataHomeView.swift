@@ -27,7 +27,7 @@ struct DataHomeView: View {
 
     private var progress: LiftProgressData {
         guard let repo = app.activeRepo else { return LiftProgressData(samples: []) }
-        return LiftProgressData.build(events: repo.events, state: repo.state, units: units)
+        return LiftProgressData.build(records: repo.records, state: repo.state, units: units)
     }
 
     @ViewBuilder private var content: some View {

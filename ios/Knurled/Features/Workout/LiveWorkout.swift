@@ -116,8 +116,8 @@ final class LiveItem: Identifiable {
         todayLoad = load
     }
 
-    /// A partial save records only the sets actually logged so far, as per-set reps, so an
-    /// in-progress exercise (e.g. 2 of 3 sets) is not dropped (§16/§31).
+    /// Optional work that was started but not completed still sends its logged sets, so a user
+    /// can record extra work without making it part of completion gating.
     func partialInput() -> ItemInput {
         ItemInput(
             itemId: id,
@@ -163,50 +163,20 @@ final class LiveWorkout: Identifiable {
     let repo: ActiveRepo
     let session: RenderedSession
     let startedAt: String
-    let continuesFrom: TrainingEvent?
     var items: [LiveItem]
 
-    init(repo: ActiveRepo, session: RenderedSession, resuming saved: TrainingEvent? = nil) {
+    init(repo: ActiveRepo, session: RenderedSession) {
         self.repo = repo
         self.session = session
-        self.startedAt = saved?.startedAt ?? Self.timestamp()
-        self.continuesFrom = saved
+        self.startedAt = Self.timestamp()
         self.items = session.items.map { LiveItem(item: $0) }
-        if let saved { prefill(from: saved) }
-    }
-
-    /// Restores the sets already logged in a saved partial so the user continues exactly where
-    /// they left off (§16/§19).
-    private func prefill(from saved: TrainingEvent) {
-        for result in saved.workoutResults {
-            guard let item = items.first(where: { $0.id == result.slotId }) else { continue }
-            if let performed = result.performedExercise, performed != item.item.exercise {
-                item.performedExercise = performed
-                item.swapPolicy = result.swapPolicy
-            }
-            for actual in result.actual {
-                guard let set = item.sets.first(where: { $0.id == actual.set }) else { continue }
-                set.reps = actual.reps
-                if let load = actual.load { set.load = load }
-                set.logged = true
-            }
-            // Warmups aren't stored in the saved event, so an exercise that already has logged
-            // working sets has clearly been warmed up — mark its ramp done so resuming doesn't
-            // drop the cursor back onto warmups.
-            if item.anyLogged {
-                for warmup in item.warmups {
-                    warmup.logged = true
-                    warmup.bypassed = false
-                }
-            }
-        }
     }
 
     var requiredItems: [LiveItem] { items.filter(\.required) }
     var completedRequiredCount: Int { requiredItems.filter(\.isComplete).count }
     var allRequiredComplete: Bool { requiredItems.allSatisfy(\.isComplete) }
     var anyLogged: Bool { items.contains(where: \.anyLogged) }
-    var canFinish: Bool { anyLogged }
+    var canFinish: Bool { allRequiredComplete }
     var finishStatus: String {
         allRequiredComplete ? ExecutionStatus.complete : ExecutionStatus.partial
     }

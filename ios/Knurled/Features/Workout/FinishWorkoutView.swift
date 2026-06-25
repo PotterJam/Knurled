@@ -9,13 +9,14 @@ struct FinishWorkoutView: View {
 
     private enum Phase {
         case computing
-        case preview(ReductionOutcome)
+        case preview(ReductionResult)
         case submitting
         case failed(String)
     }
 
     @State private var phase: Phase = .computing
     @State private var timestamp = LiveWorkout.timestamp()
+    @State private var mode: SubmitMode = .advance
 
     private var isComplete: Bool {
         workout.finishStatus == ExecutionStatus.complete
@@ -26,7 +27,7 @@ struct FinishWorkoutView: View {
             Group {
                 switch phase {
                 case .computing:
-                    ProgressView(isComplete ? "Calculating effects…" : "Preparing save…")
+                    ProgressView("Calculating effects…")
                 case .preview(let outcome):
                     previewContent(outcome)
                 case .submitting:
@@ -45,36 +46,44 @@ struct FinishWorkoutView: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .navigationTitle(isComplete ? "\(workout.session.displayName) Complete" : "Save Partial")
+            .navigationTitle("\(workout.session.displayName) Complete")
             .task { await compute() }
         }
     }
 
-    private func previewContent(_ outcome: ReductionOutcome) -> some View {
+    private func previewContent(_ outcome: ReductionResult) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: KnurledTheme.Spacing.l) {
-                if isComplete {
-                    VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
-                        Text("Effects").font(.headline)
-                        ForEach(Array((outcome.result.event?.results ?? []).enumerated()), id: \.offset) { _, result in
+                Picker("Submit mode", selection: $mode) {
+                    ForEach(SubmitMode.allCases, id: \.self) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(mode.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
+                    Text("Effects").font(.headline)
+                    if mode == .advance {
+                        ForEach(Array(outcome.results.enumerated()), id: \.offset) { _, result in
                             EffectResultRow(result: result, title: title(forSlot: result.slotId))
                         }
-                        if (outcome.result.event?.results ?? []).isEmpty {
-                            Text("No progression changes.").foregroundStyle(.secondary)
-                        }
+                    } else if mode == .offDay {
+                        Text("No progression changes.").foregroundStyle(.secondary)
+                    } else {
+                        Text("Baselines will be reset from the performed loads.").foregroundStyle(.secondary)
                     }
-                } else {
-                    VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
-                        Text("Saved Work").font(.headline)
-                        ForEach(Array((outcome.result.event?.results ?? []).enumerated()), id: \.offset) { _, result in
-                            SavedResultRow(result: result, title: title(forSlot: result.slotId))
-                        }
+                    if mode == .advance && outcome.results.isEmpty {
+                        Text("No progression changes.").foregroundStyle(.secondary)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(isComplete ? "Next" : "Resume").font(.headline)
-                    Text(outcome.result.nextWorkout.displayName)
+                    Text("Next").font(.headline)
+                    Text(outcome.nextWorkout.displayName)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -82,7 +91,7 @@ struct FinishWorkoutView: View {
                 Button {
                     Task { await submit(outcome) }
                 } label: {
-                    Label(isComplete ? "Submit Workout" : "Save Partial", systemImage: "arrow.up.circle.fill")
+                    Label("Submit Workout", systemImage: "arrow.up.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -102,10 +111,10 @@ struct FinishWorkoutView: View {
         let input = workout.finishInput(timestamp: timestamp)
         do {
             let outcome = try await app.engine.reduce(dir: workout.repo.url, session: workout.session, input: input)
-            if outcome.result.validation.isValid {
+            if outcome.validation.isValid {
                 phase = .preview(outcome)
             } else {
-                let message = outcome.result.validation.errors.map(\.message).joined(separator: "\n")
+                let message = outcome.validation.errors.map(\.message).joined(separator: "\n")
                 phase = .failed(message.isEmpty ? "The workout could not be validated." : message)
             }
         } catch {
@@ -113,15 +122,22 @@ struct FinishWorkoutView: View {
         }
     }
 
-    private func submit(_ outcome: ReductionOutcome) async {
+    private func submit(_ outcome: ReductionResult) async {
         phase = .submitting
         do {
-            try await app.commit(
-                outcome: outcome,
+            let input = workout.finishInput(timestamp: timestamp)
+            let submitted = try await app.submit(
+                session: workout.session,
+                input: input,
+                mode: mode,
                 in: workout.repo,
-                timestamp: timestamp,
-                continuesFrom: workout.continuesFrom
+                timestamp: timestamp
             )
+            guard submitted.validation.isValid else {
+                let message = submitted.validation.errors.map(\.message).joined(separator: "\n")
+                phase = .failed(message.isEmpty ? "The workout could not be submitted." : message)
+                return
+            }
             onCommitted()
             dismiss()
         } catch {

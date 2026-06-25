@@ -20,7 +20,7 @@ import Foundation
         #expect(next.items.count == 3)
     }
 
-    @Test func reducingCompletedSessionAdvancesCursorAndProgressesLane() async throws {
+    @Test func reducingCompletedSessionPreviewsCursorAndProgression() async throws {
         let dir = try SampleRepo.makeWorkingCopy()
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -36,14 +36,40 @@ import Foundation
         )
 
         let outcome = try await engine.reduce(dir: dir, session: rendered, input: input)
-        #expect(outcome.result.validation.isValid)
+        #expect(outcome.validation.isValid)
 
-        let event = try #require(outcome.result.event)
-        #expect(event.type == "session_completed")
-        #expect(!outcome.result.effects.isEmpty)
-        #expect(outcome.result.nextWorkout.sessionId != "a1")
-        #expect(outcome.eventLine != nil)
-        #expect(outcome.result.newState.lanes["squat.t1"]?.load == "82.5kg")
+        #expect(!outcome.results.isEmpty)
+        #expect(!outcome.effects.isEmpty)
+        #expect(outcome.nextWorkout.sessionId != "a1")
+        #expect(outcome.newState.lanes["squat.t1"]?.load == "82.5kg")
+    }
+
+    @Test func submittingCompletedSessionWritesMonthlyRecord() async throws {
+        let dir = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let engine = RustWorkoutEngine()
+        let rendered = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
+        let input = ExecutionInput(
+            renderedSessionHash: rendered.renderedSessionHash,
+            status: ExecutionStatus.complete,
+            startedAt: "2026-06-24T10:10:00+01:00",
+            completedAt: "2026-06-24T11:00:00+01:00",
+            inputs: rendered.items.map(Self.passingInput)
+        )
+
+        let outcome = try await engine.submit(
+            dir: dir,
+            session: rendered,
+            input: input,
+            mode: .advance,
+            date: "2026-06-24"
+        )
+
+        #expect(outcome.validation.isValid)
+        #expect(outcome.recordDay.date == "2026-06-24")
+        #expect(outcome.recordDay.lifts.first?.sets.isEmpty == false)
+        #expect(FileManager.default.fileExists(atPath: dir.appending(path: "logs/2026/06.json").path()))
     }
 
     private static func passingInput(for item: RenderedItem) -> ItemInput {

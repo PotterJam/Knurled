@@ -87,7 +87,7 @@ import Foundation
     // MARK: - Progress reconstruction
 
     @Test func emptyInputsProduceNoSamples() {
-        let data = LiftProgressData.build(events: [], state: nil, units: .kg)
+        let data = LiftProgressData.build(records: [], state: nil, units: .kg)
         #expect(data.isEmpty)
     }
 
@@ -108,7 +108,7 @@ import Foundation
         }
         """
         let state = try KnurledCoding.decoder().decode(StateProjection.self, from: Data(json.utf8))
-        let data = LiftProgressData.build(events: [], state: state, units: .kg)
+        let data = LiftProgressData.build(records: [], state: state, units: .kg)
 
         #expect(Set(data.lifts) == [.squat, .bench])
         let squat = try #require(data.samples.first { $0.lift == .squat })
@@ -117,17 +117,16 @@ import Foundation
     }
 
     @Test func importedWorkoutsFeedLastTwelveSamplesEvenOnSameDay() throws {
-        let events = try (0..<13).map { index in
-            try Self.importedEvent(
-                id: "same-day-\(index)",
-                completedAt: "2026-06-20T12:00:00Z",
+        let records = (0..<13).map { index in
+            Self.record(
                 exercise: "Squat",
-                load: "\(100 + index)kg"
+                load: "\(100 + index)kg",
+                date: "2026-06-20"
             )
         }
 
         let data = LiftProgressData.build(
-            events: events,
+            records: records,
             state: nil,
             units: .kg,
             calendar: Self.utcCalendar
@@ -142,23 +141,21 @@ import Foundation
     }
 
     @Test func importedHistoricalLiftIsNotDroppedByNewerOtherLiftWorkouts() throws {
-        let importedSquat = try Self.importedEvent(
-            id: "imported-squat",
-            completedAt: "2026-01-01T12:00:00Z",
+        let importedSquat = Self.record(
             exercise: "Squat",
-            load: "100kg"
+            load: "100kg",
+            date: "2026-01-01"
         )
-        let newerBenchEvents = try (0..<12).map { index in
-            try Self.importedEvent(
-                id: "newer-bench-\(index)",
-                completedAt: "2026-02-\(String(format: "%02d", index + 1))T12:00:00Z",
+        let newerBenchRecords = (0..<12).map { index in
+            Self.record(
                 exercise: "Bench Press",
-                load: "\(70 + index)kg"
+                load: "\(70 + index)kg",
+                date: "2026-02-\(String(format: "%02d", index + 1))"
             )
         }
 
         let data = LiftProgressData.build(
-            events: [importedSquat] + newerBenchEvents,
+            records: [importedSquat] + newerBenchRecords,
             state: nil,
             units: .kg,
             calendar: Self.utcCalendar
@@ -185,15 +182,14 @@ import Foundation
         }
         """
         let state = try KnurledCoding.decoder().decode(StateProjection.self, from: Data(stateJSON.utf8))
-        let event = try Self.importedEvent(
-            id: "recent-squat",
-            completedAt: "2026-06-20T12:00:00Z",
+        let record = Self.record(
             exercise: "Squat",
-            load: "100kg"
+            load: "100kg",
+            date: "2026-06-20"
         )
 
         let data = LiftProgressData.build(
-            events: [event],
+            records: [record],
             state: state,
             units: .kg,
             calendar: Self.utcCalendar
@@ -211,33 +207,24 @@ import Foundation
         return calendar
     }
 
-    private static func importedEvent(
-        id: String,
-        completedAt: String,
+    private static func record(
         exercise: String,
-        load: String
-    ) throws -> TrainingEvent {
-        let json = """
-        {
-          "id": "\(id)",
-          "type": "session_imported",
-          "completed_at": "\(completedAt)",
-          "results": [
-            {
-              "slot_id": "\(exercise.lowercased().replacingOccurrences(of: " ", with: "_"))",
-              "performed_exercise": "\(exercise)",
-              "actual": [
-                { "set": 1, "load": "\(load)", "reps": 5 }
-              ],
-              "outcome": "imported",
-              "effects": []
-            }
-          ],
-          "results_added": [],
-          "effects": [],
-          "changes": []
-        }
-        """
-        return try KnurledCoding.decoder().decode(TrainingEvent.self, from: Data(json.utf8))
+        load: String,
+        date: String
+    ) -> DayRecord {
+        DayRecord(
+            date: date,
+            program: nil,
+            note: nil,
+            lifts: [
+                LiftRecord(
+                    exercise: exercise,
+                    weight: load,
+                    sets: [5],
+                    metrics: [:],
+                    note: nil
+                ),
+            ]
+        )
     }
 }

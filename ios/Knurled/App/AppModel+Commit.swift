@@ -1,94 +1,34 @@
 import Foundation
 
 extension AppModel {
-    enum CommitError: Error, LocalizedError {
-        case noEvent
-
-        var errorDescription: String? {
-            "The engine did not produce an event to commit."
-        }
-    }
-
     @discardableResult
-    func commit(
-        outcome: ReductionOutcome,
+    func submit(
+        session: RenderedSession,
+        input: ExecutionInput,
+        mode: SubmitMode,
         in repo: ActiveRepo,
-        timestamp: String,
-        continuesFrom savedEvent: TrainingEvent? = nil
-    ) async throws -> ReductionResult {
-        guard outcome.result.validation.isValid, let baseLine = outcome.eventLine else {
-            throw CommitError.noEvent
-        }
-        let line: String
-        let message: String
-        if let savedEvent {
-            line = try Self.rewriteAsContinued(baseLine, savedEvent: savedEvent, timestamp: timestamp)
-            let session = (outcome.result.event?.sessionId ?? "session").uppercased()
-            let date = String(timestamp.prefix(10))
-            message = outcome.result.event?.type == "session_completed"
-                ? "Continue \(session) - \(date)"
-                : "Save partial \(session) - \(date)"
-        } else {
-            line = baseLine
-            message = Self.commitMessage(for: outcome.result.event, timestamp: timestamp)
-        }
-        try await record(eventLine: line, in: repo, timestamp: timestamp, message: message)
-        return outcome.result
-    }
-
-    /// Links a finished resumed workout back to the partial it continues, so the original is
-    /// superseded rather than duplicated (§19).
-    ///
-    /// A *complete* finish is relabelled `session_completed` → `session_continued` so replay
-    /// guards the cursor advance the partial already made. A still-*partial* finish stays
-    /// `session_saved` (its replay already guards the cursor) and only carries the link — that
-    /// drops the superseded partial out of the resumable set and out of History.
-    private static func rewriteAsContinued(
-        _ line: String,
-        savedEvent: TrainingEvent,
         timestamp: String
-    ) throws -> String {
-        var event = try KnurledCoding.decoder().decode(TrainingEvent.self, from: Data(line.utf8))
-        if event.type == "session_completed" {
-            event.type = "session_continued"
-            event.resultsAdded = resultsAddedByContinuation(
-                fullResults: event.results,
-                savedResults: savedEvent.workoutResults
-            )
-            event.results = []
-        }
-        event.continuesEventId = savedEvent.id
-        if let session = event.sessionId {
-            event.id = EventID.make(type: event.type, session: session, timestamp: timestamp)
-        }
-        return try EventEncoding.line(event)
-    }
-
-    private static func resultsAddedByContinuation(
-        fullResults: [ExerciseResult],
-        savedResults: [ExerciseResult]
-    ) -> [ExerciseResult] {
-        fullResults.compactMap { result in
-            guard let saved = savedResults.first(where: { $0.slotId == result.slotId }) else {
-                return result
-            }
-            var delta = result
-            let savedSets = Set(saved.actual.map(\.set))
-            delta.actual = result.actual.filter { !savedSets.contains($0.set) }
-            return delta.actual.isEmpty ? nil : delta
-        }
-    }
-
-    /// Per-action commit message templates (spec §28).
-    static func commitMessage(for event: TrainingEvent?, timestamp: String) -> String {
-        let session = (event?.sessionId ?? "session").uppercased()
+    ) async throws -> SubmitOutcome {
         let date = String(timestamp.prefix(10))
-        switch event?.type {
-        case "session_completed": return "Complete \(session) - \(date)"
-        case "session_saved": return "Save partial \(session) - \(date)"
-        case "session_skipped": return "Skip \(session) - push forward - \(date)"
-        case "session_corrected": return "Correct \(session) - \(date)"
-        default: return "Update training log - \(date)"
-        }
+        let outcome = try await engine.submit(
+            dir: repo.url,
+            session: session,
+            input: input,
+            mode: mode,
+            date: date
+        )
+        guard outcome.validation.isValid else { return outcome }
+
+        await repo.refresh(engine: engine)
+        await pushIfConnected(
+            repo: repo,
+            message: Self.commitMessage(session: session, mode: mode, date: date)
+        )
+        persistSelection()
+        return outcome
+    }
+
+    static func commitMessage(session: RenderedSession, mode: SubmitMode, date: String) -> String {
+        "\(mode.commitVerb) \(session.sessionId.uppercased()) - \(date)"
     }
 }
