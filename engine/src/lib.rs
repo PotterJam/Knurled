@@ -1,3 +1,4 @@
+pub mod backtest;
 pub mod core;
 pub mod error;
 pub mod import;
@@ -14,6 +15,7 @@ pub use core::{
     render_session, replay_events, simulate, synthetic_execution_input, validate_compiled,
     validate_execution_input,
 };
+pub use backtest::{BacktestProjection, BacktestStep, backtest};
 pub use error::{KnurledError, Result};
 pub use import::{
     HistoryImportDelimiter, HistoryImportDraft, HistoryImportOptions, HistoryImportReport,

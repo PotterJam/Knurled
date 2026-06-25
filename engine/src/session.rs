@@ -21,8 +21,8 @@ use serde::{Deserialize, Serialize};
 use crate::core::{advance_cursor, reduce_input, validate_execution_input};
 use crate::error::Result;
 use crate::model::{
-    CompiledPlan, Effect, ExecutionInput, ExecutionInputValidation, ItemInput, RenderedSession,
-    StateProjection, ValidationStatus,
+    CompiledPlan, Effect, ExecutionInput, ExecutionInputValidation, ItemInput, RenderedItem,
+    RenderedSession, StateProjection, ValidationStatus,
 };
 use crate::record::{DayRecord, LiftRecord};
 
@@ -136,7 +136,7 @@ fn reset_baselines(
         let Some(item_input) = find_input(input, &item.item_id) else {
             continue;
         };
-        let Some(weight) = performed_weight(item_input) else {
+        let Some(weight) = performed_weight(item, item_input) else {
             continue;
         };
         let Some(lane) = state.lanes.get_mut(&item.progression_lane) else {
@@ -181,17 +181,10 @@ fn build_record_day(
             .performed_exercise
             .clone()
             .unwrap_or_else(|| item.exercise.clone());
-        let weight = performed_weight(item_input);
-        let mut reps: Vec<(u32, u32)> = item_input
-            .sets
-            .iter()
-            .map(|set| (set.set, set.reps))
-            .collect();
-        reps.sort_by_key(|(set, _)| *set);
         lifts.push(LiftRecord {
             exercise,
-            weight,
-            sets: reps.into_iter().map(|(_, reps)| reps).collect(),
+            weight: performed_weight(item, item_input),
+            sets: performed_reps(item, item_input),
             metrics: Default::default(),
             note: None,
         });
@@ -206,13 +199,46 @@ fn find_input<'a>(input: &'a ExecutionInput, item_id: &str) -> Option<&'a ItemIn
         .find(|candidate| candidate.item_id == item_id)
 }
 
-/// The load a lift was performed at: the item-level load if given, else the load
-/// recorded on the first working set.
-fn performed_weight(item_input: &ItemInput) -> Option<String> {
+/// Reps achieved per set, in order. For `per_set_reps` inputs this is the
+/// recorded sets; for `amrap_final_set` inputs (e.g. GZCLP T1) the preceding
+/// sets are reconstructed from the prescription and the final set carries the
+/// AMRAP result.
+fn performed_reps(item: &RenderedItem, item_input: &ItemInput) -> Vec<u32> {
+    if !item_input.sets.is_empty() {
+        let mut sets: Vec<&_> = item_input.sets.iter().collect();
+        sets.sort_by_key(|set| set.set);
+        return sets.into_iter().map(|set| set.reps).collect();
+    }
+    let mut reps: Vec<u32> = item
+        .prescription
+        .sets
+        .iter()
+        .map(|set| set.target_reps)
+        .collect();
+    if let (Some(last), Some(final_reps)) = (reps.last_mut(), item_input.final_set_reps) {
+        *last = final_reps;
+    }
+    reps
+}
+
+/// The load a lift was performed at: the item-level load, else the first
+/// working set's load, else the prescribed load (AMRAP inputs carry no load
+/// because the lifter used the prescription).
+fn performed_weight(item: &RenderedItem, item_input: &ItemInput) -> Option<String> {
     item_input
         .load
         .clone()
-        .or_else(|| item_input.sets.first().and_then(|set| set.load.clone()))
+        .or_else(|| {
+            let mut sets: Vec<&_> = item_input.sets.iter().collect();
+            sets.sort_by_key(|set| set.set);
+            sets.first().and_then(|set| set.load.clone())
+        })
+        .or_else(|| {
+            item.prescription
+                .sets
+                .first()
+                .and_then(|set| set.load.clone())
+        })
 }
 
 #[cfg(test)]
