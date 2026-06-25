@@ -4,6 +4,7 @@ pub mod import;
 pub mod json;
 pub mod model;
 pub mod parser;
+pub mod record;
 pub mod repo;
 pub mod templates;
 
@@ -20,6 +21,7 @@ pub use import::{
 pub use json::{pretty_json, sha256_json, sha256_text, stable_json};
 pub use model::*;
 pub use parser::{parse_lock, parse_patch, parse_plan};
+pub use record::{DayRecord, LiftRecord, LogMonth, month_key, month_path};
 pub use repo::{
     InitResult, TrainingRepo, backtest_repo, build_repo, check_generated_repo, init_training_repo,
     preview_repo, read_training_repo, replay_repo, simulate_repo, validate_repo,
