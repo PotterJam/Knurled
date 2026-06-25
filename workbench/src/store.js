@@ -41,7 +41,8 @@ const defaults = () => ({
   planText: SAMPLE_PLAN,
   lock: "",
   patches: [], // { filename, text, name, active }
-  events: [], // imported TrainingEvent[]
+  records: [], // DayRecord[] loaded from logs/<yyyy>/<mm>.json (ADR 0007)
+  currentState: null, // state/current.json — the source of truth, or null when fresh
   repoLabel: "Static workbench",
   theme: "sage",
   github: { token: "", repo: "", branch: "main" },
@@ -84,7 +85,8 @@ export function resetPlan() {
     planText: next.planText,
     lock: next.lock,
     patches: next.patches,
-    events: next.events,
+    records: next.records,
+    currentState: next.currentState,
     repoLabel: next.repoLabel,
     ui: next.ui,
   });

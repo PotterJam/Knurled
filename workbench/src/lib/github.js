@@ -121,19 +121,17 @@ async function readBlobPath(token, repo, tree, path) {
   return { text: await getBlobText(token, repo, entry.sha), sha: entry.sha };
 }
 
-function parseEvents(text, path, warnings) {
-  const events = [];
-  const lines = text.split("\n");
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-    try {
-      events.push(JSON.parse(trimmed));
-    } catch (error) {
-      warnings.push(`${path}:${index + 1}: skipped malformed JSONL (${error.message})`);
-    }
-  });
-  return events;
+// ADR 0007: a log file is one pretty-printed month (`logs/<yyyy>/<mm>.json`)
+// holding `days[]`. Parse a month, returning its day records; malformed files
+// are skipped with a warning rather than failing the load.
+function parseRecordMonth(text, path, warnings) {
+  try {
+    const month = JSON.parse(text);
+    return Array.isArray(month?.days) ? month.days : [];
+  } catch (error) {
+    warnings.push(`${path}: skipped malformed record (${error.message})`);
+    return [];
+  }
 }
 
 /** Load a training repo's plan, lock, patches and logs into a store-shaped object. */
@@ -158,19 +156,32 @@ export async function loadRepo(token, repo, branch = "main") {
     patches.push({ filename: entry.path.split("/").pop(), text, name, active: true, sha: entry.sha });
   }
 
-  const events = [];
   const loadWarnings = [];
+  const records = [];
   for (const entry of tree
-    .filter((item) => item.type === "blob" && /^logs\/.+\.jsonl$/.test(item.path))
+    .filter((item) => item.type === "blob" && /^logs\/.+\.json$/.test(item.path))
     .sort((a, b) => a.path.localeCompare(b.path))) {
-    events.push(...parseEvents(await getBlobText(token, parsed.label, entry.sha), entry.path, loadWarnings));
+    records.push(...parseRecordMonth(await getBlobText(token, parsed.label, entry.sha), entry.path, loadWarnings));
+  }
+  records.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  // state/current.json is the source of truth (ADR 0007); load it if present.
+  const stateBlob = await readBlobPath(token, parsed.label, tree, "state/current.json");
+  let currentState = null;
+  if (stateBlob) {
+    try {
+      currentState = JSON.parse(stateBlob.text);
+    } catch (error) {
+      loadWarnings.push(`state/current.json: skipped malformed state (${error.message})`);
+    }
   }
 
   return {
     planText: plan.text,
     lock: lock?.text || "",
     patches,
-    events,
+    records,
+    currentState,
     repoLabel: `${parsed.label}@${branch}`,
     _base: { branch, commitSha: ref.object.sha, treeSha: commit.tree.sha },
     _shas: { "plan.fitspec": plan.sha, "fitspec.lock": lock?.sha },

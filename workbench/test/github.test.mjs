@@ -89,12 +89,14 @@ test("commitFiles skips commit when the new tree matches the base tree", async (
   assert.equal(calls.some((call) => call.url.endsWith("/git/refs/heads/main") && call.options.method === "PATCH"), false);
 });
 
-test("loadRepo reads plan, lock, patches, and JSONL logs from the git tree", async () => {
+test("loadRepo reads plan, lock, patches, record logs, and state from the git tree", async () => {
   const blobs = {
     "sha-plan": 'plan "Loaded" {}',
     "sha-lock": "lock",
     "sha-patch": 'patch "travel" {}',
-    "sha-log": '{"id":"evt_1","type":"session_imported"}\nnot-json\n',
+    "sha-log": '{"month":"2026-06","days":[{"date":"2026-06-24","lifts":[{"exercise":"squat","weight":"82.5kg","sets":[5,5,7]}]}]}',
+    "sha-bad-log": "{ not json",
+    "sha-state": '{"type":"state_projection","program":"gzcl.gzclp@1.0.0","lanes":{}}',
   };
   installFetch((call) => {
     const { url } = call;
@@ -106,7 +108,9 @@ test("loadRepo reads plan, lock, patches, and JSONL logs from the git tree", asy
           { type: "blob", path: "plan.fitspec", sha: "sha-plan" },
           { type: "blob", path: "fitspec.lock", sha: "sha-lock" },
           { type: "blob", path: "patches/travel.fitspec", sha: "sha-patch" },
-          { type: "blob", path: "logs/imports/hevy.jsonl", sha: "sha-log" },
+          { type: "blob", path: "logs/2026/06.json", sha: "sha-log" },
+          { type: "blob", path: "logs/2026/07.json", sha: "sha-bad-log" },
+          { type: "blob", path: "state/current.json", sha: "sha-state" },
         ],
       });
     }
@@ -121,7 +125,9 @@ test("loadRepo reads plan, lock, patches, and JSONL logs from the git tree", asy
   assert.equal(loaded.lock, "lock");
   assert.equal(loaded.patches[0].name, "travel");
   assert.equal(loaded.patches[0].sha, "sha-patch");
-  assert.equal(loaded.events.length, 1);
+  assert.equal(loaded.records.length, 1);
+  assert.equal(loaded.records[0].date, "2026-06-24");
+  assert.equal(loaded.currentState.program, "gzcl.gzclp@1.0.0");
   assert.equal(loaded.repoLabel, "owner/repo@feature/test");
   assert.equal(loaded._loadWarnings.length, 1);
 });
