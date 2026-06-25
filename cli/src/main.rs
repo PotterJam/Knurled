@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use knurled_core::{
-    HistoryImportDelimiter, HistoryImportOptions, backtest_repo, build_repo, check_generated_repo,
-    import_history_repo, init_training_repo, pretty_json, preview_repo, replay_repo, simulate_repo,
-    validate_repo,
+    ExecutionInput, HistoryImportDelimiter, HistoryImportOptions, SubmitMode, backtest_records_repo,
+    backtest_repo, build_repo, check_generated_repo, import_history_repo, init_training_repo,
+    pretty_json, preview_repo, replay_repo, simulate_repo, submit_repo, validate_repo,
 };
 
 #[derive(Debug, Parser)]
@@ -61,6 +61,23 @@ enum Command {
         #[arg(default_value = ".")]
         repo: PathBuf,
     },
+    /// Submit a finished session: advance state and append the day to the record (ADR 0007).
+    Submit {
+        repo: PathBuf,
+        /// Path to an ExecutionInput JSON built against the current next workout.
+        input: PathBuf,
+        /// ISO date (YYYY-MM-DD) the session was performed.
+        #[arg(long)]
+        date: String,
+        /// How the session moves state.
+        #[arg(long, value_enum, default_value_t = SubmitModeArg::Advance)]
+        mode: SubmitModeArg,
+    },
+    /// Backtest the plan over the recorded days (replay-free projection, ADR 0007).
+    BacktestRecords {
+        #[arg(default_value = ".")]
+        repo: PathBuf,
+    },
     ImportHistory {
         repo: PathBuf,
         input: PathBuf,
@@ -84,6 +101,26 @@ enum ImportDelimiterArg {
     Auto,
     Csv,
     Tsv,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum SubmitModeArg {
+    /// Run the program's progression rules.
+    Advance,
+    /// Record only; leave targets/stages/fails unchanged.
+    OffDay,
+    /// Make the performed loads the new baseline.
+    Reset,
+}
+
+impl From<SubmitModeArg> for SubmitMode {
+    fn from(value: SubmitModeArg) -> Self {
+        match value {
+            SubmitModeArg::Advance => SubmitMode::Advance,
+            SubmitModeArg::OffDay => SubmitMode::OffDay,
+            SubmitModeArg::Reset => SubmitMode::Reset,
+        }
+    }
 }
 
 impl From<ImportDelimiterArg> for HistoryImportDelimiter {
@@ -156,6 +193,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             if report.status != "passed" {
                 std::process::exit(1);
             }
+        }
+        Command::Submit {
+            repo,
+            input,
+            date,
+            mode,
+        } => {
+            let text = fs::read_to_string(&input)?;
+            let execution_input: ExecutionInput = serde_json::from_str(&text)?;
+            let outcome = submit_repo(&repo, &execution_input, mode.into(), &date)?;
+            println!("{}", pretty_json(&outcome)?);
+            if outcome.validation.status != knurled_core::ValidationStatus::Valid {
+                std::process::exit(1);
+            }
+        }
+        Command::BacktestRecords { repo } => {
+            println!("{}", pretty_json(&backtest_records_repo(repo)?)?);
         }
         Command::ImportHistory {
             repo,
