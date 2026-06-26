@@ -145,6 +145,19 @@ xcodebuild -scheme Knurled -destination 'platform=iOS Simulator,name=iPhone 16' 
 The app boots straight onto the bundled `gzclp-repo` sample, so read/log/submit flows are usable
 in the simulator without GitHub.
 
+### Xcode Cloud
+
+Xcode Cloud builds from a clean checkout, so `ci_scripts/ci_post_clone.sh` prepares the ignored
+iOS build artifacts before dependency resolution/archive:
+
+1. installs Rust if `rustup` is unavailable,
+2. installs XcodeGen via Homebrew if needed,
+3. runs `ios/scripts/build-xcframework.sh`, and
+4. runs `xcodegen generate` in `ios/`.
+
+Keep `Knurled.xcodeproj` and `Engine/KnurledCore.xcframework` gitignored; the cloud workflow
+should continue to point at `ios/Knurled.xcodeproj` after the post-clone script generates it.
+
 ## GitHub setup (optional)
 
 1. Register a GitHub OAuth App at <https://github.com/settings/developers> with **Device Flow**

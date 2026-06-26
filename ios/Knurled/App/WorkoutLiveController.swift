@@ -13,6 +13,18 @@ import Observation
 final class WorkoutLiveController {
     static let shared = WorkoutLiveController()
 
+    private struct ActivityHandle: @unchecked Sendable {
+        let activity: Activity<RestActivityAttributes>
+
+        func update(_ content: ActivityContent<RestActivityAttributes.ContentState>) async {
+            await activity.update(content)
+        }
+
+        func end(dismissalPolicy: ActivityUIDismissalPolicy) async {
+            await activity.end(nil, dismissalPolicy: dismissalPolicy)
+        }
+    }
+
     private(set) var workout: LiveWorkout?
     /// The exercise the user has tapped to work on next. Equipment is often busy, so sets get done
     /// out of order: tapping an unfocused card focuses it here and moves the cursor onto its first
@@ -24,7 +36,7 @@ final class WorkoutLiveController {
 
     private var now: Date = .now
     private var tickTask: Task<Void, Never>?
-    private var activity: Activity<RestActivityAttributes>?
+    private var activity: ActivityHandle?
 
     private init() {}
 
@@ -293,21 +305,22 @@ final class WorkoutLiveController {
         guard ActivityAuthorizationInfo().areActivitiesEnabled,
               let workout, let state = contentState() else { return }
         let attributes = RestActivityAttributes(workoutName: workout.session.displayName)
-        activity = try? Activity.request(
+        activity = try? ActivityHandle(activity: Activity.request(
             attributes: attributes,
             content: .init(state: state, staleDate: staleDate())
-        )
+        ))
     }
 
     private func updateActivity() {
         guard let activity, let state = contentState() else { return }
-        Task { await activity.update(.init(state: state, staleDate: staleDate())) }
+        let content = ActivityContent(state: state, staleDate: staleDate())
+        Task { await activity.update(content) }
     }
 
     private func endActivity() {
         guard let current = activity else { return }
-        Task { await current.end(nil, dismissalPolicy: .immediate) }
         activity = nil
+        Task { await current.end(dismissalPolicy: .immediate) }
     }
 
     private func staleDate() -> Date? { isResting ? restEndDate : nil }

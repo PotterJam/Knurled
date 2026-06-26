@@ -4,10 +4,10 @@ import Foundation
 /// Shared between the app (which starts/updates/advances the activity through
 /// `WorkoutLiveController`) and the KnurledRestActivity widget extension (which renders it
 /// and fires the interactive intents).
-struct RestActivityAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable {
+struct RestActivityAttributes: ActivityAttributes, Sendable {
+    struct ContentState: Codable, Hashable, Sendable {
         /// What the activity is currently asking the user to do.
-        enum Phase: Int, Codable, Hashable {
+        enum Phase: Int, Codable, Hashable, Sendable {
             case ready     // a set is staged, waiting to be logged
             case resting   // counting down between sets
             case finished  // every set logged
