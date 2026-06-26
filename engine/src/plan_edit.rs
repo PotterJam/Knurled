@@ -10,7 +10,8 @@ use crate::model::*;
 use crate::parser::{normalize_exercise, parse_plan};
 use crate::record::{DayRecord, month_path};
 use crate::repo::{
-    append_day_record, read_state, read_training_repo, write_generated_files, write_state,
+    append_day_record, read_records, read_state, read_training_repo, write_generated_files,
+    write_state,
 };
 use crate::templates::{builtin_template, parse_template_ref, render_lockfile};
 
@@ -26,6 +27,8 @@ pub enum PlanEdit {
         custom_exercise: Option<CustomExerciseEdit>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         accessory: Option<AccessoryEdit>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_exercises: Option<SessionExercisePolicy>,
     },
     SavePatch {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -164,6 +167,62 @@ pub fn apply_plan_edit(repo_path: impl AsRef<Path>, edit: PlanEdit) -> Result<Pl
     })
 }
 
+pub fn suggest_initial_numbers(
+    repo_path: impl AsRef<Path>,
+    template: &str,
+    units: Units,
+) -> Result<InitialNumberSuggestions> {
+    let reference = parse_template_ref(template);
+    let template_model = builtin_template(&reference.normalized)?;
+    let exercises = initial_number_exercises(&template_model);
+    let days = read_records(repo_path)?;
+    let unit = unit_token(&units);
+    let mut values = Map::new();
+    let mut suggestions = Vec::new();
+
+    for exercise in exercises {
+        let normalized = normalize_exercise(&exercise);
+        let source = days
+            .iter()
+            .rev()
+            .take(12)
+            .flat_map(|day| day.lifts.iter().rev().map(move |lift| (day, lift)))
+            .find(|(_, lift)| normalize_exercise(&lift.exercise) == normalized)
+            .and_then(|(day, lift)| {
+                let load = lift.weight.as_ref()?;
+                let value = numeric_load_in_unit(load, unit)?;
+                Some((day.date.clone(), lift.exercise.clone(), load.clone(), value))
+            });
+
+        let (source_date, source_exercise, source_load, value) = match source {
+            Some((date, source_exercise, source_load, value)) => {
+                values.insert(normalized.clone(), value.clone());
+                (
+                    Some(date),
+                    Some(source_exercise),
+                    Some(source_load),
+                    Some(value),
+                )
+            }
+            None => (None, None, None, None),
+        };
+        suggestions.push(InitialNumberSuggestion {
+            exercise: normalized,
+            value,
+            source_exercise,
+            source_date,
+            source_load,
+        });
+    }
+
+    Ok(InitialNumberSuggestions {
+        template: reference.normalized,
+        units,
+        values,
+        suggestions,
+    })
+}
+
 fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
     let repo = read_training_repo(root)?;
     let mut plan_text = repo.plan_text.clone();
@@ -180,6 +239,7 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
             equipment,
             custom_exercise,
             accessory,
+            session_exercises,
         } => {
             let mut plan = parse_plan(&plan_text)?;
             if let Some(days) = suggested_days {
@@ -207,6 +267,9 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
                     accessory.slot.to_ascii_uppercase(),
                     normalize_exercise(&accessory.exercise),
                 );
+            }
+            if let Some(session_exercises) = session_exercises {
+                plan.session_exercises = normalize_session_exercises(session_exercises);
             }
             plan_text = render_plan(&plan);
             writes.push(("plan.fitspec".into(), Some(plan_text.clone())));
@@ -338,6 +401,7 @@ fn starter_plan(
         exercise_options: Map::new(),
         rest: RestPolicy::default(),
         warmup: WarmupPolicy::default(),
+        session_exercises: SessionExercisePolicy::default(),
         equipment: None,
     }
 }
@@ -356,6 +420,40 @@ fn default_accessories(kind: &TemplateKind, sessions: &Map<Vec<TemplateSlot>>) -
             ))
         })
         .collect()
+}
+
+fn initial_number_exercises(template: &BuiltinTemplate) -> Vec<String> {
+    let mut exercises = template
+        .sessions
+        .values()
+        .flatten()
+        .filter(|slot| slot.tier != "chins")
+        .filter_map(|slot| slot.exercise.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if template.kind == TemplateKind::FiveThreeOne {
+        exercises.sort_by_key(|exercise| match exercise.as_str() {
+            "squat" => 0,
+            "bench" => 1,
+            "deadlift" => 2,
+            "press" => 3,
+            _ => 99,
+        });
+    }
+    exercises
+}
+
+fn numeric_load_in_unit(load: &str, unit: &str) -> Option<String> {
+    let split = load
+        .find(|ch: char| ch.is_ascii_alphabetic())
+        .unwrap_or(load.len());
+    let value = load[..split].trim().parse::<f64>().ok()?;
+    let load_unit = load[split..].trim().to_ascii_lowercase();
+    if !load_unit.is_empty() && load_unit != unit {
+        return None;
+    }
+    Some(number(value))
 }
 
 fn current_suggested_days(plan_text: &str) -> Result<Vec<String>> {
@@ -378,6 +476,30 @@ fn normalize_lift_map(values: Map<String>) -> Map<String> {
         .into_iter()
         .map(|(key, value)| (normalize_exercise(&key), value))
         .collect()
+}
+
+fn normalize_session_exercises(mut policy: SessionExercisePolicy) -> SessionExercisePolicy {
+    for exercise in policy.warmup.iter_mut().chain(policy.warmdown.iter_mut()) {
+        exercise.exercise = normalize_exercise(&exercise.exercise);
+        exercise.sets = exercise.sets.clamp(1, 20);
+        exercise.reps = exercise.reps.min(999);
+        exercise.label = exercise
+            .label
+            .take()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        exercise.load = exercise
+            .load
+            .take()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        exercise.note = exercise
+            .note
+            .take()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+    }
+    policy
 }
 
 fn normalize_token(value: &str) -> String {
@@ -467,6 +589,7 @@ fn render_plan(plan: &Plan) -> String {
     render_exercises(&mut out, &plan.exercises);
     render_rest(&mut out, &plan.rest);
     render_warmup(&mut out, &plan.warmup);
+    render_session_exercises(&mut out, &plan.session_exercises);
     render_equipment(&mut out, plan.equipment.as_ref());
     render_exercise_options(&mut out, &plan.exercise_options);
     out.push("}".into());
@@ -676,13 +799,44 @@ fn render_equipment(out: &mut Vec<String>, equipment: Option<&EquipmentProfile>)
         ));
     }
     if equipment.rounding != RoundingMode::Nearest {
-        out.push(format!("    rounding {}", rounding_token(&equipment.rounding)));
+        out.push(format!(
+            "    rounding {}",
+            rounding_token(&equipment.rounding)
+        ));
     }
     for (exercise, implement) in &equipment.implements {
         out.push(format!(
             "    implement {exercise} {}",
             implement_token(implement)
         ));
+    }
+    out.push("  }".into());
+}
+
+fn render_session_exercises(out: &mut Vec<String>, policy: &SessionExercisePolicy) {
+    if policy.is_empty() {
+        return;
+    }
+    out.push(String::new());
+    out.push("  session_exercises {".into());
+    for (phase, exercises) in [("warmup", &policy.warmup), ("warmdown", &policy.warmdown)] {
+        for exercise in exercises {
+            let mut parts = vec![
+                format!("{phase} {}", exercise.exercise),
+                format!("sets={}", exercise.sets),
+                format!("reps={}", exercise.reps),
+            ];
+            if let Some(load) = &exercise.load {
+                parts.push(format!("load=\"{}\"", escape(load)));
+            }
+            if let Some(label) = &exercise.label {
+                parts.push(format!("label=\"{}\"", escape(label)));
+            }
+            if let Some(note) = &exercise.note {
+                parts.push(format!("note=\"{}\"", escape(note)));
+            }
+            out.push(format!("    {}", parts.join(" ")));
+        }
     }
     out.push("  }".into());
 }
@@ -775,7 +929,7 @@ fn io_error(path: impl AsRef<Path>, source: std::io::Error) -> KnurledError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::repo::init_training_repo;
+    use crate::repo::{append_day_record, init_training_repo};
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("knurled-plan-edit-{name}-{}", std::process::id()))
@@ -795,13 +949,105 @@ mod tests {
                 equipment: None,
                 custom_exercise: None,
                 accessory: None,
+                session_exercises: None,
             },
         )
         .unwrap();
 
         assert!(!result.applied);
-        assert_eq!(fs::read_to_string(dir.join("plan.fitspec")).unwrap(), before);
+        assert_eq!(
+            fs::read_to_string(dir.join("plan.fitspec")).unwrap(),
+            before
+        );
         assert!(result.changed_files.contains(&"plan.fitspec".into()));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn quick_edit_adds_session_warmup_and_warmdown() {
+        let dir = temp_dir("session-exercises");
+        let _ = fs::remove_dir_all(&dir);
+        init_training_repo(&dir, "gzcl.gzclp@1.0.0").unwrap();
+
+        let result = apply_plan_edit(
+            &dir,
+            PlanEdit::Quick {
+                suggested_days: None,
+                equipment: None,
+                custom_exercise: None,
+                accessory: None,
+                session_exercises: Some(SessionExercisePolicy {
+                    warmup: vec![SessionExercise {
+                        exercise: "band pull apart".into(),
+                        label: None,
+                        sets: 2,
+                        reps: 15,
+                        load: None,
+                        note: None,
+                    }],
+                    warmdown: vec![SessionExercise {
+                        exercise: "easy bike".into(),
+                        label: Some("Easy Bike".into()),
+                        sets: 1,
+                        reps: 5,
+                        load: None,
+                        note: Some("Cooldown".into()),
+                    }],
+                }),
+            },
+        )
+        .unwrap();
+
+        let items = result.outputs.next_workout.unwrap().items;
+        assert_eq!(items.first().unwrap().phase, RenderedItemPhase::Warmup);
+        assert_eq!(items.first().unwrap().exercise, "band_pull_apart");
+        assert_eq!(items.last().unwrap().phase, RenderedItemPhase::Warmdown);
+        assert_eq!(items.last().unwrap().exercise, "easy_bike");
+        let plan = fs::read_to_string(dir.join("plan.fitspec")).unwrap();
+        assert!(plan.contains("session_exercises"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn initial_number_suggestions_use_recent_matching_lifts() {
+        let dir = temp_dir("initial-suggestions");
+        let _ = fs::remove_dir_all(&dir);
+        init_training_repo(&dir, "gzcl.gzclp@1.0.0").unwrap();
+        append_day_record(
+            &dir,
+            DayRecord::workout(
+                "2026-06-20",
+                vec![
+                    crate::record::LiftRecord::new("squat", "80kg", vec![5, 5, 5]),
+                    crate::record::LiftRecord::new("bench", "55kg", vec![5, 5, 5]),
+                ],
+            ),
+        )
+        .unwrap();
+        append_day_record(
+            &dir,
+            DayRecord::workout(
+                "2026-06-24",
+                vec![crate::record::LiftRecord::new(
+                    "squat",
+                    "82.5kg",
+                    vec![5, 5, 5],
+                )],
+            ),
+        )
+        .unwrap();
+
+        let suggestions = suggest_initial_numbers(&dir, "gzcl.gzclp@1.0.0", Units::Kg).unwrap();
+
+        assert_eq!(
+            suggestions.values.get("squat").map(String::as_str),
+            Some("82.5")
+        );
+        assert_eq!(
+            suggestions.values.get("bench").map(String::as_str),
+            Some("55")
+        );
+        assert!(!suggestions.values.contains_key("deadlift"));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -830,7 +1076,11 @@ mod tests {
 
         assert!(result.applied);
         assert!(dir.join("patches/shoulder-friendly.fitspec").exists());
-        assert!(result.changed_files.contains(&"build/current.ir.json".into()));
+        assert!(
+            result
+                .changed_files
+                .contains(&"build/current.ir.json".into())
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -860,8 +1110,16 @@ mod tests {
         .unwrap();
 
         assert!(result.applied);
-        assert!(fs::read_to_string(dir.join("plan.fitspec")).unwrap().contains("training_maxes"));
-        assert!(fs::read_to_string(dir.join("logs/2026/06.json")).unwrap().contains("531.beginners"));
+        assert!(
+            fs::read_to_string(dir.join("plan.fitspec"))
+                .unwrap()
+                .contains("training_maxes")
+        );
+        assert!(
+            fs::read_to_string(dir.join("logs/2026/06.json"))
+                .unwrap()
+                .contains("531.beginners")
+        );
         assert_eq!(
             result.outputs.state.lanes["squat.main"]
                 .training_max

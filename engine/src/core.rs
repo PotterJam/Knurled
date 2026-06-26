@@ -60,6 +60,7 @@ pub fn compile_plan(
         exercise_options: plan.exercise_options,
         rest: plan.rest,
         warmup: plan.warmup,
+        session_exercises: plan.session_exercises,
         equipment: plan.equipment,
         template,
         lock,
@@ -975,7 +976,7 @@ fn render_gzclp_next(compiled: &CompiledPlan, state: &StateProjection) -> Result
             plan_hash: compiled.plan_hash.clone(),
             template_hash: compiled.template_hash.clone(),
             rendered_session_hash: String::new(),
-            items,
+            items: with_session_exercises(compiled, items),
         },
     )
 }
@@ -1192,7 +1193,7 @@ fn render_531_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
             plan_hash: compiled.plan_hash.clone(),
             template_hash: compiled.template_hash.clone(),
             rendered_session_hash: String::new(),
-            items: vec![item],
+            items: with_session_exercises(compiled, vec![item]),
         },
     )
 }
@@ -1225,7 +1226,7 @@ fn render_starting_strength_next(
             plan_hash: compiled.plan_hash.clone(),
             template_hash: compiled.template_hash.clone(),
             rendered_session_hash: String::new(),
-            items,
+            items: with_session_exercises(compiled, items),
         },
     )
 }
@@ -1295,6 +1296,113 @@ fn render_starting_strength_item(
     )
 }
 
+fn with_session_exercises(
+    compiled: &CompiledPlan,
+    mut main_items: Vec<RenderedItem>,
+) -> Vec<RenderedItem> {
+    let mut items = Vec::new();
+    items.extend(
+        compiled
+            .session_exercises
+            .warmup
+            .iter()
+            .enumerate()
+            .map(|(index, exercise)| {
+                session_exercise_item(compiled, RenderedItemPhase::Warmup, index, exercise)
+            }),
+    );
+    items.append(&mut main_items);
+    items.extend(compiled.session_exercises.warmdown.iter().enumerate().map(
+        |(index, exercise)| {
+            session_exercise_item(compiled, RenderedItemPhase::Warmdown, index, exercise)
+        },
+    ));
+    items
+}
+
+fn session_exercise_item(
+    compiled: &CompiledPlan,
+    phase: RenderedItemPhase,
+    index: usize,
+    exercise: &SessionExercise,
+) -> RenderedItem {
+    let phase_id = match phase {
+        RenderedItemPhase::Warmup => "warmup",
+        RenderedItemPhase::Warmdown => "warmdown",
+        RenderedItemPhase::Main => "main",
+    };
+    let item_id = format!("{phase_id}.{}.{}", index + 1, exercise.exercise);
+    let sets = (1..=exercise.sets.max(1))
+        .map(|set| PrescribedSet {
+            set,
+            load: exercise.load.clone(),
+            target_reps: exercise.reps,
+            amrap: false,
+            percentage: None,
+        })
+        .collect::<Vec<_>>();
+    let title = exercise
+        .label
+        .clone()
+        .unwrap_or_else(|| title_case(&exercise.exercise));
+    let phase_title = match phase {
+        RenderedItemPhase::Warmup => "Warmup",
+        RenderedItemPhase::Warmdown => "Warmdown",
+        RenderedItemPhase::Main => "Exercise",
+    };
+
+    RenderedItem {
+        phase,
+        item_id: item_id.clone(),
+        slot_id: item_id.clone(),
+        progression_lane: String::new(),
+        progression_rule: "tracking_only".into(),
+        exercise: exercise.exercise.clone(),
+        display: DisplayFields {
+            title,
+            subtitle: exercise
+                .note
+                .clone()
+                .unwrap_or_else(|| phase_title.to_owned()),
+        },
+        prescription: Prescription {
+            warmups: Vec::new(),
+            sets: sets.clone(),
+        },
+        execution_contract: ExecutionContract {
+            recommended_input: "per_set_reps".into(),
+            fallback_inputs: Vec::new(),
+            completion_rule: "optional".into(),
+            event_template: "tracking_only_v1".into(),
+            required_for_completion: false,
+            input_schema: InputSchema {
+                mode: "per_set_reps".into(),
+                fields: Vec::new(),
+                fallback: None,
+            },
+        },
+        effect_preview: EffectPreview {
+            pass: Vec::new(),
+            fail: Vec::new(),
+            adjusted_today: Vec::new(),
+        },
+        rest: RestPrescription {
+            seconds: 30,
+            source: RestSource::EngineFallback,
+            key: phase_id.into(),
+        },
+        identity: ItemIdentity {
+            item_id: item_id.clone(),
+            slot_id: item_id,
+            progression_lane: String::new(),
+            progression_rule: "tracking_only".into(),
+            plan_hash: compiled.plan_hash.clone(),
+            rendered_session_hash: String::new(),
+        },
+        exercise_options: None,
+    }
+}
+
 struct RenderedItemSpec<'a> {
     exercise: String,
     lane: String,
@@ -1335,6 +1443,7 @@ fn rendered_item(
             })
         });
     Ok(RenderedItem {
+        phase: RenderedItemPhase::Main,
         item_id: slot.slot_id.clone(),
         slot_id: slot.slot_id.clone(),
         progression_lane: spec.lane.clone(),

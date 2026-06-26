@@ -49,6 +49,10 @@ char *knurled_preview_plan_edit(const char *dir, const char *plan_edit_json);
  * -> plan edit outcome */
 char *knurled_apply_plan_edit(const char *dir, const char *plan_edit_json);
 
+/* Suggests initial starts/training maxes for a target template from recent matching log lifts.
+ * Request JSON: { "template": "...@...", "units": "kg"|"lb" }. -> initial number suggestions */
+char *knurled_suggest_initial_numbers(const char *dir, const char *request_json);
+
 /* -> engine version string */
 char *knurled_engine_version(void);
 

@@ -10,6 +10,8 @@ struct QuickPlanEditView: View {
     @State private var plates: String
     @State private var dumbbells: String
     @State private var rounding: RoundingMode
+    @State private var warmupExercises: [SessionExercise]
+    @State private var warmdownExercises: [SessionExercise]
     @State private var isSaving = false
     @State private var outcome: PlanEditOutcome?
     @State private var errorMessage: String?
@@ -23,6 +25,8 @@ struct QuickPlanEditView: View {
         _plates = State(initialValue: (equipment?.platePairs ?? []).map(Self.formatNumber).joined(separator: " "))
         _dumbbells = State(initialValue: (equipment?.dumbbells ?? []).map(Self.formatNumber).joined(separator: " "))
         _rounding = State(initialValue: equipment?.rounding ?? .nearest)
+        _warmupExercises = State(initialValue: plan.sessionExercises.warmup)
+        _warmdownExercises = State(initialValue: plan.sessionExercises.warmdown)
     }
 
     var body: some View {
@@ -49,6 +53,17 @@ struct QuickPlanEditView: View {
                     Text("Down").tag(RoundingMode.down)
                 }
             }
+
+            SessionExercisesEditor(
+                title: "Warmup",
+                systemImage: "figure.flexibility",
+                exercises: $warmupExercises
+            )
+            SessionExercisesEditor(
+                title: "Warmdown",
+                systemImage: "figure.cooldown",
+                exercises: $warmdownExercises
+            )
         }
         .navigationTitle("Quick Edits")
         .toolbar {
@@ -85,7 +100,11 @@ struct QuickPlanEditView: View {
                 suggestedDays: Self.days.filter { selectedDays.contains($0) },
                 equipment: equipment,
                 customExercise: nil,
-                accessory: nil
+                accessory: nil,
+                sessionExercises: SessionExercisePolicy(
+                    warmup: warmupExercises.filter { !$0.exercise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
+                    warmdown: warmdownExercises.filter { !$0.exercise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                )
             )
         )
         apply(edit, message: "Update plan settings")
@@ -121,6 +140,74 @@ struct QuickPlanEditView: View {
     }
 
     private static let days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+}
+
+private struct SessionExercisesEditor: View {
+    let title: String
+    let systemImage: String
+    @Binding var exercises: [SessionExercise]
+
+    var body: some View {
+        Section {
+            if exercises.isEmpty {
+                Text("None")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(exercises.indices, id: \.self) { index in
+                SessionExerciseRow(exercise: $exercises[index])
+            }
+            .onDelete { offsets in
+                exercises.remove(atOffsets: offsets)
+            }
+
+            Button {
+                exercises.append(SessionExercise(exercise: "", sets: 1, reps: title == "Warmdown" ? 60 : 10))
+            } label: {
+                Label("Add \(title.lowercased()) exercise", systemImage: "plus.circle")
+            }
+        } header: {
+            Label(title, systemImage: systemImage)
+        }
+    }
+}
+
+private struct SessionExerciseRow: View {
+    @Binding var exercise: SessionExercise
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Exercise", text: $exercise.exercise)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            HStack {
+                Stepper("\(exercise.sets) sets", value: $exercise.sets, in: 1...20)
+                Stepper("\(exercise.reps) reps", value: $exercise.reps, in: 0...999)
+            }
+            TextField("Load or note", text: loadOrNoteBinding)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var loadOrNoteBinding: Binding<String> {
+        Binding(
+            get: { exercise.load ?? exercise.note ?? "" },
+            set: { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    exercise.load = nil
+                    exercise.note = nil
+                } else if trimmed.rangeOfCharacter(from: .decimalDigits) != nil {
+                    exercise.load = trimmed
+                    exercise.note = nil
+                } else {
+                    exercise.load = nil
+                    exercise.note = trimmed
+                }
+            }
+        )
+    }
 }
 
 struct PatchPlanEditView: View {
@@ -256,6 +343,7 @@ struct SwitchProgramView: View {
     @State private var template: StarterTemplate?
     @State private var units: Units = .kg
     @State private var values: [String: String] = [:]
+    @State private var suggestions: InitialNumberSuggestions?
     @State private var note = ""
     @State private var isSaving = false
     @State private var outcome: PlanEditOutcome?
@@ -294,6 +382,28 @@ struct SwitchProgramView: View {
 
             InitialTrainingNumbersEditor(spec: spec, units: $units, values: $values)
 
+            if let suggestions {
+                Section("Suggested from history") {
+                    ForEach(suggestions.suggestions) { suggestion in
+                        HStack {
+                            Text(suggestion.exercise.replacingOccurrences(of: "_", with: " ").capitalized)
+                            Spacer()
+                            if let value = suggestion.value,
+                               let date = suggestion.sourceDate,
+                               let load = suggestion.sourceLoad {
+                                Text("\(value)\(suggestions.units.rawValue) from \(load) on \(date)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("No match")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
             Section("History") {
                 TextField("Note", text: $note)
             }
@@ -314,10 +424,18 @@ struct SwitchProgramView: View {
             if template == nil {
                 template = app.starterTemplates.first
                 values = InitialTrainingNumbers.emptyValues(for: spec)
+                await loadSuggestions()
             }
         }
         .onChange(of: template) { _, _ in
             values = InitialTrainingNumbers.emptyValues(for: spec)
+            suggestions = nil
+            Task { await loadSuggestions() }
+        }
+        .onChange(of: units) { _, _ in
+            values = InitialTrainingNumbers.emptyValues(for: spec)
+            suggestions = nil
+            Task { await loadSuggestions() }
         }
     }
 
@@ -353,6 +471,22 @@ struct SwitchProgramView: View {
                 errorMessage = error.localizedDescription
             }
             isSaving = false
+        }
+    }
+
+    private func loadSuggestions() async {
+        guard let template else { return }
+        do {
+            let result = try await app.engine.suggestInitialNumbers(
+                dir: repo.url,
+                request: InitialNumberSuggestionRequest(template: template.reference, units: units)
+            )
+            suggestions = result
+            for (exercise, value) in result.values {
+                values[exercise] = value
+            }
+        } catch {
+            suggestions = nil
         }
     }
 

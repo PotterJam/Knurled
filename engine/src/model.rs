@@ -41,6 +41,8 @@ pub struct Plan {
     pub rest: RestPolicy,
     #[serde(default, skip_serializing_if = "WarmupPolicy::is_empty")]
     pub warmup: WarmupPolicy,
+    #[serde(default, skip_serializing_if = "SessionExercisePolicy::is_empty")]
+    pub session_exercises: SessionExercisePolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub equipment: Option<EquipmentProfile>,
 }
@@ -222,6 +224,8 @@ pub struct CompiledPlan {
     pub rest: RestPolicy,
     #[serde(default, skip_serializing_if = "WarmupPolicy::is_empty")]
     pub warmup: WarmupPolicy,
+    #[serde(default, skip_serializing_if = "SessionExercisePolicy::is_empty")]
+    pub session_exercises: SessionExercisePolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub equipment: Option<EquipmentProfile>,
     pub template: BuiltinTemplate,
@@ -305,6 +309,42 @@ pub enum WarmupBasis {
     WorkingWeight,
     /// The lane's training max (e.g. canonical 5/3/1 warmups).
     TrainingMax,
+}
+
+/// Optional whole-session exercises rendered before and after the program work.
+/// These are not ramp-up sets for a lift; they are separate, user-owned
+/// exercises such as mobility drills, light conditioning, or stretching.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct SessionExercisePolicy {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warmup: Vec<SessionExercise>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warmdown: Vec<SessionExercise>,
+}
+
+impl SessionExercisePolicy {
+    pub fn is_empty(&self) -> bool {
+        self.warmup.is_empty() && self.warmdown.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionExercise {
+    pub exercise: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default = "one")]
+    pub sets: u32,
+    #[serde(default)]
+    pub reps: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+fn one() -> u32 {
+    1
 }
 
 /// Optional, user-owned description of the equipment available in a gym, used
@@ -445,6 +485,8 @@ pub struct RenderedSession {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RenderedItem {
+    #[serde(default, skip_serializing_if = "RenderedItemPhase::is_main")]
+    pub phase: RenderedItemPhase,
     pub item_id: String,
     pub slot_id: String,
     pub progression_lane: String,
@@ -458,6 +500,21 @@ pub struct RenderedItem {
     pub identity: ItemIdentity,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exercise_options: Option<RenderedExerciseOptions>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderedItemPhase {
+    #[default]
+    Main,
+    Warmup,
+    Warmdown,
+}
+
+impl RenderedItemPhase {
+    pub fn is_main(&self) -> bool {
+        matches!(self, Self::Main)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -664,6 +721,27 @@ pub struct BuildOutputs {
     pub ir: serde_json::Value,
     pub next_workout: Option<RenderedSession>,
     pub validation: ValidationReport,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InitialNumberSuggestions {
+    pub template: String,
+    pub units: Units,
+    pub values: Map<String>,
+    pub suggestions: Vec<InitialNumberSuggestion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InitialNumberSuggestion {
+    pub exercise: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_exercise: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_load: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

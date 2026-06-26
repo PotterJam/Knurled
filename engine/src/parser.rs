@@ -21,7 +21,8 @@ use crate::error::{KnurledError, Result};
 use crate::model::{
     CustomExercise, EquipmentProfile, ExerciseAlternative, ExerciseOptions, Implement, LockEntry,
     Lockfile, Map, Patch, PatchOperation, Plan, RestPolicy, RoundingMode, SCHEMA_VERSION, Schedule,
-    SwapPolicy, Units, WarmupBasis, WarmupPolicy, WarmupScheme, WarmupStep,
+    SessionExercise, SessionExercisePolicy, SwapPolicy, Units, WarmupBasis, WarmupPolicy,
+    WarmupScheme, WarmupStep,
 };
 use crate::templates::parse_template_ref;
 
@@ -47,6 +48,7 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
     let mut exercise_options = Map::new();
     let mut rest = RestPolicy::default();
     let mut warmup = WarmupPolicy::default();
+    let mut session_exercises = SessionExercisePolicy::default();
     let mut equipment = None;
 
     for node in body.nodes() {
@@ -61,6 +63,7 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
             "exercise_options" => exercise_options = parse_exercise_options(node)?,
             "rest" => rest = parse_rest(node)?,
             "warmup" => warmup = parse_warmup(node)?,
+            "session_exercises" => session_exercises = parse_session_exercises(node)?,
             "equipment" => equipment = Some(parse_equipment(node)?),
             // `assistance` is a documented future construct (spec §11) that the
             // MVP templates do not yet consume: accept it, but ignore it.
@@ -84,6 +87,7 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
         exercise_options,
         rest,
         warmup,
+        session_exercises,
         equipment,
     })
 }
@@ -501,6 +505,48 @@ fn parse_warmup_basis(value: &str) -> Result<WarmupBasis> {
         "working_weight" => WarmupBasis::WorkingWeight,
         "training_max" => WarmupBasis::TrainingMax,
         other => return Err(parse_error(format!("unknown warmup basis: {other}"))),
+    })
+}
+
+fn parse_session_exercises(node: &KdlNode) -> Result<SessionExercisePolicy> {
+    let mut policy = SessionExercisePolicy::default();
+    if let Some(body) = node.children() {
+        for line in body.nodes() {
+            let phase = line.name().value().to_ascii_lowercase();
+            let exercise = parse_session_exercise(line, &phase)?;
+            match phase.as_str() {
+                "warmup" => policy.warmup.push(exercise),
+                "warmdown" => policy.warmdown.push(exercise),
+                other => {
+                    return Err(parse_error(format!(
+                        "unknown session_exercises phase: {other}"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(policy)
+}
+
+fn parse_session_exercise(node: &KdlNode, phase: &str) -> Result<SessionExercise> {
+    let args = positional_strings(node);
+    let exercise = args
+        .first()
+        .map(|value| normalize_exercise(value))
+        .ok_or_else(|| parse_error(format!("session_exercises {phase} needs an exercise")))?;
+    let sets = prop_string(node, "sets")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1);
+    let reps = prop_string(node, "reps")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    Ok(SessionExercise {
+        exercise,
+        label: prop_string(node, "label"),
+        sets,
+        reps,
+        load: prop_string(node, "load").filter(|value| !value.trim().is_empty()),
+        note: prop_string(node, "note").filter(|value| !value.trim().is_empty()),
     })
 }
 

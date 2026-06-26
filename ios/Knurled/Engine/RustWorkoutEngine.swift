@@ -55,6 +55,12 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(PlanEditOutcome.self, from: raw)
     }
 
+    func suggestInitialNumbers(dir: URL, request: InitialNumberSuggestionRequest) throws -> InitialNumberSuggestions {
+        let json = try encode(request)
+        let raw = try call(dir: dir, json: json) { knurled_suggest_initial_numbers($0, $1) }
+        return try decode(InitialNumberSuggestions.self, from: raw)
+    }
+
     func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionResult {
         let sessionJSON = try encode(session)
         let inputJSON = try encode(input)

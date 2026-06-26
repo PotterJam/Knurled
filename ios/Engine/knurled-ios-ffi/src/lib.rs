@@ -20,7 +20,8 @@ use knurled_core::{
     ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode, append_day_record,
     apply_plan_edit, build_outputs, build_repo, builtin_templates, exercise_catalog,
     init_training_repo, preview_plan_edit, read_state, read_training_repo, reduce_input,
-    render_session, submit_session, validate_execution_input, validate_repo, write_state,
+    render_session, submit_session, suggest_initial_numbers, validate_execution_input,
+    validate_repo, write_state, Units,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -347,6 +348,37 @@ pub extern "C" fn knurled_apply_plan_edit(
         };
         match apply_plan_edit(dir, edit) {
             Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[derive(serde::Deserialize)]
+struct InitialNumberSuggestionRequest {
+    template: String,
+    units: Units,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_suggest_initial_numbers(
+    dir: *const c_char,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_suggest_initial_numbers", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request: InitialNumberSuggestionRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid suggestion request: {error}")),
+        };
+        match suggest_initial_numbers(dir, &request.template, request.units) {
+            Ok(suggestions) => ok(suggestions),
             Err(error) => fail(error),
         }
     })

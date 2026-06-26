@@ -16,6 +16,7 @@ struct RenderedSession: Codable, Sendable, Hashable, Identifiable {
 }
 
 struct RenderedItem: Codable, Sendable, Hashable, Identifiable {
+    var phase: RenderedItemPhase
     var itemId: String
     var slotId: String
     var progressionLane: String
@@ -30,6 +31,59 @@ struct RenderedItem: Codable, Sendable, Hashable, Identifiable {
     var exerciseOptions: RenderedExerciseOptions?
 
     var id: String { itemId }
+
+    init(
+        phase: RenderedItemPhase = .main,
+        itemId: String,
+        slotId: String,
+        progressionLane: String,
+        progressionRule: String,
+        exercise: String,
+        display: DisplayFields,
+        prescription: Prescription,
+        executionContract: ExecutionContract,
+        effectPreview: EffectPreview,
+        rest: RestPrescription,
+        identity: ItemIdentity,
+        exerciseOptions: RenderedExerciseOptions?
+    ) {
+        self.phase = phase
+        self.itemId = itemId
+        self.slotId = slotId
+        self.progressionLane = progressionLane
+        self.progressionRule = progressionRule
+        self.exercise = exercise
+        self.display = display
+        self.prescription = prescription
+        self.executionContract = executionContract
+        self.effectPreview = effectPreview
+        self.rest = rest
+        self.identity = identity
+        self.exerciseOptions = exerciseOptions
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        phase = try container.decodeIfPresent(RenderedItemPhase.self, forKey: .phase) ?? .main
+        itemId = try container.decode(String.self, forKey: .itemId)
+        slotId = try container.decode(String.self, forKey: .slotId)
+        progressionLane = try container.decode(String.self, forKey: .progressionLane)
+        progressionRule = try container.decode(String.self, forKey: .progressionRule)
+        exercise = try container.decode(String.self, forKey: .exercise)
+        display = try container.decode(DisplayFields.self, forKey: .display)
+        prescription = try container.decode(Prescription.self, forKey: .prescription)
+        executionContract = try container.decode(ExecutionContract.self, forKey: .executionContract)
+        effectPreview = try container.decode(EffectPreview.self, forKey: .effectPreview)
+        rest = try container.decode(RestPrescription.self, forKey: .rest)
+        identity = try container.decode(ItemIdentity.self, forKey: .identity)
+        exerciseOptions = try container.decodeIfPresent(RenderedExerciseOptions.self, forKey: .exerciseOptions)
+    }
+}
+
+enum RenderedItemPhase: String, Codable, Sendable, Hashable {
+    case main
+    case warmup
+    case warmdown
 }
 
 struct DisplayFields: Codable, Sendable, Hashable {

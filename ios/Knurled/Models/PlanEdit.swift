@@ -18,6 +18,7 @@ enum PlanEdit: Encodable, Sendable {
         case equipment
         case customExercise
         case accessory
+        case sessionExercises
         case filename
         case name
         case description
@@ -41,6 +42,7 @@ enum PlanEdit: Encodable, Sendable {
             try container.encodeIfPresent(edit.equipment, forKey: .equipment)
             try container.encodeIfPresent(edit.customExercise, forKey: .customExercise)
             try container.encodeIfPresent(edit.accessory, forKey: .accessory)
+            try container.encodeIfPresent(edit.sessionExercises, forKey: .sessionExercises)
         case .savePatch(let edit):
             try container.encode("save_patch", forKey: .kind)
             try container.encodeIfPresent(edit.filename, forKey: .filename)
@@ -70,6 +72,74 @@ struct QuickPlanEdit: Encodable, Sendable {
     var equipment: EquipmentProfile?
     var customExercise: CustomExerciseEdit?
     var accessory: AccessoryEdit?
+    var sessionExercises: SessionExercisePolicy?
+}
+
+struct SessionExercisePolicy: Codable, Sendable, Hashable {
+    var warmup: [SessionExercise]
+    var warmdown: [SessionExercise]
+
+    init(warmup: [SessionExercise] = [], warmdown: [SessionExercise] = []) {
+        self.warmup = warmup
+        self.warmdown = warmdown
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case warmup
+        case warmdown
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        warmup = try container.decodeIfPresent([SessionExercise].self, forKey: .warmup) ?? []
+        warmdown = try container.decodeIfPresent([SessionExercise].self, forKey: .warmdown) ?? []
+    }
+}
+
+struct SessionExercise: Codable, Sendable, Hashable, Identifiable {
+    var exercise: String
+    var label: String?
+    var sets: Int
+    var reps: Int
+    var load: String?
+    var note: String?
+
+    var id: String { "\(exercise)-\(sets)-\(reps)-\(load ?? "")-\(note ?? "")" }
+
+    init(
+        exercise: String,
+        label: String? = nil,
+        sets: Int = 1,
+        reps: Int = 0,
+        load: String? = nil,
+        note: String? = nil
+    ) {
+        self.exercise = exercise
+        self.label = label
+        self.sets = sets
+        self.reps = reps
+        self.load = load
+        self.note = note
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case exercise
+        case label
+        case sets
+        case reps
+        case load
+        case note
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        exercise = try container.decode(String.self, forKey: .exercise)
+        label = try container.decodeIfPresent(String.self, forKey: .label)
+        sets = try container.decodeIfPresent(Int.self, forKey: .sets) ?? 1
+        reps = try container.decodeIfPresent(Int.self, forKey: .reps) ?? 0
+        load = try container.decodeIfPresent(String.self, forKey: .load)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+    }
 }
 
 struct CustomExerciseEdit: Encodable, Sendable {
@@ -187,4 +257,26 @@ struct SwitchProgramEdit: Encodable, Sendable {
     var suggestedDays: [String]?
     var date: String
     var note: String?
+}
+
+struct InitialNumberSuggestionRequest: Encodable, Sendable {
+    var template: String
+    var units: Units
+}
+
+struct InitialNumberSuggestions: Codable, Sendable, Hashable {
+    var template: String
+    var units: Units
+    var values: [String: String]
+    var suggestions: [InitialNumberSuggestion]
+}
+
+struct InitialNumberSuggestion: Codable, Sendable, Hashable, Identifiable {
+    var exercise: String
+    var value: String?
+    var sourceExercise: String?
+    var sourceDate: String?
+    var sourceLoad: String?
+
+    var id: String { exercise }
 }

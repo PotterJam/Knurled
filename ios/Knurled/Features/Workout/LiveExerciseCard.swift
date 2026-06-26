@@ -28,6 +28,9 @@ struct LiveExerciseCard: View {
             if let tier = WorkoutFormat.tier(fromLane: live.item.progressionLane) {
                 TierBadge(tier: tier)
             }
+            if let phaseText {
+                StatusChip(text: phaseText, style: .neutral)
+            }
             if live.isTrackingOnlyExtra {
                 StatusChip(text: "Extra", style: .neutral)
             }
@@ -51,14 +54,19 @@ struct LiveExerciseCard: View {
                 if live.isTrackingOnlyExtra {
                     StatusChip(text: "Extra", style: .neutral)
                 }
+                if let phaseText {
+                    StatusChip(text: phaseText, style: .neutral)
+                }
                 if let tier = WorkoutFormat.tier(fromLane: live.item.progressionLane) {
                     TierBadge(tier: tier)
                 }
-                Button { showChange = true } label: {
-                    Image(systemName: "slider.horizontal.3")
+                if live.phase == .main {
+                    Button { showChange = true } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Exercise options")
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Exercise options")
             }
 
             if live.isSwapped {
@@ -183,6 +191,14 @@ struct LiveExerciseCard: View {
 
     private var swapPolicyText: String {
         live.swapPolicy == .progressionEquivalent ? "counts toward progression" : "tracking only"
+    }
+
+    private var phaseText: String? {
+        switch live.phase {
+        case .main: return nil
+        case .warmup: return "Warmup"
+        case .warmdown: return "Warmdown"
+        }
     }
 
 }

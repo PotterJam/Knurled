@@ -98,6 +98,9 @@ final class LiveItem: Identifiable {
     var hasWarmups: Bool { !warmups.isEmpty }
 
     var mode: String { item.executionContract.recommendedInput }
+    var phase: RenderedItemPhase { item.phase }
+    var isSessionWarmup: Bool { phase == .warmup }
+    var isSessionWarmdown: Bool { phase == .warmdown }
     var isAmrap: Bool { item.executionContract.recommendedInput == InputMode.amrapFinalSet }
     var required: Bool { item.executionContract.requiredForCompletion && !isTrackingOnlyExtra }
     var prescribedLoad: String? { item.prescription.sets.first?.load }
@@ -310,7 +313,11 @@ final class LiveWorkout: Identifiable {
             reps: lift.sets.first ?? lift.actual.first?.reps ?? 5,
             units: repo.plan?.plan.units ?? .kg
         )
-        items.append(item)
+        if let warmdownIndex = items.firstIndex(where: { $0.isSessionWarmdown }) {
+            items.insert(item, at: warmdownIndex)
+        } else {
+            items.append(item)
+        }
         return item
     }
 

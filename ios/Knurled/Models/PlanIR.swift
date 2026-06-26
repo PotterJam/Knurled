@@ -21,6 +21,7 @@ struct PlanIR: Codable, Sendable, Hashable {
     var trainingMaxes: [String: String]
     var accessories: [String: String]
     var exercises: [String: CustomExercise]
+    var sessionExercises: SessionExercisePolicy
     var equipment: EquipmentProfile?
 
     init(from decoder: Decoder) throws {
@@ -31,6 +32,7 @@ struct PlanIR: Codable, Sendable, Hashable {
         trainingMaxes = try container.decodeIfPresent([String: String].self, forKey: .trainingMaxes) ?? [:]
         accessories = try container.decodeIfPresent([String: String].self, forKey: .accessories) ?? [:]
         exercises = try container.decodeIfPresent([String: CustomExercise].self, forKey: .exercises) ?? [:]
+        sessionExercises = try container.decodeIfPresent(SessionExercisePolicy.self, forKey: .sessionExercises) ?? SessionExercisePolicy()
         equipment = try container.decodeIfPresent(EquipmentProfile.self, forKey: .equipment)
     }
 

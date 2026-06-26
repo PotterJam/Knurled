@@ -20,7 +20,9 @@ pub use error::{KnurledError, Result};
 pub use json::{pretty_json, sha256_json, sha256_text, stable_json};
 pub use model::*;
 pub use parser::{parse_lock, parse_patch, parse_plan};
-pub use plan_edit::{PlanEdit, PlanEditOutcome, apply_plan_edit, preview_plan_edit};
+pub use plan_edit::{
+    PlanEdit, PlanEditOutcome, apply_plan_edit, preview_plan_edit, suggest_initial_numbers,
+};
 pub use record::{DayRecord, LiftRecord, LogMonth, month_key, month_path};
 pub use repo::{
     InitResult, TrainingRepo, append_day_record, backtest_records_repo, build_repo,

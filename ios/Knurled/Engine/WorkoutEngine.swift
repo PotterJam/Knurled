@@ -19,6 +19,7 @@ protocol WorkoutEngine: Sendable {
     func renderSession(dir: URL, sessionId: String) async throws -> RenderedSession
     func previewPlanEdit(dir: URL, edit: PlanEdit) async throws -> PlanEditOutcome
     func applyPlanEdit(dir: URL, edit: PlanEdit) async throws -> PlanEditOutcome
+    func suggestInitialNumbers(dir: URL, request: InitialNumberSuggestionRequest) async throws -> InitialNumberSuggestions
 }
 
 enum EngineError: Error, Sendable, LocalizedError {
