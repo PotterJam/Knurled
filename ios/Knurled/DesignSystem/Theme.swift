@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// A selectable colour scheme. Each scheme pairs an `accent` (the primary
-/// tint used for prominent controls, logged checkmarks and the active row)
-/// with a `danger` colour used for "missed"/invalid states.
+/// tint used for prominent controls and the active row) with a `danger`
+/// colour used for "missed"/invalid states.
 struct KnurledPalette: Equatable {
     let accent: Color
     let danger: Color
@@ -26,13 +26,13 @@ enum KnurledColorScheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The accent / danger pairing, e.g. "cherry · crimson".
+    /// A short description of the scheme's accent, e.g. "warm gold".
     var subtitle: String {
         switch self {
-        case .brass: return "cherry · crimson"
-        case .steel: return "cherry · crimson"
-        case .sage: return "dusty rose"
-        case .violet: return "magenta red"
+        case .brass: return "warm gold"
+        case .steel: return "cool blue"
+        case .sage: return "muted green"
+        case .violet: return "soft violet"
         }
     }
 

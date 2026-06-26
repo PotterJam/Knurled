@@ -15,7 +15,16 @@ struct SettingsHomeView: View {
                 }
 
                 Section("Appearance") {
-                    ColourSchemePicker(selection: $theme.scheme)
+                    NavigationLink {
+                        ColourSchemeSelectionView(selection: $theme.scheme)
+                    } label: {
+                        HStack {
+                            Label("Colour scheme", systemImage: "paintpalette")
+                            Spacer()
+                            Text(theme.scheme.title)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Section("Manage") {
@@ -97,32 +106,42 @@ private struct ActiveRepoSummaryRow: View {
     }
 }
 
-private struct ColourSchemePicker: View {
+private struct ColourSchemeSelectionView: View {
     @Binding var selection: KnurledColorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
-            HStack {
-                Label("Colour scheme", systemImage: "paintpalette")
-                Spacer()
-                Text(selection.title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: KnurledTheme.Spacing.s) {
-                ForEach(KnurledColorScheme.allCases) { scheme in
-                    Button {
-                        selection = scheme
-                    } label: {
+        List {
+            ForEach(KnurledColorScheme.allCases) { scheme in
+                Button {
+                    selection = scheme
+                } label: {
+                    HStack(spacing: KnurledTheme.Spacing.m) {
                         SchemeSwatchBox(scheme: scheme, isSelected: selection == scheme)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(scheme.title)
+                                .foregroundStyle(.primary)
+                            Text(scheme.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if selection == scheme {
+                            Image(systemName: "checkmark")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.tint)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(scheme.title)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(scheme.title)
+                .accessibilityAddTraits(selection == scheme ? .isSelected : [])
             }
         }
-        .padding(.vertical, 2)
+        .navigationTitle("Colour scheme")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

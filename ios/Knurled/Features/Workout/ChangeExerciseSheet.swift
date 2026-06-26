@@ -8,9 +8,9 @@ struct ChangeExerciseSheet: View {
 
     @State private var selectedExercise: String
     @State private var loadValue: Double
-    @State private var loadText: String
+    @State private var loadDraft: LoadEditDraft
     @State private var isEditingLoad = false
-    @State private var loadEditBaselineText: String
+    @State private var loadFieldFrame = CGRect.zero
     @State private var loadUnit: Units
     @State private var scope: AdjustScope = .remaining
     @FocusState private var isLoadFieldFocused: Bool
@@ -24,8 +24,9 @@ struct ChangeExerciseSheet: View {
             ?? LoadControl.defaultValue(for: live.performedExercise ?? live.item.exercise, unit: unit)
         _selectedExercise = State(initialValue: live.performedExercise ?? live.item.exercise)
         _loadValue = State(initialValue: initialValue)
-        _loadText = State(initialValue: LoadControl.numberText(initialValue))
-        _loadEditBaselineText = State(initialValue: LoadControl.format(initialValue, unit: unit))
+        _loadDraft = State(initialValue: LoadEditDraft(
+            baselineText: LoadControl.format(initialValue, unit: unit)
+        ))
         _loadUnit = State(initialValue: unit)
     }
 
@@ -82,15 +83,22 @@ struct ChangeExerciseSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .coordinateSpace(name: "changeExerciseSheet")
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(
+                SpatialTapGesture(coordinateSpace: .named("changeExerciseSheet")).onEnded { value in
+                    guard isLoadFieldFocused, !loadFieldFrame.contains(value.location) else { return }
+                    endLoadEditing()
+                }
+            )
             .navigationTitle("Change \(live.item.display.title)")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: selectedExercise) { _, exercise in
                 let value = LoadControl.defaultValue(for: exercise, unit: loadUnit)
                 loadValue = value
-                loadText = LoadControl.numberText(value)
-                loadEditBaselineText = LoadControl.format(value, unit: loadUnit)
+                loadDraft = LoadEditDraft(baselineText: LoadControl.format(value, unit: loadUnit))
             }
-            .onChange(of: loadText) { _, _ in applyLoadText() }
+            .onChange(of: loadDraft.destinationText) { _, _ in applyLoadText() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -101,6 +109,10 @@ struct ChangeExerciseSheet: View {
                         dismiss()
                     }
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { endLoadEditing() }
+                }
             }
         }
         .presentationDetents([.medium, .large])
@@ -108,7 +120,7 @@ struct ChangeExerciseSheet: View {
 
     private var loadEditorRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(loadEditBaselineText)
+            Text(loadDraft.baselineText)
                 .font(.title3.monospacedDigit().weight(.medium))
                 .foregroundStyle(.secondary)
 
@@ -116,12 +128,17 @@ struct ChangeExerciseSheet: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            TextField("0", text: $loadText)
+            TextField("New", text: $loadDraft.destinationText)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .font(.title.monospacedDigit().weight(.semibold))
                 .frame(width: 120)
                 .focused($isLoadFieldFocused)
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named("changeExerciseSheet"))
+                } action: { frame in
+                    loadFieldFrame = frame
+                }
 
             Text(loadUnit.rawValue)
                 .font(.title3.weight(.medium))
@@ -133,14 +150,18 @@ struct ChangeExerciseSheet: View {
     }
 
     private func beginLoadEditing() {
-        loadEditBaselineText = LoadControl.format(loadValue, unit: loadUnit)
-        loadText = LoadControl.numberText(loadValue)
+        loadDraft = LoadEditDraft(baselineText: LoadControl.format(loadValue, unit: loadUnit))
         isEditingLoad = true
         isLoadFieldFocused = true
     }
 
+    private func endLoadEditing() {
+        isLoadFieldFocused = false
+        isEditingLoad = false
+    }
+
     private func applyLoadText() {
-        guard let value = Double(loadText.trimmingCharacters(in: .whitespaces)) else { return }
+        guard let value = Double(loadDraft.destinationText.trimmingCharacters(in: .whitespaces)) else { return }
         loadValue = max(0, value)
     }
 
@@ -159,6 +180,11 @@ struct ChangeExerciseSheet: View {
         )
         onChanged()
     }
+}
+
+struct LoadEditDraft {
+    let baselineText: String
+    var destinationText = ""
 }
 
 enum LoadControl {

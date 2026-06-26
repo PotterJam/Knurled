@@ -21,7 +21,7 @@ struct ActiveWorkoutView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: KnurledTheme.Spacing.m) {
+                VStack(spacing: KnurledTheme.Spacing.s) {
                     progress
                     if !warmupItems.isEmpty {
                         WarmupBlockCard(items: warmupItems, controller: controller)

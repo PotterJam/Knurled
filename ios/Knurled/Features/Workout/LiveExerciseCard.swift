@@ -281,6 +281,7 @@ struct SetRowView: View {
     var onDelete: (() -> Void)? = nil
 
     @Environment(\.knurledPalette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
     @State private var offset: CGFloat = 0
     @State private var revealed = false
     @State private var rowHeight: CGFloat = 40
@@ -303,20 +304,24 @@ struct SetRowView: View {
 
             prescriptionView
                 .font(.subheadline.weight(isCurrent && !set.logged ? .semibold : .regular))
-
-            Spacer(minLength: 8)
+                .frame(maxWidth: .infinity)
 
             Button(action: onToggled) {
                 Image(systemName: set.logged ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
-                    .foregroundStyle(set.logged ? palette.accent : .secondary)
+                    .foregroundStyle(set.logged ? completedForeground : .secondary)
                     .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
         }
         .frame(minHeight: 34)
+        .background(
+            set.logged ? completedBackground : .clear,
+            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+        )
         .opacity(rowOpacity)
+        .animation(.snappy, value: set.logged)
     }
 
     private var swipeableRow: some View {
@@ -377,8 +382,9 @@ struct SetRowView: View {
             Text("×")
                 .foregroundStyle(.secondary)
             ValueChip(text: "\(displayReps)\(amrapMarker)", isChanged: repsChanged, action: onEditReps)
+            Spacer(minLength: 6)
             if showRPEChip {
-                RPEChip(text: rpeText, hasValue: set.rpe != nil, action: onEditRPE)
+                RPEChip(text: rpeText, value: set.rpe, action: onEditRPE)
             }
         }
     }
@@ -425,29 +431,87 @@ struct SetRowView: View {
         if set.bypassed { return 0.35 }
         return 1
     }
+
+    private var completedBackground: Color {
+        Color(uiColor: .systemGreen).opacity(colorScheme == .dark ? 0.18 : 0.13)
+    }
+
+    private var completedForeground: Color {
+        if colorScheme == .dark {
+            return Color(red: 0.38, green: 0.82, blue: 0.48)
+        }
+        return Color(red: 0.08, green: 0.42, blue: 0.20)
+    }
 }
 
 private struct RPEChip: View {
     let text: String
-    let hasValue: Bool
+    let value: Double?
     var action: () -> Void
-
-    @Environment(\.knurledPalette) private var palette
 
     var body: some View {
         Button(action: action) {
             Text(text)
-                .font(.caption.monospacedDigit().weight(.semibold))
-                .foregroundStyle(hasValue ? palette.accent : .secondary)
-                .padding(.horizontal, 6)
+                .font(.subheadline.monospacedDigit().weight(value == nil ? .medium : .semibold))
+                .foregroundStyle(value.map(RPEColorScale.foreground) ?? Color.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 48)
                 .padding(.vertical, 3)
                 .background(
-                    (hasValue ? palette.accent.opacity(0.14) : Color(uiColor: .tertiarySystemFill)),
+                    value.map(RPEColorScale.background) ?? Color(uiColor: .tertiarySystemFill),
                     in: RoundedRectangle(cornerRadius: 5)
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(hasValue ? "Edit RPE \(text)" : "Add RPE")
+        .accessibilityLabel(value == nil ? "Add RPE" : "Edit RPE \(text)")
+    }
+}
+
+enum RPEColorScale {
+    // ColorBrewer RdYlGn, reversed so effort rises from green to red.
+    private static let colors: [UInt32] = [
+        0x006837, 0x1A9850, 0x66BD63, 0xA6D96A, 0xD9EF8B, 0xFFFFBF,
+        0xFEE08B, 0xFDAE61, 0xF46D43, 0xD73027, 0xA50026,
+    ]
+
+    static func hex(for value: Double) -> UInt32 {
+        colors[paletteIndex(for: value)]
+    }
+
+    static func paletteIndex(for value: Double) -> Int {
+        let normalized = (min(max(value, 1), 10) - 1) / 9
+        return Int((normalized * Double(colors.count - 1)).rounded())
+    }
+
+    static func background(for value: Double) -> Color {
+        color(hex(for: value))
+    }
+
+    static func foreground(for value: Double) -> Color {
+        let components = rgb(hex(for: value))
+        let luminance = 0.2126 * linearized(components.red)
+            + 0.7152 * linearized(components.green)
+            + 0.0722 * linearized(components.blue)
+        return luminance > 0.179 ? .black : .white
+    }
+
+    private static func color(_ hex: UInt32) -> Color {
+        let components = rgb(hex)
+        return Color(red: components.red, green: components.green, blue: components.blue)
+    }
+
+    private static func rgb(_ hex: UInt32) -> (red: Double, green: Double, blue: Double) {
+        (
+            Double((hex >> 16) & 0xFF) / 255,
+            Double((hex >> 8) & 0xFF) / 255,
+            Double(hex & 0xFF) / 255
+        )
+    }
+
+    private static func linearized(_ component: Double) -> Double {
+        if component <= 0.04045 { return component / 12.92 }
+        return pow((component + 0.055) / 1.055, 2.4)
     }
 }
 
@@ -480,24 +544,21 @@ private struct LoadValueEditor: View {
     var onChanged: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var text: String
+    @State private var draft: LoadEditDraft
     @FocusState private var isFocused: Bool
-    private let originalLoadText: String
 
     init(set: LiveSet, units: Units, onChanged: @escaping () -> Void) {
         self.set = set
         self.units = units
         self.onChanged = onChanged
-        let parsed = LoadControl.parse(set.load, defaultUnit: units)
-        self.originalLoadText = set.load ?? "bodyweight"
-        _text = State(initialValue: parsed.map { LoadControl.numberText($0.value) } ?? "")
+        _draft = State(initialValue: LoadEditDraft(baselineText: set.load ?? "bodyweight"))
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(originalLoadText)
+                    Text(draft.baselineText)
                         .font(.title3.monospacedDigit().weight(.medium))
                         .foregroundStyle(.secondary)
 
@@ -505,13 +566,13 @@ private struct LoadValueEditor: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    TextField("0", text: $text)
+                    TextField("New", text: $draft.destinationText)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.center)
                         .font(.largeTitle.monospacedDigit().weight(.semibold))
                         .frame(width: 130)
                         .focused($isFocused)
-                        .onChange(of: text) { _, _ in applyText() }
+                        .onChange(of: draft.destinationText) { _, _ in applyText() }
 
                     Text(units.rawValue)
                         .font(.title3.weight(.medium))
@@ -535,12 +596,12 @@ private struct LoadValueEditor: View {
 
     private func reset() {
         set.load = set.prescribed.load
-        text = LoadControl.parse(set.load, defaultUnit: units).map { LoadControl.numberText($0.value) } ?? ""
+        draft = LoadEditDraft(baselineText: set.load ?? "bodyweight")
         onChanged()
     }
 
     private func applyText() {
-        guard let value = Double(text.trimmingCharacters(in: .whitespaces)) else { return }
+        guard let value = Double(draft.destinationText.trimmingCharacters(in: .whitespaces)) else { return }
         apply(max(0, value))
     }
 
@@ -686,7 +747,7 @@ struct WarmupBlockCard: View {
     @ViewBuilder private func warmupItemSection(_ item: LiveItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(item.item.display.title)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             ForEach(Array(item.sets.enumerated()), id: \.element.id) { _, set in

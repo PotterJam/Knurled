@@ -39,3 +39,35 @@ import Testing
         #expect(item?.canContinue == true)
     }
 }
+
+@Suite struct LoadEditDraftTests {
+    @Test func startsWithCapturedBaselineAndEmptyDestination() {
+        let draft = LoadEditDraft(baselineText: "82.5kg")
+
+        #expect(draft.baselineText == "82.5kg")
+        #expect(draft.destinationText.isEmpty)
+    }
+
+    @Test func typingDestinationDoesNotReplaceBaseline() {
+        var draft = LoadEditDraft(baselineText: "82.5kg")
+
+        draft.destinationText = "85"
+
+        #expect(draft.baselineText == "82.5kg")
+        #expect(draft.destinationText == "85")
+    }
+}
+
+@Suite struct RPEColorScaleTests {
+    @Test func mapsEffortFromGreenThroughYellowToRed() {
+        #expect(RPEColorScale.hex(for: 1) == 0x006837)
+        #expect(RPEColorScale.hex(for: 5.5) == 0xFFFFBF)
+        #expect(RPEColorScale.hex(for: 9) == 0xD73027)
+        #expect(RPEColorScale.hex(for: 10) == 0xA50026)
+    }
+
+    @Test func clampsValuesToScaleEndpoints() {
+        #expect(RPEColorScale.hex(for: -1) == RPEColorScale.hex(for: 1))
+        #expect(RPEColorScale.hex(for: 12) == RPEColorScale.hex(for: 10))
+    }
+}
