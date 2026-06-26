@@ -147,8 +147,9 @@ in the simulator without GitHub.
 
 ### Xcode Cloud
 
-Xcode Cloud builds from a clean checkout, so `ci_scripts/ci_post_clone.sh` prepares the ignored
-iOS build artifacts before dependency resolution/archive:
+Xcode Cloud builds from a clean checkout, so `ios/ci_scripts/ci_post_clone.sh` prepares the
+ignored iOS build artifacts before dependency resolution/archive. Xcode Cloud resolves this path
+relative to the selected project directory, so the script lives beside `Knurled.xcodeproj`.
 
 1. installs Rust if `rustup` is unavailable,
 2. installs XcodeGen via Homebrew if needed,
