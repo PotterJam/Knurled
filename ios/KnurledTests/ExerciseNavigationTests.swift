@@ -30,9 +30,9 @@ import Foundation
         #expect(controller.currentTarget?.item.id == second.id)
     }
 
-    // Once the focused exercise is finished the manual focus drops and the cursor returns to the
-    // first exercise still outstanding (here, the one that was skipped over).
-    @Test func cursorReturnsToFirstIncompleteAfterFocusedCompletes() async throws {
+    // Once an out-of-order exercise is finished the cursor continues forward from that exercise,
+    // leaving earlier untouched exercises skipped unless the user explicitly comes back to them.
+    @Test func cursorAdvancesAfterFocusedExerciseCompletes() async throws {
         let (dir, workout) = try await makeWorkout()
         defer { try? FileManager.default.removeItem(at: dir) }
         let controller = WorkoutLiveController.shared
@@ -41,6 +41,7 @@ import Foundation
 
         let first = try #require(workout.items.first)
         let second = try #require(workout.items.dropFirst().first)
+        let third = try #require(workout.items.dropFirst(2).first)
 
         controller.focus(second)
         var guardCount = 0
@@ -50,8 +51,28 @@ import Foundation
         }
 
         #expect(second.isComplete)
-        #expect(controller.focusedItemID == nil)
-        #expect(controller.currentTarget?.item.id == first.id)
+        #expect(!first.isComplete)
+        #expect(controller.currentTarget?.item.id == third.id)
+    }
+
+    @Test func tickingLaterWarmupAdvancesForwardThroughWarmups() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let controller = WorkoutLiveController.shared
+        controller.begin(workout)
+        defer { controller.end() }
+
+        let item = try #require(workout.items.first { $0.warmups.count > 1 })
+        let skipped = item.warmups[0]
+        let later = item.warmups[1]
+        let expectedNext = item.warmups.dropFirst(2).first ?? item.sets.first
+
+        controller.toggle(set: later, in: item)
+
+        #expect(!skipped.logged)
+        #expect(later.logged)
+        #expect(controller.currentTarget?.item.id == item.id)
+        #expect(controller.currentTarget?.set === expectedNext)
     }
 
     // Focusing an already-finished exercise does nothing — there's nothing left to do there.
@@ -163,6 +184,26 @@ import Foundation
         #expect(workout.canSaveProgress)
         #expect(input.status == ExecutionStatus.partial)
         #expect(itemInput.sets.map(\.set) == [item.sets[0].id])
+    }
+
+    @Test func loggedSetUsesRowLoadRepsAndRPEMetric() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(workout.requiredItems.first)
+        let set = try #require(item.sets.first)
+
+        set.load = "82.5kg"
+        set.reps = 6
+        set.rpe = 8.5
+        set.logged = true
+
+        let input = workout.finishInput(timestamp: "2026-06-24T11:00:00Z")
+        let itemInput = try #require(input.inputs.first { $0.itemId == item.id })
+        let actual = try #require(itemInput.sets.first { $0.set == set.id })
+
+        #expect(actual.load == "82.5kg")
+        #expect(actual.reps == 6)
+        #expect(actual.metrics["rpe"] == "8.5")
     }
 
     @Test func savedPartialRecordRestoresLoggedSets() async throws {

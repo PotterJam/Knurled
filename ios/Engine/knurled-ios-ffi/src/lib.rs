@@ -18,10 +18,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
     ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode, append_day_record,
-    apply_plan_edit, build_outputs, build_repo, builtin_templates, exercise_catalog,
-    init_training_repo, preview_plan_edit, read_state, read_training_repo, reduce_input,
-    render_session, submit_session, suggest_initial_numbers, validate_execution_input,
-    validate_repo, write_state, Units,
+    apply_plan_edit, build_outputs, build_repo, builtin_templates, clear_partials_for_session,
+    exercise_catalog, init_training_repo, preview_plan_edit, read_state, read_training_repo,
+    reduce_input, render_session, submit_session, suggest_initial_numbers,
+    validate_execution_input, validate_repo, write_state, Units,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -227,6 +227,11 @@ pub extern "C" fn knurled_submit(
             }
             if let Err(error) = append_day_record(dir, outcome.record_day.clone()) {
                 return fail(error);
+            }
+            if input.status != "partial" {
+                if let Err(error) = clear_partials_for_session(dir, &rendered.session_id) {
+                    return fail(error);
+                }
             }
         }
         ok(outcome)

@@ -60,6 +60,10 @@ struct AddExerciseSheet: View {
         selected != nil || !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var unit: String {
+        repo.plan?.plan.units.rawValue ?? "kg"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -99,12 +103,23 @@ struct AddExerciseSheet: View {
                     }
                 }
 
-                Section("Sets") {
-                    TextField("Load", text: $loadText)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Stepper("\(setCount) sets", value: $setCount, in: 1...20)
-                    Stepper("\(reps) reps", value: $reps, in: 0...99)
+                Section("Set scheme") {
+                    HStack {
+                        Text("Load")
+                        Spacer()
+                        TextField("optional", text: $loadText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 110)
+                        Text(unit)
+                            .foregroundStyle(.secondary)
+                    }
+                    pickerRow(title: setCount == 1 ? "1 set" : "\(setCount) sets") {
+                        HorizontalNumberPicker(value: $setCount, range: 1...20)
+                    }
+                    pickerRow(title: reps == 1 ? "1 rep" : "\(reps) reps") {
+                        HorizontalNumberPicker(value: $reps, range: 0...99)
+                    }
                 }
             }
             .navigationTitle("Add Exercise")
@@ -125,6 +140,17 @@ struct AddExerciseSheet: View {
         .presentationDetents([.medium, .large])
     }
 
+    @ViewBuilder
+    private func pickerRow(title: String, @ViewBuilder picker: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            picker()
+        }
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+    }
+
     private func add() {
         let exercise = selected ?? ExerciseCatalogEntry(
             id: normalizedSearch,
@@ -136,7 +162,15 @@ struct AddExerciseSheet: View {
             try? ExercisePlanWriter.upsertCustomExercise(exercise, in: repo.url)
         }
         let trimmedLoad = loadText.trimmingCharacters(in: .whitespacesAndNewlines)
-        onAdd(exercise.id, trimmedLoad.isEmpty ? nil : trimmedLoad, setCount, reps)
+        let load: String?
+        if trimmedLoad.isEmpty {
+            load = nil
+        } else if Double(trimmedLoad) != nil {
+            load = "\(trimmedLoad)\(unit)"
+        } else {
+            load = trimmedLoad
+        }
+        onAdd(exercise.id, load, setCount, reps)
     }
 
     private static func titleCase(_ id: String) -> String {

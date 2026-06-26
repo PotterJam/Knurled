@@ -8,19 +8,24 @@ struct ChangeExerciseSheet: View {
 
     @State private var selectedExercise: String
     @State private var loadValue: Double
+    @State private var loadText: String
+    @State private var isEditingLoad = false
+    @State private var loadEditBaselineText: String
     @State private var loadUnit: Units
     @State private var scope: AdjustScope = .remaining
+    @FocusState private var isLoadFieldFocused: Bool
 
     init(live: LiveItem, onChanged: @escaping () -> Void) {
         self.live = live
         self.onChanged = onChanged
         let parsed = LoadControl.parse(live.currentLoad, defaultUnit: live.units)
         let unit = parsed?.unit ?? live.units
+        let initialValue = parsed?.value
+            ?? LoadControl.defaultValue(for: live.performedExercise ?? live.item.exercise, unit: unit)
         _selectedExercise = State(initialValue: live.performedExercise ?? live.item.exercise)
-        _loadValue = State(
-            initialValue: parsed?.value
-                ?? LoadControl.defaultValue(for: live.performedExercise ?? live.item.exercise, unit: unit)
-        )
+        _loadValue = State(initialValue: initialValue)
+        _loadText = State(initialValue: LoadControl.numberText(initialValue))
+        _loadEditBaselineText = State(initialValue: LoadControl.format(initialValue, unit: unit))
         _loadUnit = State(initialValue: unit)
     }
 
@@ -41,19 +46,24 @@ struct ChangeExerciseSheet: View {
                 }
 
                 Section("Today’s load") {
-                    HStack {
-                        Text(LoadControl.format(loadValue, unit: loadUnit))
-                            .font(.title3.monospacedDigit().weight(.semibold))
-                        Spacer()
-                        Text(live.prescribedLoad.map { "Prescribed \($0)" } ?? "Set base load")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    if isEditingLoad {
+                        loadEditorRow
+                    } else {
+                        Button {
+                            beginLoadEditing()
+                        } label: {
+                            HStack {
+                                Text(LoadControl.format(loadValue, unit: loadUnit))
+                                    .font(.title3.monospacedDigit().weight(.semibold))
+                                Spacer()
+                                Text(live.prescribedLoad.map { "Prescribed \($0)" } ?? "Set base load")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    Slider(
-                        value: $loadValue,
-                        in: LoadControl.range(containing: loadValue, unit: loadUnit),
-                        step: LoadControl.step(for: loadUnit)
-                    )
                 }
 
                 Section("Apply to") {
@@ -75,8 +85,12 @@ struct ChangeExerciseSheet: View {
             .navigationTitle("Change \(live.item.display.title)")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: selectedExercise) { _, exercise in
-                loadValue = LoadControl.defaultValue(for: exercise, unit: loadUnit)
+                let value = LoadControl.defaultValue(for: exercise, unit: loadUnit)
+                loadValue = value
+                loadText = LoadControl.numberText(value)
+                loadEditBaselineText = LoadControl.format(value, unit: loadUnit)
             }
+            .onChange(of: loadText) { _, _ in applyLoadText() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -90,6 +104,44 @@ struct ChangeExerciseSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private var loadEditorRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(loadEditBaselineText)
+                .font(.title3.monospacedDigit().weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Image(systemName: "arrow.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            TextField("0", text: $loadText)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.center)
+                .font(.title.monospacedDigit().weight(.semibold))
+                .frame(width: 120)
+                .focused($isLoadFieldFocused)
+
+            Text(loadUnit.rawValue)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+        }
+        .task { isLoadFieldFocused = true }
+    }
+
+    private func beginLoadEditing() {
+        loadEditBaselineText = LoadControl.format(loadValue, unit: loadUnit)
+        loadText = LoadControl.numberText(loadValue)
+        isEditingLoad = true
+        isLoadFieldFocused = true
+    }
+
+    private func applyLoadText() {
+        guard let value = Double(loadText.trimmingCharacters(in: .whitespaces)) else { return }
+        loadValue = max(0, value)
     }
 
     private func apply() {
@@ -155,28 +207,13 @@ enum LoadControl {
             || normalized.contains("chinup")
     }
 
-    static func step(for unit: Units) -> Double {
-        switch unit {
-        case .kg: 2.5
-        case .lb: 5
-        }
-    }
-
-    static func range(containing value: Double, unit: Units) -> ClosedRange<Double> {
-        let baseline = switch unit {
-        case .kg: 200.0
-        case .lb: 500.0
-        }
-        return 0...max(baseline, value + 100)
-    }
-
     static func format(_ value: Double, unit: Units) -> String {
-        let rounded = (value / step(for: unit)).rounded() * step(for: unit)
-        let number = if rounded.rounded() == rounded {
-            String(Int(rounded))
-        } else {
-            String(format: "%.1f", rounded)
-        }
+        let number = numberText(max(0, value))
         return "\(number)\(unit.rawValue)"
+    }
+
+    static func numberText(_ value: Double) -> String {
+        if value.rounded() == value { return String(Int(value)) }
+        return String(format: "%.1f", value)
     }
 }

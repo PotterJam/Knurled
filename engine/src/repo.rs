@@ -238,6 +238,47 @@ pub fn append_day_record(repo_path: impl AsRef<Path>, day: DayRecord) -> Result<
     Ok(relative)
 }
 
+/// Remove any saved partial day records for `session_id`, regardless of date.
+/// A partial only ever represents the current in-progress attempt at a session,
+/// so completing that session obsoletes it. Without this, finishing a session
+/// fresh (rather than resuming the partial, which upserts the same date) leaves
+/// the old partial behind as a resumable "Continue" entry forever. Returns the
+/// number of partials removed.
+pub fn clear_partials_for_session(
+    repo_path: impl AsRef<Path>,
+    session_id: &str,
+) -> Result<usize> {
+    let logs_dir = repo_path.as_ref().join("logs");
+    if !logs_dir.exists() {
+        return Ok(0);
+    }
+    let mut files = Vec::new();
+    collect_files(&logs_dir, &mut files)?;
+
+    let mut removed = 0;
+    for path in files.into_iter().filter(|path| {
+        path.extension()
+            .is_some_and(|extension| extension == "json")
+    }) {
+        let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
+        let mut month = LogMonth::parse(&text)?;
+        let before = month.days.len();
+        month.days.retain(|day| {
+            !(day.status.as_deref() == Some("partial")
+                && day
+                    .session_id
+                    .as_deref()
+                    .is_some_and(|id| id.eq_ignore_ascii_case(session_id)))
+        });
+        let dropped = before - month.days.len();
+        if dropped > 0 {
+            removed += dropped;
+            fs::write(&path, month.to_pretty_json()?).map_err(|source| io_error(&path, source))?;
+        }
+    }
+    Ok(removed)
+}
+
 /// Submit a finished session against the next workout: advance `state` per
 /// `mode` and append the day to the record. On invalid input nothing is
 /// written; the returned outcome carries the validation errors.
@@ -255,6 +296,9 @@ pub fn submit_repo(
     if outcome.validation.status == ValidationStatus::Valid {
         write_state(root, &outcome.new_state)?;
         append_day_record(root, outcome.record_day.clone())?;
+        if input.status != "partial" {
+            clear_partials_for_session(root, &rendered.session_id)?;
+        }
     }
     Ok(outcome)
 }

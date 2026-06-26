@@ -7,7 +7,6 @@ struct LiveExerciseCard: View {
     var onDelete: (() -> Void)? = nil
     @State private var showChange = false
     @State private var confirmDelete = false
-    @State private var editingSet: LiveSet?
     @State private var editingValue: SetValueEdit?
 
     @Environment(\.knurledPalette) private var palette
@@ -56,7 +55,7 @@ struct LiveExerciseCard: View {
 
             if live.hasWarmups { warmupSection }
 
-            VStack(spacing: 6) {
+            VStack(spacing: 3) {
                 ForEach(Array(live.sets.enumerated()), id: \.element.id) { index, set in
                     SetRowView(
                         set: set,
@@ -66,7 +65,7 @@ struct LiveExerciseCard: View {
                         isCurrent: controller.isCurrent(set),
                         onEditLoad: { editingValue = .load(set) },
                         onEditReps: { editingValue = .reps(set) },
-                        onEditDetails: { editingSet = set },
+                        onEditRPE: { editingValue = .rpe(set) },
                         onToggled: { controller.toggle(set: set, in: live) },
                         onChanged: { controller.modelChanged() },
                         onDelete: set.isExtra ? {
@@ -97,13 +96,12 @@ struct LiveExerciseCard: View {
         .onTapGesture {
             if !isCurrentExercise && !live.isComplete { controller.focus(live) }
         }
-        .accessibilityHint(isCurrentExercise || live.isComplete ? "" : "Double tap to work on this exercise next")
         .sheet(isPresented: $showChange) {
             ChangeExerciseSheet(live: live) {
                 controller.modelChanged()
             }
         }
-        .setEditingSheets(editingSet: $editingSet, editingValue: $editingValue, units: live.units) {
+        .setEditingSheets(editingValue: $editingValue, units: live.units) {
             controller.modelChanged()
         }
         .confirmationDialog(
@@ -119,16 +117,16 @@ struct LiveExerciseCard: View {
     @ViewBuilder private var warmupSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             let visibleWarmups = live.visibleWarmups
-            ForEach(Array(visibleWarmups.enumerated()), id: \.element.id) { index, set in
+            ForEach(Array(visibleWarmups.enumerated()), id: \.element.id) { _, set in
                 SetRowView(
                     set: set,
-                    indexLabel: visibleWarmups.count > 1 ? "W\(index + 1)" : "W",
+                    indexLabel: "W",
                     isAmrap: false,
                     isLastSet: set.id == live.warmups.last?.id,
                     isCurrent: controller.isCurrent(set),
                     onEditLoad: { editingValue = .load(set) },
                     onEditReps: { editingValue = .reps(set) },
-                    onEditDetails: { editingSet = set },
+                    onEditRPE: { editingValue = .rpe(set) },
                     onToggled: { controller.toggle(set: set, in: live) },
                     onChanged: { controller.modelChanged() }
                 )
@@ -155,17 +153,14 @@ struct LiveExerciseCard: View {
     }
 
     @ViewBuilder private var footer: some View {
-        HStack(spacing: 16) {
-            Spacer()
-            if live.isComplete {
+        if live.isComplete {
+            HStack {
+                Spacer()
                 Label("Done", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
-            } else if !isCurrentExercise {
-                Label("Tap to do next", systemImage: "hand.tap")
-                    .foregroundStyle(.secondary)
             }
+            .font(.footnote)
         }
-        .font(.footnote)
     }
 
     private var swapPolicyText: String {
@@ -182,29 +177,36 @@ struct LiveExerciseCard: View {
 
 }
 
+private struct RowHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 40
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 enum SetValueEdit: Identifiable {
     case load(LiveSet)
     case reps(LiveSet)
+    case rpe(LiveSet)
 
     var id: String {
         switch self {
         case .load(let set): "load-\(ObjectIdentifier(set).hashValue)"
         case .reps(let set): "reps-\(ObjectIdentifier(set).hashValue)"
+        case .rpe(let set): "rpe-\(ObjectIdentifier(set).hashValue)"
         }
     }
 }
 
-/// Hosts the load / reps / details editing sheets shared by the working-set card and the
-/// combined warm-up block so both edit a set the same way.
+/// Hosts the load / reps / RPE editing sheets shared by the working-set card and the combined
+/// warm-up block so both edit a set the same way.
 private struct SetEditingSheets: ViewModifier {
-    @Binding var editingSet: LiveSet?
     @Binding var editingValue: SetValueEdit?
     let units: Units
     let onChanged: () -> Void
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $editingSet) { set in SetDetailSheet(set: set) }
             .sheet(item: $editingValue) { edit in
                 switch edit {
                 case .load(let set):
@@ -213,6 +215,9 @@ private struct SetEditingSheets: ViewModifier {
                 case .reps(let set):
                     RepsValueEditor(set: set, onChanged: onChanged)
                         .presentationDetents([.height(300)])
+                case .rpe(let set):
+                    RPEValueEditor(set: set, onChanged: onChanged)
+                        .presentationDetents([.height(300)])
                 }
             }
     }
@@ -220,13 +225,11 @@ private struct SetEditingSheets: ViewModifier {
 
 extension View {
     func setEditingSheets(
-        editingSet: Binding<LiveSet?>,
         editingValue: Binding<SetValueEdit?>,
         units: Units,
         onChanged: @escaping () -> Void
     ) -> some View {
         modifier(SetEditingSheets(
-            editingSet: editingSet,
             editingValue: editingValue,
             units: units,
             onChanged: onChanged
@@ -271,7 +274,7 @@ struct SetRowView: View {
     let isCurrent: Bool
     var onEditLoad: () -> Void
     var onEditReps: () -> Void
-    var onEditDetails: () -> Void
+    var onEditRPE: () -> Void
     var onToggled: () -> Void
     var onChanged: () -> Void
     /// Non-nil only for user-added sets, which can be swiped away.
@@ -280,6 +283,7 @@ struct SetRowView: View {
     @Environment(\.knurledPalette) private var palette
     @State private var offset: CGFloat = 0
     @State private var revealed = false
+    @State private var rowHeight: CGFloat = 40
 
     private let revealWidth: CGFloat = 76
     private var isAmrapFinal: Bool { isAmrap && isLastSet }
@@ -302,17 +306,6 @@ struct SetRowView: View {
 
             Spacer(minLength: 8)
 
-            if set.logged {
-                Button(action: onEditDetails) {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.title3)
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Set details")
-            }
-
             Button(action: onToggled) {
                 Image(systemName: set.logged ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
@@ -322,8 +315,7 @@ struct SetRowView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
         }
-        .frame(minHeight: 38)
-        .padding(.vertical, 1)
+        .frame(minHeight: 34)
         .opacity(rowOpacity)
     }
 
@@ -335,17 +327,24 @@ struct SetRowView: View {
                 Image(systemName: "trash.fill")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                    .frame(width: revealWidth, height: 44)
+                    .frame(width: revealWidth, height: rowHeight)
                     .background(palette.danger, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Delete set")
+            .opacity(offset < -1 ? 1 : 0)
 
             rowContent
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(
+                    GeometryReader { geo in
+                        Color(uiColor: .secondarySystemBackground)
+                            .preference(key: RowHeightKey.self, value: geo.size.height)
+                    }
+                )
                 .offset(x: offset)
                 .gesture(swipeGesture)
         }
+        .onPreferenceChange(RowHeightKey.self) { rowHeight = $0 }
     }
 
     private var swipeGesture: some Gesture {
@@ -377,7 +376,10 @@ struct SetRowView: View {
             ValueChip(text: loadText, isChanged: loadChanged, action: onEditLoad)
             Text("×")
                 .foregroundStyle(.secondary)
-            ValueChip(text: "\(displayReps)\(amrapMarker)\(rpeSuffix)", isChanged: repsChanged, action: onEditReps)
+            ValueChip(text: "\(displayReps)\(amrapMarker)", isChanged: repsChanged, action: onEditReps)
+            if showRPEChip {
+                RPEChip(text: rpeText, hasValue: set.rpe != nil, action: onEditRPE)
+            }
         }
     }
 
@@ -406,9 +408,13 @@ struct SetRowView: View {
         return isAmrapFinal ? "+" : ""
     }
 
-    private var rpeSuffix: String {
-        guard let rpe = set.rpeText else { return "" }
-        return " @\(rpe)"
+    private var showRPEChip: Bool {
+        return set.logged || set.rpe != nil
+    }
+
+    private var rpeText: String {
+        guard let rpe = set.rpeText else { return "RPE" }
+        return "@\(rpe)"
     }
 
     private var repsChanged: Bool {
@@ -418,6 +424,30 @@ struct SetRowView: View {
     private var rowOpacity: Double {
         if set.bypassed { return 0.35 }
         return 1
+    }
+}
+
+private struct RPEChip: View {
+    let text: String
+    let hasValue: Bool
+    var action: () -> Void
+
+    @Environment(\.knurledPalette) private var palette
+
+    var body: some View {
+        Button(action: action) {
+            Text(text)
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(hasValue ? palette.accent : .secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    (hasValue ? palette.accent.opacity(0.14) : Color(uiColor: .tertiarySystemFill)),
+                    in: RoundedRectangle(cornerRadius: 5)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(hasValue ? "Edit RPE \(text)" : "Add RPE")
     }
 }
 
@@ -451,47 +481,47 @@ private struct LoadValueEditor: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
+    @FocusState private var isFocused: Bool
+    private let originalLoadText: String
 
     init(set: LiveSet, units: Units, onChanged: @escaping () -> Void) {
         self.set = set
         self.units = units
         self.onChanged = onChanged
         let parsed = LoadControl.parse(set.load, defaultUnit: units)
-        _text = State(initialValue: parsed.map { Self.numberText($0.value) } ?? "")
+        self.originalLoadText = set.load ?? "bodyweight"
+        _text = State(initialValue: parsed.map { LoadControl.numberText($0.value) } ?? "")
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
-                HStack(spacing: 10) {
-                    ForEach(decrements, id: \.self) { amount in
-                        Button(formatDelta(-amount)) { adjust(by: -amount) }
-                            .buttonStyle(.bordered)
-                    }
-                }
-
+            VStack(spacing: 16) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(originalLoadText)
+                        .font(.title3.monospacedDigit().weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: "arrow.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
                     TextField("0", text: $text)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.center)
                         .font(.largeTitle.monospacedDigit().weight(.semibold))
                         .frame(width: 130)
+                        .focused($isFocused)
                         .onChange(of: text) { _, _ in applyText() }
+
                     Text(units.rawValue)
                         .font(.title3.weight(.medium))
                         .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 10) {
-                    ForEach(increments, id: \.self) { amount in
-                        Button(formatDelta(amount)) { adjust(by: amount) }
-                            .buttonStyle(.bordered)
-                    }
                 }
             }
             .padding()
             .navigationTitle("Load")
             .navigationBarTitleDisplayMode(.inline)
+            .task { isFocused = true }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Reset") { reset() }
@@ -503,29 +533,9 @@ private struct LoadValueEditor: View {
         }
     }
 
-    private var decrements: [Double] {
-        switch units {
-        case .kg: [10, 5, 2.5]
-        case .lb: [20, 10, 5]
-        }
-    }
-
-    private var increments: [Double] {
-        switch units {
-        case .kg: [2.5, 5, 10]
-        case .lb: [5, 10, 20]
-        }
-    }
-
-    private func adjust(by delta: Double) {
-        let value = max(0, currentValue + delta)
-        text = Self.numberText(value)
-        apply(value)
-    }
-
     private func reset() {
         set.load = set.prescribed.load
-        text = LoadControl.parse(set.load, defaultUnit: units).map { Self.numberText($0.value) } ?? ""
+        text = LoadControl.parse(set.load, defaultUnit: units).map { LoadControl.numberText($0.value) } ?? ""
         onChanged()
     }
 
@@ -537,22 +547,6 @@ private struct LoadValueEditor: View {
     private func apply(_ value: Double) {
         set.load = LoadControl.format(value, unit: units)
         onChanged()
-    }
-
-    private var currentValue: Double {
-        Double(text.trimmingCharacters(in: .whitespaces))
-            ?? LoadControl.parse(set.load, defaultUnit: units)?.value
-            ?? 0
-    }
-
-    private func formatDelta(_ value: Double) -> String {
-        let number = Self.numberText(value)
-        return value > 0 ? "+\(number)" : number
-    }
-
-    private static func numberText(_ value: Double) -> String {
-        if value.rounded() == value { return String(Int(value)) }
-        return String(format: "%.1f", value)
     }
 }
 
@@ -594,13 +588,65 @@ private struct RepsValueEditor: View {
     }
 }
 
+private struct RPEValueEditor: View {
+    let set: LiveSet
+    var onChanged: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var value: Double
+
+    private let values = stride(from: 1.0, through: 10.0, by: 0.5).map { $0 }
+
+    init(set: LiveSet, onChanged: @escaping () -> Void) {
+        self.set = set
+        self.onChanged = onChanged
+        _value = State(initialValue: set.rpe ?? 8)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Picker("RPE", selection: Binding(
+                get: { value },
+                set: {
+                    value = $0
+                    set.rpe = $0
+                    onChanged()
+                }
+            )) {
+                ForEach(values, id: \.self) { rpe in
+                    Text(LiveSet.formatRPE(rpe)).tag(rpe)
+                }
+            }
+            .pickerStyle(.wheel)
+            .navigationTitle("RPE")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Remove") {
+                        set.rpe = nil
+                        onChanged()
+                        dismiss()
+                    }
+                    .disabled(set.rpe == nil)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        set.rpe = value
+                        onChanged()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// All of a session's warm-up exercises shown as one compact card: each exercise gets a small
 /// name label above its set rows, instead of every warm-up being its own full-height card.
 struct WarmupBlockCard: View {
     let items: [LiveItem]
     let controller: WorkoutLiveController
 
-    @State private var editingSet: LiveSet?
     @State private var editingValue: SetValueEdit?
     @Environment(\.knurledPalette) private var palette
 
@@ -632,7 +678,7 @@ struct WarmupBlockCard: View {
             }
         }
         .knurledCard()
-        .setEditingSheets(editingSet: $editingSet, editingValue: $editingValue, units: units) {
+        .setEditingSheets(editingValue: $editingValue, units: units) {
             controller.modelChanged()
         }
     }
@@ -643,16 +689,16 @@ struct WarmupBlockCard: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            ForEach(Array(item.sets.enumerated()), id: \.element.id) { index, set in
+            ForEach(Array(item.sets.enumerated()), id: \.element.id) { _, set in
                 SetRowView(
                     set: set,
-                    indexLabel: item.sets.count > 1 ? "W\(index + 1)" : "W",
+                    indexLabel: "W",
                     isAmrap: false,
                     isLastSet: set.id == item.sets.last?.id,
                     isCurrent: controller.isCurrent(set),
                     onEditLoad: { editingValue = .load(set) },
                     onEditReps: { editingValue = .reps(set) },
-                    onEditDetails: { editingSet = set },
+                    onEditRPE: { editingValue = .rpe(set) },
                     onToggled: { controller.toggle(set: set, in: item) },
                     onChanged: { controller.modelChanged() }
                 )

@@ -348,31 +348,33 @@ private struct SessionExerciseRow: View {
     @Binding var exercise: SessionExercise
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             TextField("Exercise", text: $exercise.exercise)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.body.weight(.medium))
+                .font(.subheadline.weight(.medium))
 
-            Grid(horizontalSpacing: KnurledTheme.Spacing.m, verticalSpacing: 6) {
-                GridRow {
-                    Stepper(value: $exercise.sets, in: 1...20) {
-                        Label("\(exercise.sets) sets", systemImage: "square.stack.3d.up")
-                            .font(.callout)
-                    }
-                    Stepper(value: $exercise.reps, in: 0...999) {
-                        Label("\(exercise.reps) reps", systemImage: "number")
-                            .font(.callout)
-                    }
-                }
-            }
-
-            TextField("Load or note", text: loadOrNoteBinding)
+            TextField("load or note", text: loadOrNoteBinding)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.callout)
+                .font(.caption)
+
+            HStack(spacing: 14) {
+                labeledPicker("Sets", value: $exercise.sets, range: 1...20)
+                labeledPicker("Reps", value: $exercise.reps, range: 0...99)
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func labeledPicker(_ title: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HorizontalNumberPicker(value: value, range: range)
+        }
     }
 
     private var loadOrNoteBinding: Binding<String> {

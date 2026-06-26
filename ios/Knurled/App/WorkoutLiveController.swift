@@ -26,10 +26,11 @@ final class WorkoutLiveController {
     }
 
     private(set) var workout: LiveWorkout?
-    /// The exercise the user has tapped to work on next. Equipment is often busy, so sets get done
-    /// out of order: tapping an unfocused card focuses it here and moves the cursor onto its first
-    /// unlogged set. Cleared (falling back to the first incomplete exercise) once it's finished.
+    /// The exercise holding the current cursor. Equipment is often busy, so sets get done out of
+    /// order: tapping a card focuses it, and logging a set advances forward from that set.
     private(set) var focusedItemID: String?
+    private var preferredTarget: TargetRef?
+    private var cursorAtEnd = false
     private(set) var restEndDate: Date?
     /// Staged rep count for the current AMRAP final set (adjusted via the widget stepper).
     private(set) var amrapReps: Int = 0
@@ -39,6 +40,11 @@ final class WorkoutLiveController {
     private var activity: ActivityHandle?
 
     private init() {}
+
+    private struct TargetRef: Equatable {
+        let itemID: String
+        let setID: ObjectIdentifier
+    }
 
     // MARK: - Rest countdown (read by the in-app RestTimerBar)
 
@@ -56,12 +62,17 @@ final class WorkoutLiveController {
 
     // MARK: - Cursor
 
-    /// The next set the user should perform. If the user has tapped an exercise to focus it, the
-    /// cursor sits on that exercise's first unlogged set; otherwise it's the first unlogged set in
-    /// item/set order. This single cursor drives both the in-app card highlighting and the Live
-    /// Activity, so the "current set" is the same everywhere and advances together.
+    /// The next set the user should perform. After a set is logged, the cursor advances from that
+    /// exact set instead of jumping back to earlier skipped work; otherwise it starts at the first
+    /// unlogged set in item/set order. This single cursor drives both the in-app card highlighting
+    /// and the Live Activity, so the "current set" is the same everywhere and advances together.
     var currentTarget: (item: LiveItem, set: LiveSet)? {
         guard let workout else { return nil }
+        if let preferredTarget,
+           let target = resolve(preferredTarget) {
+            return target
+        }
+        if cursorAtEnd { return nil }
         if let focusedItemID,
            let item = workout.items.first(where: { $0.id == focusedItemID }),
            let set = nextSet(in: item) {
@@ -79,6 +90,19 @@ final class WorkoutLiveController {
         for set in item.warmups where !set.logged && !set.bypassed { return set }
         for set in item.sets where !set.logged { return set }
         return nil
+    }
+
+    private func resolve(_ target: TargetRef) -> (item: LiveItem, set: LiveSet)? {
+        guard let item = workout?.items.first(where: { $0.id == target.itemID }) else { return nil }
+        for set in item.warmups + item.sets
+            where ObjectIdentifier(set) == target.setID && !set.logged && !set.bypassed {
+            return (item, set)
+        }
+        return nil
+    }
+
+    private func ref(for item: LiveItem, set: LiveSet) -> TargetRef {
+        TargetRef(itemID: item.id, setID: ObjectIdentifier(set))
     }
 
     /// Whether `set` is the single active set across the whole workout. Compared by object
@@ -110,6 +134,8 @@ final class WorkoutLiveController {
         stopRest()
         workout = nil
         focusedItemID = nil
+        preferredTarget = nil
+        cursorAtEnd = false
         endActivity()
     }
 
@@ -119,13 +145,16 @@ final class WorkoutLiveController {
         guard let (item, set) = currentTarget else { return }
         set.reps = isAmrapTarget(item, set) ? amrapReps : set.prescribed.targetReps
         set.logged = true
-        afterLog(item: item, wasWarmup: set.isWarmup)
+        afterLog(item: item, set: set)
     }
 
     func toggle(set: LiveSet, in item: LiveItem) {
         if set.logged {
             set.logged = false
             set.bypassed = false
+            preferredTarget = ref(for: item, set: set)
+            focusedItemID = item.id
+            cursorAtEnd = false
             syncAmrap()
             updateActivity()
             return
@@ -133,15 +162,16 @@ final class WorkoutLiveController {
 
         set.bypassed = false
         set.logged = true
-        afterLog(item: item, wasWarmup: set.isWarmup)
+        afterLog(item: item, set: set)
     }
 
     /// Advance past the current warmup without recording it as performed. Warmups are
     /// guidance-only, so this moves the cursor through the ramp without touching progression.
     func advanceCurrentWarmup() {
-        guard let (_, set) = currentTarget, set.isWarmup else { return }
+        guard let (item, set) = currentTarget, set.isWarmup else { return }
         set.logged = false
         set.bypassed = true
+        moveCursorAfter(item: item, set: set)
         syncAmrap()
         stopRest()
         updateActivity()
@@ -159,6 +189,9 @@ final class WorkoutLiveController {
                 warmup.bypassed = false
             }
         }
+        preferredTarget = ref(for: item, set: selected)
+        focusedItemID = item.id
+        cursorAtEnd = false
         syncAmrap()
         stopRest()
         updateActivity()
@@ -184,10 +217,9 @@ final class WorkoutLiveController {
 
     // MARK: - Notifications from the in-app UI
 
-    /// Called after a set is logged in-app; starts rest before the next set (matching the
-    /// previous in-app behaviour) and refreshes the activity.
+    /// Legacy in-app notification hook. Main set rows now call `toggle(set:in:)`, which has the
+    /// set identity needed to advance the cursor precisely.
     func didLogSetInApp(item: LiveItem, wasWarmup: Bool = false) {
-        clearFocusIfDone()
         syncAmrap()
         if currentTarget != nil, !wasWarmup {
             startRest(seconds: item.item.rest.seconds)
@@ -206,8 +238,10 @@ final class WorkoutLiveController {
     /// Move the cursor onto `item` because the user tapped it (e.g. its equipment is free now).
     /// The current set becomes its first unlogged set; if it's already done this is a no-op.
     func focus(_ item: LiveItem) {
-        guard nextSet(in: item) != nil else { return }
+        guard let set = nextSet(in: item) else { return }
         focusedItemID = item.id
+        preferredTarget = ref(for: item, set: set)
+        cursorAtEnd = false
         syncAmrap()
         stopRest()
         updateActivity()
@@ -215,11 +249,11 @@ final class WorkoutLiveController {
 
     // MARK: - Internals
 
-    private func afterLog(item: LiveItem, wasWarmup: Bool) {
-        clearFocusIfDone()
+    private func afterLog(item: LiveItem, set: LiveSet) {
+        moveCursorAfter(item: item, set: set)
         syncAmrap()
         // Ramp-up sets and whole warm-up exercises are guidance only — no rest countdown between them.
-        if currentTarget != nil, !wasWarmup, !item.isSessionWarmup {
+        if currentTarget != nil, !set.isWarmup, !item.isSessionWarmup {
             startRest(seconds: item.item.rest.seconds)
         } else {
             stopRest()
@@ -227,12 +261,47 @@ final class WorkoutLiveController {
         }
     }
 
-    /// Once the focused exercise has nothing left to do, drop the manual focus so the cursor
-    /// returns to the first exercise still outstanding.
-    private func clearFocusIfDone() {
-        guard let focusedItemID,
-              let item = workout?.items.first(where: { $0.id == focusedItemID }) else { return }
-        if nextSet(in: item) == nil { self.focusedItemID = nil }
+    /// After logging out of order, keep moving forward from the set the user just performed
+    /// instead of jumping back to earlier skipped sets or warmups.
+    private func moveCursorAfter(item: LiveItem, set loggedSet: LiveSet) {
+        guard let workout,
+              let itemIndex = workout.items.firstIndex(where: { $0.id == item.id }) else {
+            preferredTarget = nil
+            focusedItemID = nil
+            cursorAtEnd = false
+            return
+        }
+
+        if let set = nextSet(in: item, after: loggedSet) {
+            preferredTarget = ref(for: item, set: set)
+            focusedItemID = item.id
+            cursorAtEnd = false
+            return
+        }
+
+        for laterItem in workout.items.dropFirst(itemIndex + 1) {
+            if let set = nextSet(in: laterItem) {
+                preferredTarget = ref(for: laterItem, set: set)
+                focusedItemID = laterItem.id
+                cursorAtEnd = false
+                return
+            }
+        }
+
+        preferredTarget = nil
+        focusedItemID = nil
+        cursorAtEnd = true
+    }
+
+    private func nextSet(in item: LiveItem, after loggedSet: LiveSet) -> LiveSet? {
+        let orderedSets = item.warmups + item.sets
+        guard let loggedIndex = orderedSets.firstIndex(where: { $0 === loggedSet }) else {
+            return nextSet(in: item)
+        }
+        for set in orderedSets.dropFirst(loggedIndex + 1) where !set.logged && !set.bypassed {
+            return set
+        }
+        return nil
     }
 
     private func syncAmrap() {

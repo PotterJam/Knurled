@@ -22,6 +22,8 @@
 	<string>1</string>
 	<key>GitHubClientID</key>
 	<string>$(GITHUB_CLIENT_ID)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UILaunchScreen</key>

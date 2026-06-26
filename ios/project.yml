@@ -63,6 +63,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         "UISupportedInterfaceOrientations~iphone":
           - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
         NSSupportsLiveActivities: true
         GitHubClientID: $(GITHUB_CLIENT_ID)
 
@@ -82,6 +83,7 @@ targets:
       path: KnurledRestActivity/Info.plist
       properties:
         CFBundleDisplayName: Rest Timer
+        ITSAppUsesNonExemptEncryption: false
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
