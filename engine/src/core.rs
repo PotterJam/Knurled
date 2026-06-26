@@ -351,16 +351,6 @@ pub fn reduce_input(
         });
     }
 
-    if input.status == "partial" {
-        return Ok(ReductionResult {
-            validation,
-            results: Vec::new(),
-            effects: Vec::new(),
-            new_state: state.clone(),
-            next_workout: rendered_session.clone(),
-        });
-    }
-
     let mut new_state = state.clone();
     let mut results = Vec::new();
     let mut effects = Vec::new();
@@ -378,8 +368,9 @@ pub fn reduce_input(
     }
 
     apply_effects(&mut new_state, &effects);
-    // Advance to the next workout whenever the cursor is still sitting on the completed session
-    // being submitted. Partial saves returned earlier without moving state.
+    // Advance to the next workout whenever the cursor is still sitting on the session being
+    // submitted. This runs for partial submits too — only the per-exercise effects above are
+    // gated on completion; moving on to the next workout is not.
     if new_state
         .cursor
         .next_session
@@ -1629,6 +1620,14 @@ fn reduce_item(
     compiled: &CompiledPlan,
 ) -> Result<ExerciseResult> {
     let actual = actual_sets_for(item, input)?;
+    // A lift only progresses when all of its prescribed working sets (warmups are
+    // separate) were performed. An exercise left unfinished is recorded but moves
+    // nothing — so a partial session still progresses the lifts that were done.
+    let all_working_sets_done = item
+        .prescription
+        .sets
+        .iter()
+        .all(|prescribed| actual.iter().any(|done| done.set == prescribed.set));
     let adjusted_today = actual.iter().any(|set| {
         let prescribed = item
             .prescription
@@ -1640,12 +1639,18 @@ fn reduce_item(
             .zip(prescribed)
             .is_some_and(|(actual, prescribed)| actual != prescribed)
     });
-    let outcome = if adjusted_today {
+    let outcome = if !all_working_sets_done {
+        "incomplete".to_owned()
+    } else if adjusted_today {
         "adjusted_today".to_owned()
     } else {
         outcome_for(item, &actual, compiled)
     };
-    let effects = effects_for_outcome(compiled, item, &outcome, &actual);
+    let effects = if all_working_sets_done {
+        effects_for_outcome(compiled, item, &outcome, &actual)
+    } else {
+        Vec::new()
+    };
 
     Ok(ExerciseResult {
         slot_id: item.slot_id.clone(),

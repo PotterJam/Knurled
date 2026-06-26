@@ -15,6 +15,13 @@
 //!
 //! The record is always built from what was performed, regardless of mode. The
 //! engine never reads it back.
+//!
+//! Finishing is not all-or-nothing. Every submit — full or `partial` ("save
+//! progress") — advances the cursor to the next workout, and progression is
+//! decided per exercise: a lift only moves when all of its working sets (warmups
+//! excluded) were done. So an unfinished session still progresses the lifts you
+//! completed and leaves the rest where they were. A saved partial stays resumable
+//! from history by its session id ([`crate::render_session`] ignores the cursor).
 
 use serde::{Deserialize, Serialize};
 
@@ -74,15 +81,12 @@ pub fn submit_session(
         });
     }
 
-    if input.status == "partial" {
-        return Ok(SubmitOutcome {
-            validation,
-            record_day,
-            new_state: state.clone(),
-            effects: Vec::new(),
-        });
-    }
-
+    // A `partial` submit is not special-cased here: it advances the cursor and
+    // runs progression like any submit. Progression is gated per exercise (an
+    // exercise only moves when all its working sets are done — see `reduce_item`),
+    // so an unfinished session simply progresses the lifts that were completed and
+    // leaves the rest untouched. The saved partial stays resumable from history by
+    // its session id (`render_session` ignores the cursor).
     let (new_state, effects) = match mode {
         SubmitMode::Advance => {
             let reduced = reduce_input(compiled, state, rendered_session, input)?;
@@ -649,7 +653,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_save_records_resume_metadata_without_moving_state() {
+    fn partial_save_advances_cursor_without_moving_lanes() {
         let compiled = gzclp();
         let state = create_initial_state(&compiled);
         let rendered = render_next(&compiled, &state).unwrap();
@@ -690,7 +694,12 @@ mod tests {
         .unwrap();
 
         assert_eq!(outcome.validation.status, ValidationStatus::Valid);
-        assert_eq!(outcome.new_state, state);
+        // The cursor moves on to the next workout, but the only logged exercise was
+        // unfinished (one set of many), so no lift progresses and the lanes are left
+        // exactly as they were.
+        assert_eq!(state.cursor.next_session, "a1");
+        assert_eq!(outcome.new_state.cursor.next_session, "b1");
+        assert_eq!(outcome.new_state.lanes, state.lanes);
         assert!(outcome.effects.is_empty());
         assert_eq!(outcome.record_day.status.as_deref(), Some("partial"));
         assert_eq!(outcome.record_day.session_id.as_deref(), Some("a1"));
@@ -698,5 +707,64 @@ mod tests {
             outcome.record_day.lifts[0].item_id.as_deref(),
             Some(first_item.item_id.as_str())
         );
+    }
+
+    #[test]
+    fn partial_submit_progresses_finished_lifts_and_skips_unfinished_ones() {
+        let compiled = gzclp();
+        let state = create_initial_state(&compiled);
+        let rendered = render_next(&compiled, &state).unwrap();
+
+        let t1 = rendered
+            .items
+            .iter()
+            .find(|item| item.progression_rule.ends_with(".t1"))
+            .unwrap();
+        let t2 = rendered
+            .items
+            .iter()
+            .find(|item| item.progression_rule.ends_with(".t2"))
+            .unwrap();
+        let t1_lane = t1.progression_lane.clone();
+        let t2_lane = t2.progression_lane.clone();
+        let t1_load_before = state.lanes[&t1_lane].load.clone();
+        let t2_load_before = state.lanes[&t2_lane].load.clone();
+
+        // A "save progress": T1 finished (every set passing), T2 only one set logged.
+        let mut input = passing_input(&rendered);
+        input.status = "partial".into();
+        let t2_input = input
+            .inputs
+            .iter_mut()
+            .find(|candidate| candidate.item_id == t2.item_id)
+            .unwrap();
+        t2_input.mode = "per_set_reps".into();
+        t2_input.final_set_reps = None;
+        t2_input.sets = vec![ActualSet {
+            set: t2.prescription.sets[0].set,
+            load: t2.prescription.sets[0].load.clone(),
+            reps: t2.prescription.sets[0].target_reps,
+            metrics: BTreeMap::new(),
+        }];
+
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::Advance,
+            "2026-06-24",
+        )
+        .unwrap();
+
+        assert_eq!(outcome.validation.status, ValidationStatus::Valid);
+        // Cursor moves on even though the session was not finished.
+        assert_ne!(
+            outcome.new_state.cursor.next_session,
+            state.cursor.next_session
+        );
+        // The finished T1 lift progressed; the unfinished T2 lift stayed put.
+        assert_ne!(outcome.new_state.lanes[&t1_lane].load, t1_load_before);
+        assert_eq!(outcome.new_state.lanes[&t2_lane].load, t2_load_before);
     }
 }

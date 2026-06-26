@@ -55,7 +55,7 @@ struct LiveExerciseCard: View {
 
             if live.hasWarmups { warmupSection }
 
-            VStack(spacing: 3) {
+            VStack(spacing: 0) {
                 ForEach(Array(live.sets.enumerated()), id: \.element.id) { index, set in
                     SetRowView(
                         set: set,
@@ -115,7 +115,7 @@ struct LiveExerciseCard: View {
     }
 
     @ViewBuilder private var warmupSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 2) {
             let visibleWarmups = live.visibleWarmups
             ForEach(Array(visibleWarmups.enumerated()), id: \.element.id) { _, set in
                 SetRowView(
@@ -130,7 +130,6 @@ struct LiveExerciseCard: View {
                     onToggled: { controller.toggle(set: set, in: live) },
                     onChanged: { controller.modelChanged() }
                 )
-                if set.id != visibleWarmups.last?.id { Divider() }
             }
 
             Divider().padding(.vertical, 2)
@@ -139,8 +138,15 @@ struct LiveExerciseCard: View {
 
     private var addSetRow: some View {
         Button {
+            // Adding a set to a finished exercise should put the cursor back on it, so the user
+            // can do the extra set without first having to undo a completed one.
+            let wasComplete = live.isComplete
             live.addSet()
-            controller.modelChanged()
+            if wasComplete {
+                controller.focus(live)
+            } else {
+                controller.modelChanged()
+            }
         } label: {
             Label("Add set", systemImage: "plus.circle")
                 .font(.footnote.weight(.medium))
@@ -316,10 +322,14 @@ struct SetRowView: View {
             .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
         }
         .frame(minHeight: 34)
-        .background(
-            set.logged ? completedBackground : .clear,
-            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-        )
+        .background {
+            if set.logged {
+                // Full-bleed band that fills the row up to the dividers and runs out to the card
+                // edges, rather than a narrow inset pill.
+                completedBackground
+                    .padding(.horizontal, -KnurledTheme.Spacing.m)
+            }
+        }
         .opacity(rowOpacity)
         .animation(.snappy, value: set.logged)
     }
@@ -433,14 +443,15 @@ struct SetRowView: View {
     }
 
     private var completedBackground: Color {
-        Color(uiColor: .systemGreen).opacity(colorScheme == .dark ? 0.18 : 0.13)
+        // Soft sage to match the scheme, instead of the heavy dark systemGreen slab.
+        Color(red: 0.55, green: 0.71, blue: 0.53).opacity(colorScheme == .dark ? 0.22 : 0.18)
     }
 
     private var completedForeground: Color {
         if colorScheme == .dark {
-            return Color(red: 0.38, green: 0.82, blue: 0.48)
+            return Color(red: 0.62, green: 0.80, blue: 0.60)
         }
-        return Color(red: 0.08, green: 0.42, blue: 0.20)
+        return Color(red: 0.32, green: 0.52, blue: 0.34)
     }
 }
 
@@ -527,6 +538,8 @@ private struct ValueChip: View {
             Text(text)
                 .font(.subheadline.monospacedDigit().weight(isChanged ? .semibold : .medium))
                 .foregroundStyle(isChanged ? .orange : .secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
                 .background(
