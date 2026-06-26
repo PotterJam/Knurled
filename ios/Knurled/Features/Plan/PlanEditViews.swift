@@ -6,9 +6,10 @@ struct QuickPlanEditView: View {
 
     @Environment(AppModel.self) private var app
     @State private var selectedDays: Set<String>
-    @State private var barWeight: String
-    @State private var plates: String
-    @State private var dumbbells: String
+    @State private var barWeight: Double?
+    @State private var selectedPlates: Set<Double>
+    @State private var dumbbellValues: [Double]
+    @State private var dumbbellPreset: DumbbellPreset
     @State private var rounding: RoundingMode
     @State private var warmupExercises: [SessionExercise]
     @State private var warmdownExercises: [SessionExercise]
@@ -20,10 +21,12 @@ struct QuickPlanEditView: View {
         self.repo = repo
         self.plan = plan
         let equipment = plan.equipment
+        let currentDumbbells = equipment?.dumbbells ?? []
         _selectedDays = State(initialValue: Set(plan.schedule.suggestedDays))
-        _barWeight = State(initialValue: equipment?.bars["default"].map(Self.formatNumber) ?? "")
-        _plates = State(initialValue: (equipment?.platePairs ?? []).map(Self.formatNumber).joined(separator: " "))
-        _dumbbells = State(initialValue: (equipment?.dumbbells ?? []).map(Self.formatNumber).joined(separator: " "))
+        _barWeight = State(initialValue: equipment?.bars["default"])
+        _selectedPlates = State(initialValue: Set(equipment?.platePairs ?? []))
+        _dumbbellValues = State(initialValue: currentDumbbells)
+        _dumbbellPreset = State(initialValue: DumbbellPreset.matching(values: currentDumbbells, units: plan.plan.units))
         _rounding = State(initialValue: equipment?.rounding ?? .nearest)
         _warmupExercises = State(initialValue: plan.sessionExercises.warmup)
         _warmdownExercises = State(initialValue: plan.sessionExercises.warmdown)
@@ -39,20 +42,14 @@ struct QuickPlanEditView: View {
                 }
             }
 
-            Section("Equipment") {
-                TextField("Default bar", text: $barWeight)
-                    .keyboardType(.decimalPad)
-                TextField("Plates per side", text: $plates)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                TextField("Dumbbells", text: $dumbbells)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Picker("Rounding", selection: $rounding) {
-                    Text("Nearest").tag(RoundingMode.nearest)
-                    Text("Down").tag(RoundingMode.down)
-                }
-            }
+            EquipmentEditor(
+                units: plan.plan.units,
+                barWeight: $barWeight,
+                selectedPlates: $selectedPlates,
+                dumbbellValues: $dumbbellValues,
+                dumbbellPreset: $dumbbellPreset,
+                rounding: $rounding
+            )
 
             SessionExercisesEditor(
                 title: "Warmup",
@@ -75,6 +72,9 @@ struct QuickPlanEditView: View {
                 }
                 .disabled(isSaving)
             }
+            ToolbarItem(placement: .topBarLeading) {
+                EditButton()
+            }
         }
     }
 
@@ -89,9 +89,9 @@ struct QuickPlanEditView: View {
 
     private func save() {
         let equipment = EquipmentProfile(
-            bars: parsedSingle(barWeight).map { ["default": $0] } ?? [:],
-            platePairs: parsedList(plates),
-            dumbbells: parsedList(dumbbells),
+            bars: barWeight.map { ["default": $0] } ?? [:],
+            platePairs: sortedPlates,
+            dumbbells: dumbbellValues,
             rounding: rounding,
             implements: plan.equipment?.implements ?? [:]
         )
@@ -110,6 +110,10 @@ struct QuickPlanEditView: View {
         apply(edit, message: "Update plan settings")
     }
 
+    private var sortedPlates: [Double] {
+        selectedPlates.sorted(by: >)
+    }
+
     private func apply(_ edit: PlanEdit, message: String) {
         isSaving = true
         errorMessage = nil
@@ -124,13 +128,105 @@ struct QuickPlanEditView: View {
         }
     }
 
-    private func parsedSingle(_ text: String) -> Double? {
-        Double(text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: "."))
+    private static let days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+}
+
+private struct EquipmentEditor: View {
+    let units: Units
+    @Binding var barWeight: Double?
+    @Binding var selectedPlates: Set<Double>
+    @Binding var dumbbellValues: [Double]
+    @Binding var dumbbellPreset: DumbbellPreset
+    @Binding var rounding: RoundingMode
+
+    var body: some View {
+        Section {
+            Picker("Default bar", selection: $barWeight) {
+                Text("None").tag(Optional<Double>.none)
+                ForEach(barOptions, id: \.self) { weight in
+                    Text(weightLabel(weight)).tag(Optional(weight))
+                }
+            }
+
+            DisclosureGroup {
+                ForEach(plateOptions, id: \.self) { plate in
+                    Toggle(weightLabel(plate), isOn: plateBinding(plate))
+                }
+            } label: {
+                LabeledContent("Plate pairs per side", value: plateSummary)
+            }
+
+            Picker("Dumbbells", selection: $dumbbellPreset) {
+                ForEach(DumbbellPreset.options(for: units), id: \.self) { preset in
+                    Text(preset.title(units: units)).tag(preset)
+                }
+                if !DumbbellPreset.options(for: units).contains(dumbbellPreset) {
+                    Text("Current list").tag(dumbbellPreset)
+                }
+            }
+            .onChange(of: dumbbellPreset) { _, preset in
+                guard let values = preset.values(units: units) else { return }
+                dumbbellValues = values
+            }
+
+            if !dumbbellValues.isEmpty {
+                Text(dumbbellSummary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker("Rounding", selection: $rounding) {
+                Text("Nearest achievable").tag(RoundingMode.nearest)
+                Text("Always round down").tag(RoundingMode.down)
+            }
+        } header: {
+            Text("Equipment")
+        } footer: {
+            Text("Plates are pairs available on each side of a bar. Dumbbells are total dumbbell weights available in the gym.")
+        }
     }
 
-    private func parsedList(_ text: String) -> [Double] {
-        text.split { $0 == " " || $0 == "," || $0 == "\n" || $0 == "\t" }
-            .compactMap { Double(String($0).replacingOccurrences(of: ",", with: ".")) }
+    private var barOptions: [Double] {
+        mergedOptions(defaults: units == .kg ? [20, 15, 10, 7.5] : [45, 35, 15], current: barWeight.map { [$0] } ?? [])
+    }
+
+    private var plateOptions: [Double] {
+        mergedOptions(
+            defaults: units == .kg ? [25, 20, 15, 10, 5, 2.5, 1.25, 0.5] : [45, 35, 25, 10, 5, 2.5, 1.25],
+            current: Array(selectedPlates)
+        )
+        .sorted(by: >)
+    }
+
+    private var plateSummary: String {
+        guard !selectedPlates.isEmpty else { return "None" }
+        return selectedPlates.sorted(by: >).map(weightLabel).joined(separator: ", ")
+    }
+
+    private var dumbbellSummary: String {
+        guard let first = dumbbellValues.first, let last = dumbbellValues.last else { return "No dumbbells" }
+        return "\(dumbbellValues.count) weights, \(weightLabel(first)) to \(weightLabel(last))"
+    }
+
+    private func plateBinding(_ plate: Double) -> Binding<Bool> {
+        Binding(
+            get: { selectedPlates.contains(plate) },
+            set: { enabled in
+                if enabled {
+                    selectedPlates.insert(plate)
+                } else {
+                    selectedPlates.remove(plate)
+                }
+            }
+        )
+    }
+
+    private func mergedOptions(defaults: [Double], current: [Double]) -> [Double] {
+        Array(Set(defaults + current)).sorted()
+    }
+
+    private func weightLabel(_ value: Double) -> String {
+        "\(Self.formatNumber(value))\(units.rawValue)"
     }
 
     private static func formatNumber(_ value: Double) -> String {
@@ -138,8 +234,80 @@ struct QuickPlanEditView: View {
         if rounded == value { return String(Int(rounded)) }
         return String(value)
     }
+}
 
-    private static let days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+private enum DumbbellPreset: Hashable {
+    case none
+    case kgHome
+    case kgCommercial
+    case kgHeavy
+    case lbHome
+    case lbCommercial
+    case lbHeavy
+    case current
+
+    static func options(for units: Units) -> [DumbbellPreset] {
+        units == .kg ? [.none, .kgHome, .kgCommercial, .kgHeavy] : [.none, .lbHome, .lbCommercial, .lbHeavy]
+    }
+
+    static func matching(values: [Double], units: Units) -> DumbbellPreset {
+        for preset in options(for: units) where preset.values(units: units) == values {
+            return preset
+        }
+        return values.isEmpty ? .none : .current
+    }
+
+    func title(units: Units) -> String {
+        switch self {
+        case .none:
+            return "None"
+        case .kgHome:
+            return "Home set: 2-20kg by 2kg"
+        case .kgCommercial:
+            return "Commercial: 2.5-30kg by 2.5kg"
+        case .kgHeavy:
+            return "Heavy: 5-50kg by 2.5kg"
+        case .lbHome:
+            return "Home set: 5-50lb by 5lb"
+        case .lbCommercial:
+            return "Commercial: 2.5-50lb by 2.5lb"
+        case .lbHeavy:
+            return "Heavy: 5-100lb by 5lb"
+        case .current:
+            return "Current list"
+        }
+    }
+
+    func values(units: Units) -> [Double]? {
+        switch self {
+        case .none:
+            return []
+        case .kgHome:
+            return Self.stepped(from: 2, through: 20, by: 2)
+        case .kgCommercial:
+            return Self.stepped(from: 2.5, through: 30, by: 2.5)
+        case .kgHeavy:
+            return Self.stepped(from: 5, through: 50, by: 2.5)
+        case .lbHome:
+            return Self.stepped(from: 5, through: 50, by: 5)
+        case .lbCommercial:
+            return Self.stepped(from: 2.5, through: 50, by: 2.5)
+        case .lbHeavy:
+            return Self.stepped(from: 5, through: 100, by: 5)
+        case .current:
+            return nil
+        }
+    }
+
+    private static func stepped(from start: Double, through end: Double, by step: Double) -> [Double] {
+        var values: [Double] = []
+        var current = start
+        while current <= end + 0.0001 {
+            values.append((current * 10).rounded() / 10)
+            current += step
+        }
+        return values
+    }
 }
 
 private struct SessionExercisesEditor: View {
@@ -159,6 +327,9 @@ private struct SessionExercisesEditor: View {
             .onDelete { offsets in
                 exercises.remove(atOffsets: offsets)
             }
+            .onMove { offsets, destination in
+                exercises.move(fromOffsets: offsets, toOffset: destination)
+            }
 
             Button {
                 exercises.append(SessionExercise(exercise: "", sets: 1, reps: title == "Warmdown" ? 60 : 10))
@@ -167,6 +338,8 @@ private struct SessionExercisesEditor: View {
             }
         } header: {
             Label(title, systemImage: systemImage)
+        } footer: {
+            Text("Use Edit to drag items into the order they should appear.")
         }
     }
 }
@@ -175,19 +348,31 @@ private struct SessionExerciseRow: View {
     @Binding var exercise: SessionExercise
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             TextField("Exercise", text: $exercise.exercise)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-            HStack {
-                Stepper("\(exercise.sets) sets", value: $exercise.sets, in: 1...20)
-                Stepper("\(exercise.reps) reps", value: $exercise.reps, in: 0...999)
+                .font(.body.weight(.medium))
+
+            Grid(horizontalSpacing: KnurledTheme.Spacing.m, verticalSpacing: 6) {
+                GridRow {
+                    Stepper(value: $exercise.sets, in: 1...20) {
+                        Label("\(exercise.sets) sets", systemImage: "square.stack.3d.up")
+                            .font(.callout)
+                    }
+                    Stepper(value: $exercise.reps, in: 0...999) {
+                        Label("\(exercise.reps) reps", systemImage: "number")
+                            .font(.callout)
+                    }
+                }
             }
+
             TextField("Load or note", text: loadOrNoteBinding)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .font(.callout)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 
     private var loadOrNoteBinding: Binding<String> {

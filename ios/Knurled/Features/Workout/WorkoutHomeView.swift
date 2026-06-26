@@ -33,14 +33,22 @@ struct NextWorkoutView: View {
     @State private var isSyncing = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: KnurledTheme.Spacing.m) {
-                header
+        VStack(spacing: 0) {
+            header
+                .padding([.horizontal, .top])
+                .padding(.bottom, KnurledTheme.Spacing.s)
 
-                ForEach(session.items) { item in
-                    ExercisePrescriptionCard(item: item)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: KnurledTheme.Spacing.m) {
+                    ForEach(previewItems) { item in
+                        ExercisePrescriptionCard(item: item)
+                    }
                 }
+                .padding(.horizontal)
+                .padding(.bottom)
+            }
 
+            VStack(spacing: KnurledTheme.Spacing.s) {
                 NavigationLink {
                     ActiveWorkoutView(repo: repo, session: session)
                 } label: {
@@ -49,14 +57,15 @@ struct NextWorkoutView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .padding(.top, KnurledTheme.Spacing.s)
 
                 Text("Finish a workout as advance, off-day, or reset when you submit it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
             .padding()
+            .background(.bar)
         }
         .refreshable { await app.sync() }
         .toolbar {
@@ -86,6 +95,10 @@ struct NextWorkoutView: View {
                 .accessibilityLabel("Sync")
             }
         }
+    }
+
+    private var previewItems: [RenderedItem] {
+        session.items.filter { $0.phase == .main }
     }
 
     private var header: some View {
@@ -134,12 +147,6 @@ struct ExercisePrescriptionCard: View {
             Label(WorkoutFormat.repScheme(item.prescription.sets), systemImage: "repeat")
                 .font(.callout.monospaced())
                 .foregroundStyle(.primary)
-
-            if !item.prescription.warmups.isEmpty {
-                Label("Warm-up \(WorkoutFormat.repScheme(item.prescription.warmups))", systemImage: "flame")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
         }
         .knurledCard()
     }
