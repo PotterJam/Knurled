@@ -106,6 +106,22 @@ export function build(plan_text, lock_text, patches_json, state_json) {
 }
 
 /**
+ * @returns {string}
+ */
+export function engine_version() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.engine_version();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * Submit a finished session (ADR 0007). The browser holds `state` and the
  * record, so they are passed in and returned: this renders the next workout
  * from `state_json`, reduces the input per `mode` (`advance` | `off_day` |
@@ -193,22 +209,18 @@ export function builtin_template_catalog() {
 }
 
 /**
- * Generate a correct `fitspec.lock` body for a freshly authored plan's template.
- * @param {string} template_ref
  * @returns {string}
  */
-export function lock_for(template_ref) {
-    let deferred2_0;
-    let deferred2_1;
+export function exercise_catalog_json() {
+    let deferred1_0;
+    let deferred1_1;
     try {
-        const ptr0 = passStringToWasm0(template_ref, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.lock_for(ptr0, len0);
-        deferred2_0 = ret[0];
-        deferred2_1 = ret[1];
+        const ret = wasm.exercise_catalog_json();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
 
@@ -277,18 +289,22 @@ export function simulate_plan(plan_text, lock_text, patches_json, state_json, we
 }
 
 /**
+ * Generate a correct `fitspec.lock` body for a freshly authored plan's template.
+ * @param {string} template_ref
  * @returns {string}
  */
-export function engine_version() {
-    let deferred1_0;
-    let deferred1_1;
+export function lock_for(template_ref) {
+    let deferred2_0;
+    let deferred2_1;
     try {
-        const ret = wasm.engine_version();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
+        const ptr0 = passStringToWasm0(template_ref, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.lock_for(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
