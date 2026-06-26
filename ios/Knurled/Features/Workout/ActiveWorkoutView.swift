@@ -23,11 +23,20 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 VStack(spacing: KnurledTheme.Spacing.m) {
                     progress
-                    ForEach(workout.items) { item in
+                    if !warmupItems.isEmpty {
+                        WarmupBlockCard(items: warmupItems, controller: controller)
+                            .id(Self.warmupAnchorID)
+                    }
+                    ForEach(bodyItems) { item in
                         LiveExerciseCard(
                             live: item,
                             controller: controller,
-                            isCollapsedForDrag: draggingItemID != nil && draggingItemID != item.id
+                            onDelete: item.isTrackingOnlyExtra ? {
+                                withAnimation(.snappy) {
+                                    workout.removeItem(item)
+                                    controller.modelChanged()
+                                }
+                            } : nil
                         )
                             .id(item.id)
                             .onDrag {
@@ -46,6 +55,9 @@ struct ActiveWorkoutView: View {
                     addExerciseRow
                 }
                 .padding()
+                // Fallback so releasing a drag anywhere clears the dragging state and nothing
+                // gets left in a half-dragged look.
+                .onDrop(of: [.plainText], delegate: ResetDragDelegate(draggingItemID: $draggingItemID))
             }
             .onAppear {
                 controller.begin(workout)
@@ -82,18 +94,25 @@ struct ActiveWorkoutView: View {
         }
     }
 
+    private static let warmupAnchorID = "__warmup_block__"
+
+    private var warmupItems: [LiveItem] { workout.items.filter(\.isSessionWarmup) }
+    private var bodyItems: [LiveItem] { workout.items.filter { !$0.isSessionWarmup } }
+
     private var currentExerciseID: String? {
         controller.currentTarget?.item.id
     }
 
     private func scrollToExercise(_ exerciseID: String?, proxy: ScrollViewProxy, animated: Bool = true) {
         guard let exerciseID else { return }
+        // Warm-ups all live in one block, so any warm-up target scrolls to that single anchor.
+        let anchor = warmupItems.contains { $0.id == exerciseID } ? Self.warmupAnchorID : exerciseID
         if animated {
             withAnimation(.snappy) {
-                proxy.scrollTo(exerciseID, anchor: .top)
+                proxy.scrollTo(anchor, anchor: .top)
             }
         } else {
-            proxy.scrollTo(exerciseID, anchor: .top)
+            proxy.scrollTo(anchor, anchor: .top)
         }
     }
 
@@ -171,6 +190,21 @@ private struct ExerciseDropDelegate: DropDelegate {
     }
 
     func dropExited(info: DropInfo) {}
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+}
+
+/// Catches drops that land between cards (or outside any card) so the dragging state is always
+/// cleared — otherwise a drag that ends on empty space would leave it stuck.
+private struct ResetDragDelegate: DropDelegate {
+    @Binding var draggingItemID: String?
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingItemID = nil
+        return true
+    }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)

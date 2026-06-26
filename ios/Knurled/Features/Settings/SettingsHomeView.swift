@@ -3,119 +3,261 @@ import SwiftUI
 struct SettingsHomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(ThemeStore.self) private var theme
-    @State private var showConnect = false
-    @State private var isSyncing = false
 
     var body: some View {
         @Bindable var theme = theme
         NavigationStack {
             List {
-                Section("Appearance") {
-                    Picker("Colour scheme", selection: $theme.scheme) {
-                        ForEach(KnurledColorScheme.allCases) { scheme in
-                            SchemeRow(scheme: scheme).tag(scheme)
-                        }
-                    }
-                    .pickerStyle(.navigationLink)
-                }
-
-                Section("Repository") {
-                    if let repo = app.activeRepo {
-                        LabeledContent("Active", value: repo.displayName)
-                        if repo.isSample {
-                            Text("Running on the bundled sample repo. Connect GitHub to use your own training repository.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        if repo.pendingPush {
-                            Label("Changes saved locally — not yet pushed", systemImage: "arrow.up.circle.dotted")
-                                .font(.footnote)
-                                .foregroundStyle(.orange)
-                        }
-                        if repo.remote != nil {
-                            Button {
-                                Task { isSyncing = true; await app.sync(); isSyncing = false }
-                            } label: {
-                                HStack {
-                                    Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
-                                    if isSyncing { Spacer(); ProgressView() }
-                                }
-                            }
-                            .disabled(isSyncing)
-                        }
-                    } else {
-                        Text("No repository connected.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("GitHub") {
-                    if let login = app.github.login {
-                        LabeledContent("Signed in", value: "@\(login)")
-                        Button {
-                            showConnect = true
-                        } label: {
-                            Label("Manage / switch repository", systemImage: "arrow.left.arrow.right")
-                        }
-                    } else {
-                        Button {
-                            showConnect = true
-                        } label: {
-                            Label("Connect GitHub", systemImage: "person.crop.circle.badge.plus")
-                        }
-                    }
-                }
-
                 if let repo = app.activeRepo {
-                    Section("Custom Exercises") {
+                    Section {
+                        ActiveRepoSummaryRow(repo: repo)
+                    }
+                }
+
+                Section("Appearance") {
+                    ColourSchemePicker(selection: $theme.scheme)
+                }
+
+                Section("Manage") {
+                    NavigationLink {
+                        GitSettingsView()
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Git & Sync",
+                            subtitle: gitSummary,
+                            systemImage: "arrow.triangle.2.circlepath"
+                        )
+                    }
+
+                    if let repo = app.activeRepo {
                         NavigationLink {
                             CustomExercisesView(repo: repo)
                         } label: {
-                            Label("Manage custom exercises", systemImage: "figure.strengthtraining.traditional")
+                            SettingsNavigationRow(
+                                title: "Custom Exercises",
+                                subtitle: "\(repo.plan?.exercises.count ?? 0) saved",
+                                systemImage: "figure.strengthtraining.traditional"
+                            )
                         }
                     }
-                }
 
-                Section("Engine") {
-                    LabeledContent("knurled-core", value: app.engineVersion ?? "—")
-                }
-
-                Section("App") {
-                    LabeledContent("Version", value: Bundle.main.shortVersion)
+                    NavigationLink {
+                        AboutSettingsView(engineVersion: app.engineVersion)
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "About",
+                            subtitle: "App and engine versions",
+                            systemImage: "info.circle"
+                        )
+                    }
                 }
             }
             .navigationTitle("Settings")
-            .sheet(isPresented: $showConnect) {
-                GitHubConnectView()
-            }
         }
+    }
+
+    private var gitSummary: String {
+        if let login = app.github.login {
+            return app.activeRepo?.remote == nil ? "@\(login), no remote repo" : "@\(login)"
+        }
+        return app.activeRepo?.isSample == true ? "Sample repo" : "Not connected"
     }
 }
 
-/// A single colour-scheme option: name, accent/danger description and a pair
-/// of swatches previewing the two colours.
-private struct SchemeRow: View {
-    let scheme: KnurledColorScheme
+private struct ActiveRepoSummaryRow: View {
+    let repo: ActiveRepo
 
     var body: some View {
-        HStack(spacing: KnurledTheme.Spacing.s) {
-            HStack(spacing: 4) {
-                swatch(scheme.palette.accent)
-                swatch(scheme.palette.danger)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(repo.displayName)
+                    .font(.headline)
+                Spacer()
+                StatusChip(text: repo.isValid ? "valid" : "invalid", style: repo.isValid ? .ok : .bad)
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(scheme.title)
-                Text(scheme.subtitle)
+
+            HStack(spacing: KnurledTheme.Spacing.s) {
+                if let remote = repo.remote {
+                    Label("\(remote.owner)/\(remote.name)", systemImage: "shippingbox")
+                } else if repo.isSample {
+                    Label("Sample repository", systemImage: "tray")
+                } else {
+                    Label("Local repository", systemImage: "folder")
+                }
+
+                if repo.pendingPush {
+                    Label("Pending push", systemImage: "arrow.up.circle.dotted")
+                        .foregroundStyle(.orange)
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct ColourSchemePicker: View {
+    @Binding var selection: KnurledColorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
+            HStack {
+                Label("Colour scheme", systemImage: "paintpalette")
+                Spacer()
+                Text(selection.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            HStack(spacing: KnurledTheme.Spacing.s) {
+                ForEach(KnurledColorScheme.allCases) { scheme in
+                    Button {
+                        selection = scheme
+                    } label: {
+                        SchemeSwatchBox(scheme: scheme, isSelected: selection == scheme)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(scheme.title)
+                }
+            }
         }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct SchemeSwatchBox: View {
+    let scheme: KnurledColorScheme
+    let isSelected: Bool
+
+    var body: some View {
+        let borderColor = isSelected ? Color.accentColor : Color(uiColor: .separator).opacity(0.4)
+        let borderWidth = isSelected ? 2.0 : 0.5
+
+        HStack(spacing: 5) {
+            swatch(scheme.palette.accent)
+            swatch(scheme.palette.danger)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(borderColor, lineWidth: borderWidth)
+        )
     }
 
     private func swatch(_ color: Color) -> some View {
         Circle()
             .fill(color)
-            .frame(width: 16, height: 16)
+            .frame(width: 14, height: 14)
             .overlay(Circle().strokeBorder(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5))
+    }
+}
+
+private struct SettingsNavigationRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+private struct GitSettingsView: View {
+    @Environment(AppModel.self) private var app
+    @State private var showConnect = false
+    @State private var isSyncing = false
+
+    var body: some View {
+        List {
+            Section("Repository") {
+                if let repo = app.activeRepo {
+                    LabeledContent("Active", value: repo.displayName)
+                    if let remote = repo.remote {
+                        LabeledContent("Remote", value: "\(remote.owner)/\(remote.name)")
+                        LabeledContent("Branch", value: remote.branch)
+                    } else if repo.isSample {
+                        Text("Sample repository")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No remote repository")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if repo.pendingPush {
+                        Label("Changes saved locally, not yet pushed", systemImage: "arrow.up.circle.dotted")
+                            .foregroundStyle(.orange)
+                    }
+
+                    if repo.remote != nil {
+                        Button {
+                            Task { isSyncing = true; await app.sync(); isSyncing = false }
+                        } label: {
+                            HStack {
+                                Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                                if isSyncing { Spacer(); ProgressView() }
+                            }
+                        }
+                        .disabled(isSyncing)
+                    }
+                } else {
+                    Text("No repository connected.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("GitHub") {
+                if let login = app.github.login {
+                    LabeledContent("Signed in", value: "@\(login)")
+                    Button {
+                        showConnect = true
+                    } label: {
+                        Label("Manage repository", systemImage: "arrow.left.arrow.right")
+                    }
+                } else {
+                    Button {
+                        showConnect = true
+                    } label: {
+                        Label("Connect GitHub", systemImage: "person.crop.circle.badge.plus")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Git & Sync")
+        .sheet(isPresented: $showConnect) {
+            GitHubConnectView()
+        }
+    }
+}
+
+private struct AboutSettingsView: View {
+    let engineVersion: String?
+
+    var body: some View {
+        List {
+            Section("App") {
+                LabeledContent("Version", value: Bundle.main.shortVersion)
+            }
+
+            Section("Engine") {
+                LabeledContent("knurled-core", value: engineVersion ?? "—")
+            }
+        }
+        .navigationTitle("About")
     }
 }

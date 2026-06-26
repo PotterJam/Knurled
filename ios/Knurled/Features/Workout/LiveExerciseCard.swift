@@ -3,8 +3,10 @@ import SwiftUI
 struct LiveExerciseCard: View {
     let live: LiveItem
     let controller: WorkoutLiveController
-    var isCollapsedForDrag = false
+    /// Non-nil only for exercises the user added this session, which can be removed.
+    var onDelete: (() -> Void)? = nil
     @State private var showChange = false
+    @State private var confirmDelete = false
     @State private var editingSet: LiveSet?
     @State private var editingValue: SetValueEdit?
 
@@ -13,40 +15,6 @@ struct LiveExerciseCard: View {
     private var isCurrentExercise: Bool { controller.isCurrentExercise(live) }
 
     var body: some View {
-        if isCollapsedForDrag {
-            collapsedBody
-        } else {
-            fullBody
-        }
-    }
-
-    private var collapsedBody: some View {
-        HStack(spacing: 10) {
-            Text(live.item.display.title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-            if let tier = WorkoutFormat.tier(fromLane: live.item.progressionLane) {
-                TierBadge(tier: tier)
-            }
-            if let phaseText {
-                StatusChip(text: phaseText, style: .neutral)
-            }
-            if live.isTrackingOnlyExtra {
-                StatusChip(text: "Extra", style: .neutral)
-            }
-            Spacer()
-            Image(systemName: live.isComplete ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(live.isComplete ? palette.accent : .secondary)
-        }
-        .padding(.horizontal, KnurledTheme.Spacing.m)
-        .padding(.vertical, 10)
-        .background(
-            Color(uiColor: .secondarySystemBackground),
-            in: RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
-        )
-    }
-
-    private var fullBody: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(live.item.display.title).font(.headline)
@@ -67,6 +35,14 @@ struct LiveExerciseCard: View {
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Exercise options")
                 }
+                if onDelete != nil {
+                    Button { confirmDelete = true } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(palette.danger)
+                    .accessibilityLabel("Remove exercise")
+                }
             }
 
             if live.isSwapped {
@@ -81,9 +57,10 @@ struct LiveExerciseCard: View {
             if live.hasWarmups { warmupSection }
 
             VStack(spacing: 6) {
-                ForEach(live.sets) { set in
+                ForEach(Array(live.sets.enumerated()), id: \.element.id) { index, set in
                     SetRowView(
                         set: set,
+                        indexLabel: "\(index + 1)",
                         isAmrap: live.isAmrap,
                         isLastSet: set.id == live.lastRequiredSetID,
                         isCurrent: controller.isCurrent(set),
@@ -91,7 +68,13 @@ struct LiveExerciseCard: View {
                         onEditReps: { editingValue = .reps(set) },
                         onEditDetails: { editingSet = set },
                         onToggled: { controller.toggle(set: set, in: live) },
-                        onChanged: { controller.modelChanged() }
+                        onChanged: { controller.modelChanged() },
+                        onDelete: set.isExtra ? {
+                            withAnimation(.snappy) {
+                                live.removeSet(set)
+                                controller.modelChanged()
+                            }
+                        } : nil
                     )
                     if set.id != live.sets.last?.id { Divider() }
                 }
@@ -120,33 +103,29 @@ struct LiveExerciseCard: View {
                 controller.modelChanged()
             }
         }
-        .sheet(item: $editingSet) { set in SetDetailSheet(set: set) }
-        .sheet(item: $editingValue) { edit in
-            switch edit {
-            case .load(let set):
-                LoadValueEditor(set: set, units: live.units) {
-                    controller.modelChanged()
-                }
-                .presentationDetents([.height(250)])
-            case .reps(let set):
-                RepsValueEditor(set: set) {
-                    controller.modelChanged()
-                }
-                .presentationDetents([.height(300)])
-            }
+        .setEditingSheets(editingSet: $editingSet, editingValue: $editingValue, units: live.units) {
+            controller.modelChanged()
+        }
+        .confirmationDialog(
+            "Remove \(live.item.display.title)?",
+            isPresented: $confirmDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Exercise", role: .destructive) { onDelete?() }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
     @ViewBuilder private var warmupSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             let visibleWarmups = live.visibleWarmups
-            ForEach(visibleWarmups) { set in
+            ForEach(Array(visibleWarmups.enumerated()), id: \.element.id) { index, set in
                 SetRowView(
                     set: set,
+                    indexLabel: visibleWarmups.count > 1 ? "W\(index + 1)" : "W",
                     isAmrap: false,
                     isLastSet: set.id == live.warmups.last?.id,
                     isCurrent: controller.isCurrent(set),
-                    isWarmup: true,
                     onEditLoad: { editingValue = .load(set) },
                     onEditReps: { editingValue = .reps(set) },
                     onEditDetails: { editingSet = set },
@@ -203,7 +182,7 @@ struct LiveExerciseCard: View {
 
 }
 
-private enum SetValueEdit: Identifiable {
+enum SetValueEdit: Identifiable {
     case load(LiveSet)
     case reps(LiveSet)
 
@@ -215,37 +194,110 @@ private enum SetValueEdit: Identifiable {
     }
 }
 
+/// Hosts the load / reps / details editing sheets shared by the working-set card and the
+/// combined warm-up block so both edit a set the same way.
+private struct SetEditingSheets: ViewModifier {
+    @Binding var editingSet: LiveSet?
+    @Binding var editingValue: SetValueEdit?
+    let units: Units
+    let onChanged: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $editingSet) { set in SetDetailSheet(set: set) }
+            .sheet(item: $editingValue) { edit in
+                switch edit {
+                case .load(let set):
+                    LoadValueEditor(set: set, units: units, onChanged: onChanged)
+                        .presentationDetents([.height(250)])
+                case .reps(let set):
+                    RepsValueEditor(set: set, onChanged: onChanged)
+                        .presentationDetents([.height(300)])
+                }
+            }
+    }
+}
+
+extension View {
+    func setEditingSheets(
+        editingSet: Binding<LiveSet?>,
+        editingValue: Binding<SetValueEdit?>,
+        units: Units,
+        onChanged: @escaping () -> Void
+    ) -> some View {
+        modifier(SetEditingSheets(
+            editingSet: editingSet,
+            editingValue: editingValue,
+            units: units,
+            onChanged: onChanged
+        ))
+    }
+}
+
+/// The small leading chip showing the set number (1, 2, 3…) or "W" for a warm-up set.
+private struct SetIndexBadge: View {
+    let label: String
+    let isCurrent: Bool
+
+    @Environment(\.knurledPalette) private var palette
+
+    var body: some View {
+        Text(label)
+            .font(.caption.weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(isCurrent ? palette.accent : .secondary)
+            .frame(width: 26, height: 26)
+            .background(
+                Color(uiColor: .tertiarySystemFill),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .overlay {
+                if isCurrent {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(palette.accent, lineWidth: 1.5)
+                }
+            }
+    }
+}
+
 struct SetRowView: View {
     let set: LiveSet
+    /// Number shown in the leading badge — the set position, or "W"/"W1"… for warm-ups.
+    let indexLabel: String
     let isAmrap: Bool
     let isLastSet: Bool
     /// The single active set across the whole workout. Rows stay directly actionable even when
     /// they are not current, but the active one gets a little extra emphasis.
     let isCurrent: Bool
-    var isWarmup: Bool = false
     var onEditLoad: () -> Void
     var onEditReps: () -> Void
     var onEditDetails: () -> Void
     var onToggled: () -> Void
     var onChanged: () -> Void
+    /// Non-nil only for user-added sets, which can be swiped away.
+    var onDelete: (() -> Void)? = nil
 
     @Environment(\.knurledPalette) private var palette
+    @State private var offset: CGFloat = 0
+    @State private var revealed = false
 
+    private let revealWidth: CGFloat = 76
     private var isAmrapFinal: Bool { isAmrap && isLastSet }
 
     var body: some View {
-        @Bindable var set = set
-        HStack(spacing: 12) {
-            Button(action: onToggled) {
-                Image(systemName: set.logged ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(set.logged ? palette.accent : .secondary)
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
+        if onDelete != nil {
+            swipeableRow
+        } else {
+            rowContent
+        }
+    }
 
-            editablePrescription
+    private var rowContent: some View {
+        @Bindable var set = set
+        return HStack(spacing: 12) {
+            SetIndexBadge(label: indexLabel, isCurrent: isCurrent && !set.logged)
+
+            prescriptionView
                 .font(.subheadline.weight(isCurrent && !set.logged ? .semibold : .regular))
 
             Spacer(minLength: 8)
@@ -253,38 +305,97 @@ struct SetRowView: View {
             if set.logged {
                 Button(action: onEditDetails) {
                     Image(systemName: "ellipsis.circle")
+                        .font(.title3)
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Set details")
             }
+
+            Button(action: onToggled) {
+                Image(systemName: set.logged ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundStyle(set.logged ? palette.accent : .secondary)
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
         }
-        .frame(minHeight: 34)
+        .frame(minHeight: 38)
         .padding(.vertical, 1)
         .opacity(rowOpacity)
     }
 
-    private var editablePrescription: some View {
-        HStack(spacing: 5) {
-            if isWarmup {
-                Text("W")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
+    private var swipeableRow: some View {
+        ZStack(alignment: .trailing) {
+            Button {
+                onDelete?()
+            } label: {
+                Image(systemName: "trash.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: revealWidth, height: 44)
+                    .background(palette.danger, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            ValueChip(text: loadText, isChanged: set.load != set.prescribed.load, action: onEditLoad)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Delete set")
+
+            rowContent
+                .background(Color(uiColor: .secondarySystemBackground))
+                .offset(x: offset)
+                .gesture(swipeGesture)
+        }
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 14)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                let base = revealed ? -revealWidth : 0
+                offset = max(-revealWidth, min(0, base + value.translation.width))
+            }
+            .onEnded { _ in
+                withAnimation(.snappy) {
+                    revealed = offset < -revealWidth / 2
+                    offset = revealed ? -revealWidth : 0
+                }
+            }
+    }
+
+    private var prescriptionView: some View {
+        HStack(spacing: 5) {
+            if showPrescribedReference {
+                Text(prescribedText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .strikethrough()
+                Image(systemName: "arrow.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            ValueChip(text: loadText, isChanged: loadChanged, action: onEditLoad)
             Text("×")
                 .foregroundStyle(.secondary)
             ValueChip(text: "\(displayReps)\(amrapMarker)\(rpeSuffix)", isChanged: repsChanged, action: onEditReps)
         }
     }
 
-    private var prefix: String {
-        return isWarmup ? "W " : ""
+    private var showPrescribedReference: Bool {
+        self.set.logged && (loadChanged || repsChanged)
+    }
+
+    private var prescribedText: String {
+        let load = set.prescribed.load ?? "bw"
+        return "\(load)×\(set.prescribed.targetReps)\(set.prescribed.amrap ? "+" : "")"
     }
 
     private var loadText: String {
         return set.load ?? "bodyweight"
+    }
+
+    private var loadChanged: Bool {
+        return set.load != set.prescribed.load
     }
 
     private var displayReps: Int {
@@ -478,6 +589,73 @@ private struct RepsValueEditor: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+        }
+    }
+}
+
+/// All of a session's warm-up exercises shown as one compact card: each exercise gets a small
+/// name label above its set rows, instead of every warm-up being its own full-height card.
+struct WarmupBlockCard: View {
+    let items: [LiveItem]
+    let controller: WorkoutLiveController
+
+    @State private var editingSet: LiveSet?
+    @State private var editingValue: SetValueEdit?
+    @Environment(\.knurledPalette) private var palette
+
+    private var units: Units { items.first?.units ?? .kg }
+    private var completedCount: Int { items.filter(\.isComplete).count }
+    private var allComplete: Bool { !items.isEmpty && completedCount == items.count }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Warm Up", systemImage: "flame")
+                    .font(.headline)
+                Spacer()
+                if allComplete {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(palette.accent)
+                } else {
+                    Text("\(completedCount)/\(items.count)")
+                        .font(.caption.weight(.medium).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ForEach(items) { item in
+                warmupItemSection(item)
+                if item.id != items.last?.id {
+                    Divider().padding(.vertical, 2)
+                }
+            }
+        }
+        .knurledCard()
+        .setEditingSheets(editingSet: $editingSet, editingValue: $editingValue, units: units) {
+            controller.modelChanged()
+        }
+    }
+
+    @ViewBuilder private func warmupItemSection(_ item: LiveItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.item.display.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ForEach(Array(item.sets.enumerated()), id: \.element.id) { index, set in
+                SetRowView(
+                    set: set,
+                    indexLabel: item.sets.count > 1 ? "W\(index + 1)" : "W",
+                    isAmrap: false,
+                    isLastSet: set.id == item.sets.last?.id,
+                    isCurrent: controller.isCurrent(set),
+                    onEditLoad: { editingValue = .load(set) },
+                    onEditReps: { editingValue = .reps(set) },
+                    onEditDetails: { editingSet = set },
+                    onToggled: { controller.toggle(set: set, in: item) },
+                    onChanged: { controller.modelChanged() }
+                )
             }
         }
     }

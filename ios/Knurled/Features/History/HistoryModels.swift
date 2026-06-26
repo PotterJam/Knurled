@@ -32,20 +32,26 @@ struct HistoryItem: Identifiable, Hashable {
 
 enum HistoryBuilder {
     static func items(from records: [DayRecord]) -> [HistoryItem] {
-        records
+        var activeProgram: String?
+        return records
             .sorted { $0.date < $1.date }
-            .compactMap(item(from:))
+            .compactMap { record -> HistoryItem? in
+                // Program markers set the context that following workouts inherit, so a workout
+                // row can be labelled with the program it belongs to.
+                if let program = record.program { activeProgram = program }
+                return item(from: record, activeProgram: activeProgram)
+            }
             .reversed()
     }
 
-    private static func item(from record: DayRecord) -> HistoryItem? {
+    private static func item(from record: DayRecord, activeProgram: String?) -> HistoryItem? {
         let date = WorkoutFormat.relativeDay(fromISO: record.date) ?? record.date
         if !record.lifts.isEmpty {
             let isPartial = record.status == ExecutionStatus.partial
             return HistoryItem(
                 id: record.date,
-                title: title(for: record),
-                detail: detail(for: record, date: date),
+                title: title(for: record, activeProgram: activeProgram),
+                detail: date,
                 status: isPartial ? "Partial" : "Recorded",
                 statusStyle: isPartial ? .warn : .ok,
                 kind: .workout,
@@ -55,7 +61,7 @@ enum HistoryBuilder {
         if let program = record.program {
             return HistoryItem(
                 id: record.date,
-                title: program,
+                title: programShorthand(program),
                 detail: date,
                 status: "Program",
                 statusStyle: .neutral,
@@ -66,19 +72,23 @@ enum HistoryBuilder {
         return nil
     }
 
-    private static func title(for record: DayRecord) -> String {
+    private static func title(for record: DayRecord, activeProgram: String?) -> String {
+        // Prefer the program shorthand plus the cycle/session (e.g. "GZCLP · A1") over a raw lift
+        // count, which warm-ups and accessories inflate misleadingly.
+        let program = activeProgram.map(programShorthand)
+        let cycle = record.sessionId?.uppercased()
+        let label = [program, cycle].compactMap { $0 }.joined(separator: " · ")
+        if !label.isEmpty { return label }
+
         if record.lifts.count == 1, let lift = record.lifts.first {
             return lift.exercise.replacingOccurrences(of: "_", with: " ").capitalized
         }
         return "\(record.lifts.count) lifts"
     }
 
-    private static func detail(for record: DayRecord, date: String) -> String {
-        let names = record.lifts
-            .prefix(3)
-            .map { $0.exercise.replacingOccurrences(of: "_", with: " ").capitalized }
-            .joined(separator: ", ")
-        return [date, names].filter { !$0.isEmpty }.joined(separator: " · ")
+    /// "gzcl.gzclp" → "GZCLP": the last dotted component, upper-cased, as a compact label.
+    static func programShorthand(_ program: String) -> String {
+        (program.split(separator: ".").last.map(String.init) ?? program).uppercased()
     }
 }
 

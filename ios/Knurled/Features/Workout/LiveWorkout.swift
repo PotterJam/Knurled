@@ -137,6 +137,12 @@ final class LiveItem: Identifiable {
         sets.append(LiveSet(prescribed: prescribed, defaultLoad: prescribed.load, isExtra: true))
     }
 
+    /// Only user-added (extra) sets can be removed; prescribed sets stay put.
+    func removeSet(_ set: LiveSet) {
+        guard set.isExtra else { return }
+        sets.removeAll { $0 === set }
+    }
+
     func swap(to alternative: ExerciseAlternative) {
         performedExercise = alternative.exercise
         swapLabel = alternative.label
@@ -382,6 +388,12 @@ final class LiveWorkout: Identifiable {
         let moved = items.remove(at: sourceIndex)
         let adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
         items.insert(moved, at: adjustedTarget)
+    }
+
+    /// Remove an exercise the user added for this session. Prescribed plan exercises stay put.
+    func removeItem(_ item: LiveItem) {
+        guard item.isTrackingOnlyExtra else { return }
+        items.removeAll { $0.id == item.id }
     }
 
     @discardableResult

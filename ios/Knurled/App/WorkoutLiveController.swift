@@ -218,7 +218,8 @@ final class WorkoutLiveController {
     private func afterLog(item: LiveItem, wasWarmup: Bool) {
         clearFocusIfDone()
         syncAmrap()
-        if currentTarget != nil, !wasWarmup {
+        // Ramp-up sets and whole warm-up exercises are guidance only — no rest countdown between them.
+        if currentTarget != nil, !wasWarmup, !item.isSessionWarmup {
             startRest(seconds: item.item.rest.seconds)
         } else {
             stopRest()
