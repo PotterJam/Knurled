@@ -3,6 +3,11 @@
 - Status: Reconciled by [ADR 0007](0007-logs-as-record-state-as-truth.md)
 - Date: 2026-06-24
 
+> Reconciliation note: the `plan_changed` event shape below is historical. ADR 0007 removed
+> replay-bound lifecycle events along with JSONL event logs. Program boundaries are now optional,
+> human-facing `DayRecord` markers (`{ "date": "…", "program": "…" }`) in the monthly record;
+> the engine ignores them for progression.
+
 ## Context
 
 A training repo's plan changes over time (mvp-spec §12):
@@ -65,11 +70,9 @@ Rules:
 
 ## Implementation status
 
-- **Done:** `TrainingEvent` carries the optional `change_kind`, `from`, and `to` fields needed by
-  `plan_changed`; replay recognises `plan_changed` as a marker and updates `last_event_id` without
-  mutating plan content or progression state.
-- **Used by ADR 0005:** historical imports may pair `session_imported` workout facts with a
-  `plan_changed` boundary when the import marks the transition from a prior tool/program into a
-  FitSpec plan.
-- **Still to do:** emit `plan_changed` automatically from plan-edit, patch, phase-complete, and
-  program-complete workflows; surface a program timeline in the app/workbench.
+- **Retired by ADR 0007:** `TrainingEvent`, replay recognition, and automatic `plan_changed`
+  emission are no longer part of the current architecture.
+- **Replacement:** monthly records may include a dated `program` marker for human history,
+  charts, and backtest segmentation. This marker is record data, not a replay instruction.
+- **Still useful from this ADR:** the product intent survives: make program boundaries visible in
+  history without duplicating plan content.

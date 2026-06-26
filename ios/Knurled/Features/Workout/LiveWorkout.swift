@@ -25,23 +25,50 @@ final class LiveSet: Identifiable {
     let isWarmup: Bool
     var reps: Int
     var load: String?
+    var rpe: Double?
     var logged: Bool
+    var isExtra: Bool
     /// Warmups are guidance-only, so a user can advance past an early ramp set without
     /// recording it as performed. Bypassed warmups are ignored by the active cursor.
     var bypassed: Bool
 
-    init(prescribed: PrescribedSet, defaultLoad: String?, isWarmup: Bool = false) {
+    init(prescribed: PrescribedSet, defaultLoad: String?, isWarmup: Bool = false, isExtra: Bool = false) {
         self.id = prescribed.set
         self.prescribed = prescribed
         self.isWarmup = isWarmup
         self.reps = prescribed.targetReps
         self.load = defaultLoad ?? prescribed.load
+        self.rpe = nil
         self.logged = false
         self.bypassed = false
+        self.isExtra = isExtra
     }
 
     var isAdjusted: Bool {
         load != prescribed.load
+    }
+
+    var metrics: [String: String] {
+        guard let rpe else { return [:] }
+        return ["rpe": Self.formatRPE(rpe)]
+    }
+
+    var rpeText: String? {
+        guard let rpe else { return nil }
+        return Self.formatRPE(rpe)
+    }
+
+    static func formatRPE(_ value: Double) -> String {
+        let rounded = (value * 2).rounded() / 2
+        if rounded.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(rounded))
+        }
+        return String(format: "%.1f", rounded)
+    }
+
+    static func parseRPE(_ value: String?) -> Double? {
+        guard let value, let parsed = Double(value) else { return nil }
+        return min(10, max(1, (parsed * 2).rounded() / 2))
     }
 }
 
@@ -51,6 +78,7 @@ final class LiveItem: Identifiable {
     let id: String
     let item: RenderedItem
     let units: Units
+    let isTrackingOnlyExtra: Bool
     var warmups: [LiveSet]
     var sets: [LiveSet]
     var todayLoad: String?
@@ -58,10 +86,11 @@ final class LiveItem: Identifiable {
     var swapLabel: String?
     var swapPolicy: SwapPolicy?
 
-    init(item: RenderedItem, units: Units) {
+    init(item: RenderedItem, units: Units, isTrackingOnlyExtra: Bool = false) {
         self.id = item.itemId
         self.item = item
         self.units = units
+        self.isTrackingOnlyExtra = isTrackingOnlyExtra
         self.warmups = item.prescription.warmups.map { LiveSet(prescribed: $0, defaultLoad: $0.load, isWarmup: true) }
         self.sets = item.prescription.sets.map { LiveSet(prescribed: $0, defaultLoad: $0.load) }
     }
@@ -70,10 +99,12 @@ final class LiveItem: Identifiable {
 
     var mode: String { item.executionContract.recommendedInput }
     var isAmrap: Bool { item.executionContract.recommendedInput == InputMode.amrapFinalSet }
-    var required: Bool { item.executionContract.requiredForCompletion }
+    var required: Bool { item.executionContract.requiredForCompletion && !isTrackingOnlyExtra }
     var prescribedLoad: String? { item.prescription.sets.first?.load }
     var currentLoad: String? { todayLoad ?? sets.first?.load ?? prescribedLoad }
-    var isComplete: Bool { sets.allSatisfy(\.logged) }
+    var requiredSets: [LiveSet] { sets.filter { !$0.isExtra } }
+    var lastRequiredSetID: Int? { requiredSets.last?.id }
+    var isComplete: Bool { requiredSets.allSatisfy(\.logged) }
     var anyLogged: Bool { sets.contains(where: \.logged) }
     var isAdjusted: Bool { sets.contains(where: \.isAdjusted) }
     var visibleWarmups: [LiveSet] {
@@ -89,6 +120,19 @@ final class LiveItem: Identifiable {
     var isSwapped: Bool { performedExercise != nil }
     var prescribedExerciseName: String { Self.titleCase(item.exercise) }
     var performedExerciseName: String { swapLabel ?? Self.titleCase(performedExercise ?? item.exercise) }
+
+    func addSet() {
+        let previous = sets.last
+        let nextID = (sets.map(\.id).max() ?? 0) + 1
+        let prescribed = PrescribedSet(
+            set: nextID,
+            load: previous?.load ?? currentLoad,
+            targetReps: previous?.reps ?? previous?.prescribed.targetReps ?? 5,
+            amrap: false,
+            percentage: nil
+        )
+        sets.append(LiveSet(prescribed: prescribed, defaultLoad: prescribed.load, isExtra: true))
+    }
 
     func swap(to alternative: ExerciseAlternative) {
         performedExercise = alternative.exercise
@@ -127,9 +171,25 @@ final class LiveItem: Identifiable {
             adjust(load: weight, scope: .wholeExercise, from: sets.first?.id ?? 1)
         }
 
+        let restoredSetCount = max(lift.sets.count, lift.actual.map(\.set).max() ?? 0)
+        while sets.count < restoredSetCount {
+            addSet()
+        }
+
         for (index, reps) in lift.sets.enumerated() where index < sets.count {
             sets[index].reps = reps
             sets[index].logged = true
+        }
+
+        if !lift.actual.isEmpty {
+            let actual = lift.actual.sorted { $0.set < $1.set }
+            for performed in actual {
+                guard let set = sets.first(where: { $0.id == performed.set }) else { continue }
+                set.reps = performed.reps
+                set.load = performed.load
+                set.rpe = LiveSet.parseRPE(performed.metrics["rpe"])
+                set.logged = true
+            }
         }
     }
 
@@ -178,8 +238,8 @@ final class LiveItem: Identifiable {
         ItemInput(
             itemId: id,
             mode: InputMode.perSetReps,
-            sets: sets.filter(\.logged).map { ActualSet(set: $0.id, load: $0.load, reps: $0.reps) },
-            performedExercise: performedExercise,
+            sets: sets.filter(\.logged).map { ActualSet(set: $0.id, load: $0.load, reps: $0.reps, metrics: $0.metrics) },
+            performedExercise: performedExercise ?? (isTrackingOnlyExtra ? item.exercise : nil),
             swapReason: isSwapped ? "preferred alternative" : nil,
             swapPolicy: swapPolicy
         )
@@ -193,19 +253,20 @@ final class LiveItem: Identifiable {
             return ItemInput(
                 itemId: id,
                 mode: InputMode.amrapFinalSet,
-                finalSetReps: sets.last?.reps ?? 0,
+                finalSetReps: requiredSets.last?.reps ?? 0,
+                sets: sets.filter { !$0.isExtra || $0.logged }.map { ActualSet(set: $0.id, load: $0.load, reps: $0.reps, metrics: $0.metrics) },
                 load: overrideLoad,
                 performedExercise: performed,
                 swapReason: reason,
                 swapPolicy: swapPolicy
             )
         }
-        let actual = sets.map { ActualSet(set: $0.id, load: $0.load, reps: $0.reps) }
+        let actual = sets.filter { !$0.isExtra || $0.logged }.map { ActualSet(set: $0.id, load: $0.load, reps: $0.reps, metrics: $0.metrics) }
         return ItemInput(
             itemId: id,
             mode: InputMode.perSetReps,
             sets: actual,
-            performedExercise: performed,
+            performedExercise: performed ?? (isTrackingOnlyExtra ? item.exercise : nil),
             swapReason: reason,
             swapPolicy: swapPolicy
         )
@@ -233,10 +294,24 @@ final class LiveWorkout: Identifiable {
     private func restore(_ record: DayRecord) {
         var restoredItemIDs = Set<String>()
         for lift in record.lifts {
-            guard let item = item(matching: lift, excluding: restoredItemIDs) else { continue }
+            guard let item = item(matching: lift, excluding: restoredItemIDs) ?? restoreExtra(from: lift) else { continue }
             item.restore(from: lift)
             restoredItemIDs.insert(item.id)
         }
+    }
+
+    private func restoreExtra(from lift: LiftRecord) -> LiveItem? {
+        guard let itemID = lift.itemId, itemID.hasPrefix("extra.") else { return nil }
+        let item = Self.extraItem(
+            id: itemID,
+            exercise: lift.exercise,
+            load: lift.weight,
+            sets: max(lift.sets.count, lift.actual.count, 1),
+            reps: lift.sets.first ?? lift.actual.first?.reps ?? 5,
+            units: repo.plan?.plan.units ?? .kg
+        )
+        items.append(item)
+        return item
     }
 
     private func item(matching lift: LiftRecord, excluding restoredItemIDs: Set<String>) -> LiveItem? {
@@ -291,6 +366,75 @@ final class LiveWorkout: Identifiable {
             savedAt: isComplete ? nil : timestamp,
             inputs: inputs
         )
+    }
+
+    func moveItem(from sourceID: String, before targetID: String) {
+        guard sourceID != targetID,
+              let sourceIndex = items.firstIndex(where: { $0.id == sourceID }),
+              let targetIndex = items.firstIndex(where: { $0.id == targetID }) else { return }
+        let moved = items.remove(at: sourceIndex)
+        let adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+        items.insert(moved, at: adjustedTarget)
+    }
+
+    @discardableResult
+    func addExtraExercise(exercise: String, load: String?, setCount: Int, reps: Int) -> LiveItem {
+        let item = Self.extraItem(
+            id: "extra.\(UUID().uuidString.lowercased())",
+            exercise: LiveItem.normalized(exercise),
+            load: load,
+            sets: setCount,
+            reps: reps,
+            units: repo.plan?.plan.units ?? .kg
+        )
+        items.append(item)
+        return item
+    }
+
+    private static func extraItem(
+        id: String,
+        exercise: String,
+        load: String?,
+        sets setCount: Int,
+        reps: Int,
+        units: Units
+    ) -> LiveItem {
+        let normalized = LiveItem.normalized(exercise)
+        let safeSetCount = max(1, min(20, setCount))
+        let safeReps = max(0, min(99, reps))
+        let defaultLoad = load ?? LiveItem.defaultBaseLoad(for: normalized, units: units)
+        let prescribedSets = (1...safeSetCount).map {
+            PrescribedSet(set: $0, load: defaultLoad, targetReps: safeReps, amrap: false, percentage: nil)
+        }
+        let rendered = RenderedItem(
+            itemId: id,
+            slotId: id,
+            progressionLane: "",
+            progressionRule: "tracking_only",
+            exercise: normalized,
+            display: DisplayFields(title: LiveItem.titleCase(normalized), subtitle: "Extra work"),
+            prescription: Prescription(sets: prescribedSets),
+            executionContract: ExecutionContract(
+                recommendedInput: InputMode.perSetReps,
+                fallbackInputs: [],
+                completionRule: "optional",
+                eventTemplate: "tracking_only_v1",
+                requiredForCompletion: false,
+                inputSchema: InputSchema(mode: InputMode.perSetReps, fields: [], fallback: nil)
+            ),
+            effectPreview: EffectPreview(pass: [], fail: [], adjustedToday: []),
+            rest: RestPrescription(seconds: 90, source: "extra", key: "extra"),
+            identity: ItemIdentity(
+                itemId: id,
+                slotId: id,
+                progressionLane: "",
+                progressionRule: "tracking_only",
+                planHash: "",
+                renderedSessionHash: ""
+            ),
+            exerciseOptions: nil
+        )
+        return LiveItem(item: rendered, units: units, isTrackingOnlyExtra: true)
     }
 
     static func timestamp() -> String {

@@ -17,7 +17,7 @@
 use knurled_core::{
     CompiledPlan, DayRecord, ENGINE_VERSION, ExecutionInput, PatchFile, StateProjection, SubmitMode,
     backtest, build_outputs, builtin_template, builtin_templates, compile_plan, create_initial_state,
-    render_lockfile, render_next, simulate, submit_session, validate_compiled,
+    exercise_catalog, render_lockfile, render_next, simulate, submit_session, validate_compiled,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -235,6 +235,11 @@ pub fn builtin_template_catalog() -> String {
         }));
     }
     ok(templates)
+}
+
+#[wasm_bindgen]
+pub fn exercise_catalog_json() -> String {
+    ok(exercise_catalog())
 }
 
 /// Generate a correct `fitspec.lock` body for a freshly authored plan's template.

@@ -40,12 +40,24 @@ char *knurled_render_session(const char *dir, const char *session_id);
 /* -> execution_input_validation */
 char *knurled_validate_execution_input(const char *dir, const char *execution_input_json);
 
+/* Previews an engine-owned plan edit without mutating the repo. The edit JSON is a typed
+ * PlanEdit payload owned by knurled-core. -> plan edit outcome */
+char *knurled_preview_plan_edit(const char *dir, const char *plan_edit_json);
+
+/* Applies an engine-owned plan edit. On invalid validation, returns applied=false and does
+ * not write files. On success, writes canonical/generated files and returns changed paths.
+ * -> plan edit outcome */
+char *knurled_apply_plan_edit(const char *dir, const char *plan_edit_json);
+
 /* -> engine version string */
 char *knurled_engine_version(void);
 
 /* Lists the built-in starter templates (reference, display_name, description) so the app
  * never hardcodes template ids or names. -> array of template descriptors */
 char *knurled_builtin_templates(void);
+
+/* Lists built-in exercise metadata for picker/search UI. -> array of exercise descriptors */
+char *knurled_exercise_catalog(void);
 
 /* Releases a string returned by any function above. */
 void knurled_string_free(char *ptr);

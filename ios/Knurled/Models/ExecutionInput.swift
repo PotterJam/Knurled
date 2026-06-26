@@ -46,8 +46,36 @@ struct ActualSet: Codable, Sendable, Hashable, Identifiable {
     var set: Int
     var load: String?
     var reps: Int
+    var metrics: [String: String]
 
     var id: Int { self.set }
+
+    enum CodingKeys: String, CodingKey {
+        case set, load, reps, metrics
+    }
+
+    init(set: Int, load: String?, reps: Int, metrics: [String: String] = [:]) {
+        self.set = set
+        self.load = load
+        self.reps = reps
+        self.metrics = metrics
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        set = try container.decode(Int.self, forKey: .set)
+        load = try container.decodeIfPresent(String.self, forKey: .load)
+        reps = try container.decode(Int.self, forKey: .reps)
+        metrics = try container.decodeIfPresent([String: String].self, forKey: .metrics) ?? [:]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(set, forKey: .set)
+        try container.encodeIfPresent(load, forKey: .load)
+        try container.encode(reps, forKey: .reps)
+        if !metrics.isEmpty { try container.encode(metrics, forKey: .metrics) }
+    }
 }
 
 enum ExecutionStatus {

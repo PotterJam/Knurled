@@ -59,7 +59,12 @@ export default function App() {
       console.error("template catalog failed", e);
       workbench.setTemplates([]);
     }
-    workbench.setBaseExercises(exercisesData);
+    try {
+      workbench.setBaseExercises(engine.exerciseCatalog());
+    } catch (e) {
+      console.error("exercise catalog failed", e);
+      workbench.setBaseExercises(exercisesData);
+    }
     workbench.setReady(true);
   });
 

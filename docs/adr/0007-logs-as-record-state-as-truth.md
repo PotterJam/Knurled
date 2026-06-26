@@ -63,15 +63,22 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
      "date": "2026-06-24",
      "lifts": [
        { "exercise": "squat", "weight": "82.5kg", "sets": [5, 5, 3] },
-       { "exercise": "bench", "weight": "45kg", "sets": [10, 10, 8], "note": "felt strong" }
+       {
+         "exercise": "bench",
+         "weight": "45kg",
+         "sets": [10, 10, 8],
+         "actual": [{ "set": 3, "load": "45kg", "reps": 8, "metrics": { "rpe": "9" } }],
+         "note": "felt strong"
+       }
      ]
    }
    ```
 
    Dropped from the log: all hashes, `program` per session, `prescribed`, `outcome`,
    per-line `engine_version`, and the `continues`/`corrects`/`results_added`/`changes` plumbing.
-   Open, units-explicit per-set metrics (`rpe`, `rir`, later velocity — the one good idea from
-   ADR 0001) survive additively as optional keys.
+   The compact `sets` vector remains the ordinary strength record; optional `actual[]` is present
+   only when a set carries detail that cannot fit there, such as per-set metrics (`rpe`, `rir`,
+   later velocity — the one good idea from ADR 0001).
 
 6. **File layout & format: pretty JSON, grouped monthly.** `logs/<yyyy>/<mm>.json`, a top-level
    object with a `days[]` array. Pretty-printed (not minified). Monthly matches the existing iOS
@@ -105,6 +112,13 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
     honors the repo's Engine Boundary rule (clients render engine output, they don't reimplement
     engine concerns).
 
+11. **Tracking-only extra work is record data, not progression input.** A workout player may log
+    optional sets beyond the rendered prescription, or entirely added exercises for the day. These
+    inputs are recorded in `DayRecord.lifts` in the order submitted, but the reducer only applies
+    progression to rendered program items and their prescribed working-set numbers. Extra work can
+    be saved in partial workouts with minimal `item_id` metadata for resume, then becomes ordinary
+    human-facing record data on completion.
+
 ## Consequences
 
 - **Simpler engine.** `replay_events`, `fold_corrections`, the correction/continuation event
@@ -124,10 +138,8 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
 
 - **Greenfield reset.** No real logs exist in the repo (only `.gitkeep`), so there is nothing to
   migrate. Any developer fixtures are regenerated in the new shape.
-- **Phased delivery** (each its own change):
-  1. This ADR + superseded/amended markers + sample shapes. *(done)*
-  2. Engine: program-shaped `state`, the submit-time progression step (`advance`/`off day`/
-     `reset`), the lean log serializer/parser, and the standalone backtest — exposed over WASM/FFI.
-  3. Clients (CLI, workbench, iOS) call the engine serializer instead of hand-rolling logs.
-  4. Delete `replay_events`/`fold_corrections`/the projection-build path.
-  5. Amend `repo-contract.md` and mvp-spec §18–19 to match.
+- **Delivered:** engine-owned submit progression (`advance`/`off day`/`reset`), monthly lean log
+  parser/serializer, record-based backtest, WASM/FFI submit endpoints, partial-save resume
+  metadata, optional `actual[]` metrics, and tracking-only extra work recording.
+- **Still to update outside this ADR:** any remaining product/spec prose that still describes
+  replay events or correction/continuation plumbing.

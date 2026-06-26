@@ -62,6 +62,33 @@ fn exercise_options_parse_same_line_policy_directives() {
 }
 
 #[test]
+fn custom_exercises_parse_as_repo_owned_metadata() {
+    let plan = parse_plan(
+        r#"plan "Custom" {
+  template "gzcl.gzclp@1.0.0"
+  units kg
+
+  exercises {
+    landmine_press { label "Landmine Press"; pattern vertical_push; implement barbell }
+    belt_squat { label "Belt Squat"; pattern squat; implement machine }
+  }
+}
+"#,
+    )
+    .unwrap();
+
+    assert_eq!(plan.exercises["landmine_press"].label, "Landmine Press");
+    assert_eq!(
+        plan.exercises["landmine_press"].pattern.as_deref(),
+        Some("vertical_push")
+    );
+    assert_eq!(
+        plan.exercises["belt_squat"].implement.as_deref(),
+        Some("machine")
+    );
+}
+
+#[test]
 fn template_version_property_matches_at_form() {
     let at_form = parse_plan(
         r#"plan "P" {

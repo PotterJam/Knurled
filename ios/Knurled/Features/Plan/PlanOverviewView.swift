@@ -56,6 +56,24 @@ struct PlanOverviewView: View {
                     }
                 }
             }
+
+            Section("Edit") {
+                NavigationLink {
+                    QuickPlanEditView(repo: repo, plan: plan)
+                } label: {
+                    Label("Quick edits", systemImage: "slider.horizontal.3")
+                }
+                NavigationLink {
+                    PatchPlanEditView(repo: repo)
+                } label: {
+                    Label("Add patch", systemImage: "bandage")
+                }
+                NavigationLink {
+                    SwitchProgramView(repo: repo)
+                } label: {
+                    Label("Switch program", systemImage: "arrow.triangle.branch")
+                }
+            }
         }
     }
 

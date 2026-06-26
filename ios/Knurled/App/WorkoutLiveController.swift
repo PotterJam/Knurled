@@ -110,6 +110,20 @@ final class WorkoutLiveController {
         afterLog(item: item, wasWarmup: set.isWarmup)
     }
 
+    func toggle(set: LiveSet, in item: LiveItem) {
+        if set.logged {
+            set.logged = false
+            set.bypassed = false
+            syncAmrap()
+            updateActivity()
+            return
+        }
+
+        set.bypassed = false
+        set.logged = true
+        afterLog(item: item, wasWarmup: set.isWarmup)
+    }
+
     /// Advance past the current warmup without recording it as performed. Warmups are
     /// guidance-only, so this moves the cursor through the ramp without touching progression.
     func advanceCurrentWarmup() {

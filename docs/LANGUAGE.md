@@ -64,6 +64,7 @@ A plan is a single `plan "name" { … }` node. Inside it:
 | `starts` | | `starts { squat "80kg" … }` | Per-lift starting working weights. |
 | `training_maxes` | | `training_maxes { squat "140kg" … }` | Per-lift training maxes (for %-based templates). |
 | `accessories` | | `accessories { A1.T3 lat_pulldown … }` | Maps a `slot.tier` to an accessory exercise. |
+| `exercises` | | `exercises { landmine_press { … } }` | Repo-owned custom exercise metadata for app pickers/logging. |
 | `rest` | | `rest { … }` | Rest prescription, see below. |
 | `warmup` | | `warmup { … }` | Warmup (ramp-up) sets, see below. |
 | `equipment` | | `equipment { … }` | Available plates/dumbbells/bars for load rounding, see below. |
@@ -71,6 +72,21 @@ A plan is a single `plan "name" { … }` node. Inside it:
 | `assistance` | | `assistance …` | **Accepted but ignored** — reserved placeholder (mvp-spec §11). |
 
 Any other directive is a parse error.
+
+### `exercises`
+
+Optional repo-owned exercise metadata. This powers search/create UI and display labels; it is not
+a restrictive registry. Existing plans, logs, swaps, and patches may still use any exercise string.
+
+```kdl
+exercises {
+  landmine_press { label "Landmine Press"; pattern vertical_push; implement barbell }
+  belt_squat     { label "Belt Squat";     pattern squat;         implement machine }
+}
+```
+
+IDs are normalized like every other exercise name. `pattern` and `implement` are advisory metadata
+for clients; the engine does not reject unknown values.
 
 ### `rest`
 

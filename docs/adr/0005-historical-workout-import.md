@@ -3,6 +3,13 @@
 - Status: Superseded by [ADR 0007](0007-logs-as-record-state-as-truth.md)
 - Date: 2026-06-24
 
+> Supersession note: the flat staging format remains a useful import boundary, but the canonical
+> output is no longer `logs/imports/*.jsonl` or `session_imported` events. Imported workouts should
+> now be written as ordinary monthly `DayRecord.lifts` entries in `logs/<yyyy>/<mm>.json`, with
+> optional `actual[].metrics` for set-level details. Imported history still must not advance
+> `state/current.json` unless the user explicitly performs a reset/state edit.
+> The decision text below is retained as the historical import design, not current guidance.
+
 ## Context
 
 Users often have years of training history in tools such as Hevy, StrengthLevel, spreadsheets, or

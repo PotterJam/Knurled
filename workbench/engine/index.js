@@ -75,6 +75,8 @@ export const engine = {
 
   templateCatalog: () => unwrap(wasmCall("builtin_template_catalog")),
 
+  exerciseCatalog: () => unwrap(wasmCall("exercise_catalog_json")),
+
   lockFor: (templateRef) => unwrap(wasmCall("lock_for", templateRef)),
 
   version: () => unwrap(wasmCall("engine_version")),

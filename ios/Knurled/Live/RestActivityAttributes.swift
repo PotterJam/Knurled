@@ -26,17 +26,15 @@ struct RestActivityAttributes: ActivityAttributes {
         var amrapReps: Int       // staged rep count for an AMRAP final set
         var restEndDate: Date    // meaningful while `phase == .resting`
 
-        var setProgress: String {
-            "\(isWarmup ? "Warmup" : "Set") \(setNumber) of \(totalSets)"
-        }
-        var warmupAdvanceTitle: String {
-            setNumber < totalSets ? "Next warm-up" : "Start sets"
-        }
         var exerciseProgress: String { "Exercise \(exerciseIndex) of \(totalExercises)" }
         var loadReps: String {
-            let reps = isAmrap ? "\(targetReps)+ reps" : "\(targetReps) reps"
-            guard let loadText else { return reps }
-            return "\(loadText) · \(reps)"
+            let reps = isAmrap ? "\(targetReps)+" : "\(targetReps)"
+            guard let loadText else { return "x \(reps)" }
+            return "\(loadText) x \(reps)"
+        }
+        var compactSetLine: String {
+            let prefix = isWarmup ? "W " : ""
+            return "\(prefix)\(loadReps)"
         }
     }
 

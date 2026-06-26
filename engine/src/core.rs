@@ -56,6 +56,7 @@ pub fn compile_plan(
         starts: plan.starts,
         training_maxes: plan.training_maxes,
         accessories: plan.accessories,
+        exercises: plan.exercises,
         exercise_options: plan.exercise_options,
         rest: plan.rest,
         warmup: plan.warmup,
@@ -1601,17 +1602,42 @@ fn actual_sets_for(item: &RenderedItem, input: &ItemInput) -> Result<Vec<ActualS
                 .enumerate()
                 .map(|(index, set)| ActualSet {
                     set: set.set,
-                    load: input.load.clone().or_else(|| set.load.clone()),
+                    load: input
+                        .load
+                        .clone()
+                        .or_else(|| {
+                            input
+                                .sets
+                                .iter()
+                                .find(|actual| actual.set == set.set)
+                                .and_then(|actual| actual.load.clone())
+                        })
+                        .or_else(|| set.load.clone()),
                     reps: if index == item.prescription.sets.len() - 1 {
                         final_reps
                     } else {
                         set.target_reps
                     },
-                    metrics: Default::default(),
+                    metrics: input
+                        .sets
+                        .iter()
+                        .find(|actual| actual.set == set.set)
+                        .map(|actual| actual.metrics.clone())
+                        .unwrap_or_default(),
                 })
                 .collect())
         }
-        "per_set_reps" => Ok(input.sets.clone()),
+        "per_set_reps" => Ok(input
+            .sets
+            .iter()
+            .filter(|actual| {
+                item.prescription
+                    .sets
+                    .iter()
+                    .any(|prescribed| prescribed.set == actual.set)
+            })
+            .cloned()
+            .collect()),
         _ => Ok(item
             .prescription
             .sets

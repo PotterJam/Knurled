@@ -19,9 +19,9 @@ use serde::Deserialize;
 
 use crate::error::{KnurledError, Result};
 use crate::model::{
-    EquipmentProfile, ExerciseAlternative, ExerciseOptions, Implement, LockEntry, Lockfile, Map,
-    Patch, PatchOperation, Plan, RestPolicy, RoundingMode, SCHEMA_VERSION, Schedule, SwapPolicy,
-    Units, WarmupBasis, WarmupPolicy, WarmupScheme, WarmupStep,
+    CustomExercise, EquipmentProfile, ExerciseAlternative, ExerciseOptions, Implement, LockEntry,
+    Lockfile, Map, Patch, PatchOperation, Plan, RestPolicy, RoundingMode, SCHEMA_VERSION, Schedule,
+    SwapPolicy, Units, WarmupBasis, WarmupPolicy, WarmupScheme, WarmupStep,
 };
 use crate::templates::parse_template_ref;
 
@@ -43,6 +43,7 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
     let mut starts = Map::new();
     let mut training_maxes = Map::new();
     let mut accessories = Map::new();
+    let mut exercises = Map::new();
     let mut exercise_options = Map::new();
     let mut rest = RestPolicy::default();
     let mut warmup = WarmupPolicy::default();
@@ -56,6 +57,7 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
             "starts" => starts = normalize_lift_map(parse_pairs(node)?),
             "training_maxes" => training_maxes = normalize_lift_map(parse_pairs(node)?),
             "accessories" => accessories = normalize_accessory_map(parse_pairs(node)?),
+            "exercises" => exercises = parse_custom_exercises(node)?,
             "exercise_options" => exercise_options = parse_exercise_options(node)?,
             "rest" => rest = parse_rest(node)?,
             "warmup" => warmup = parse_warmup(node)?,
@@ -78,6 +80,7 @@ pub fn parse_plan(text: &str) -> Result<Plan> {
         starts,
         training_maxes,
         accessories,
+        exercises,
         exercise_options,
         rest,
         warmup,
@@ -231,6 +234,63 @@ fn parse_pairs(node: &KdlNode) -> Result<Map<String>> {
         }
     }
     Ok(values)
+}
+
+fn parse_custom_exercises(node: &KdlNode) -> Result<Map<CustomExercise>> {
+    let mut exercises = Map::new();
+    if let Some(body) = node.children() {
+        for entry in body.nodes() {
+            let raw_id = entry.name().value();
+            let id = normalize_exercise(raw_id);
+            let mut label = title_case(&id);
+            let mut pattern = None;
+            let mut implement = None;
+
+            if let Some(entry_body) = entry.children() {
+                for line in entry_body.nodes() {
+                    match line.name().value() {
+                        "label" => label = node_string_arg(line, "label")?,
+                        "pattern" => {
+                            pattern = Some(
+                                node_string_arg(line, "pattern")?
+                                    .trim()
+                                    .to_ascii_lowercase()
+                                    .replace(' ', "_"),
+                            );
+                        }
+                        "implement" => {
+                            implement = Some(
+                                node_string_arg(line, "implement")?
+                                    .trim()
+                                    .to_ascii_lowercase()
+                                    .replace(' ', "_"),
+                            );
+                        }
+                        other => {
+                            return Err(parse_error(format!(
+                                "unknown exercises directive for {id}: {other}"
+                            )));
+                        }
+                    }
+                }
+            }
+
+            if exercises
+                .insert(
+                    id.clone(),
+                    CustomExercise {
+                        label,
+                        pattern,
+                        implement,
+                    },
+                )
+                .is_some()
+            {
+                return Err(parse_error(format!("duplicate exercise: {id}")));
+            }
+        }
+    }
+    Ok(exercises)
 }
 
 fn parse_exercise_options(node: &KdlNode) -> Result<Map<ExerciseOptions>> {
@@ -639,6 +699,21 @@ pub fn normalize_exercise(value: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join("_")
+}
+
+fn title_case(value: &str) -> String {
+    value
+        .replace('_', " ")
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // ---------------------------------------------------------------------------

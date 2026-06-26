@@ -1,8 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ActiveWorkoutView: View {
     @State private var workout: LiveWorkout
     @State private var showFinish = false
+    @State private var showAddExercise = false
+    @State private var draggingItemID: String?
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -21,9 +24,26 @@ struct ActiveWorkoutView: View {
                 VStack(spacing: KnurledTheme.Spacing.m) {
                     progress
                     ForEach(workout.items) { item in
-                        LiveExerciseCard(live: item, controller: controller)
+                        LiveExerciseCard(
+                            live: item,
+                            controller: controller,
+                            isCollapsedForDrag: draggingItemID != nil && draggingItemID != item.id
+                        )
                             .id(item.id)
+                            .onDrag {
+                                draggingItemID = item.id
+                                return NSItemProvider(object: item.id as NSString)
+                            }
+                            .onDrop(
+                                of: [.plainText],
+                                delegate: ExerciseDropDelegate(
+                                    target: item,
+                                    workout: workout,
+                                    draggingItemID: $draggingItemID
+                                )
+                            )
                     }
+                    addExerciseRow
                 }
                 .padding()
             }
@@ -47,6 +67,13 @@ struct ActiveWorkoutView: View {
         }
         .sheet(isPresented: $showFinish) {
             FinishWorkoutView(workout: workout) { dismiss() }
+        }
+        .sheet(isPresented: $showAddExercise) {
+            AddExerciseSheet(repo: workout.repo, catalog: app.exerciseCatalog) { exercise, load, sets, reps in
+                let item = workout.addExtraExercise(exercise: exercise, load: load, setCount: sets, reps: reps)
+                controller.focus(item)
+                controller.modelChanged()
+            }
         }
         .alert("Couldn't save", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -82,6 +109,27 @@ struct ActiveWorkoutView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var addExerciseRow: some View {
+        Button {
+            showAddExercise = true
+        } label: {
+            Label("Add exercise", systemImage: "plus.circle")
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    Color(uiColor: .secondarySystemBackground),
+                    in: RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                        .foregroundStyle(.secondary.opacity(0.45))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
     private var bottomBar: some View {
         HStack(spacing: KnurledTheme.Spacing.m) {
             Button {
@@ -104,5 +152,27 @@ struct ActiveWorkoutView: View {
 
     private var submitIcon: String {
         workout.canSaveProgress ? "tray.and.arrow.down.fill" : "flag.checkered"
+    }
+}
+
+private struct ExerciseDropDelegate: DropDelegate {
+    let target: LiveItem
+    let workout: LiveWorkout
+    @Binding var draggingItemID: String?
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingItemID else { return }
+        workout.moveItem(from: draggingItemID, before: target.id)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingItemID = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }

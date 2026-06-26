@@ -101,3 +101,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.knurled.app.tests
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Knurled:
+    build:
+      targets:
+        Knurled: all
+    test:
+      targets:
+        - KnurledTests

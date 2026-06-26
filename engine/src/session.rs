@@ -21,8 +21,8 @@ use serde::{Deserialize, Serialize};
 use crate::core::{advance_cursor, reduce_input, validate_execution_input};
 use crate::error::Result;
 use crate::model::{
-    CompiledPlan, Effect, ExecutionInput, ExecutionInputValidation, ItemInput, RenderedItem,
-    RenderedSession, StateProjection, ValidationStatus,
+    ActualSet, CompiledPlan, Effect, ExecutionInput, ExecutionInputValidation, ItemInput,
+    RenderedItem, RenderedSession, StateProjection, ValidationStatus,
 };
 use crate::record::{DayRecord, LiftRecord};
 
@@ -182,22 +182,31 @@ fn build_record_day(
     date: &str,
 ) -> DayRecord {
     let mut lifts = Vec::new();
-    for item in &rendered_session.items {
-        let Some(item_input) = find_input(input, &item.item_id) else {
-            continue;
-        };
-        let exercise = item_input
-            .performed_exercise
-            .clone()
-            .unwrap_or_else(|| item.exercise.clone());
-        lifts.push(LiftRecord {
-            item_id: (input.status == "partial").then(|| item.item_id.clone()),
-            exercise,
-            weight: performed_weight(item, item_input),
-            sets: performed_reps(item, item_input),
-            metrics: Default::default(),
-            note: None,
-        });
+    for item_input in &input.inputs {
+        if let Some(item) = rendered_session
+            .items
+            .iter()
+            .find(|item| item.item_id == item_input.item_id)
+        {
+            let exercise = item_input
+                .performed_exercise
+                .clone()
+                .unwrap_or_else(|| item.exercise.clone());
+            lifts.push(LiftRecord {
+                item_id: (input.status == "partial").then(|| item.item_id.clone()),
+                exercise,
+                weight: performed_weight(item, item_input),
+                sets: performed_reps(item, item_input),
+                actual: performed_actual(item, item_input)
+                    .into_iter()
+                    .filter(|set| !set.metrics.is_empty())
+                    .collect(),
+                metrics: Default::default(),
+                note: None,
+            });
+        } else if let Some(lift) = extra_lift_record(item_input, input.status == "partial") {
+            lifts.push(lift);
+        }
     }
     let mut day = DayRecord::workout(date, lifts);
     if input.status == "partial" {
@@ -210,6 +219,40 @@ fn build_record_day(
     day
 }
 
+fn extra_lift_record(item_input: &ItemInput, include_item_id: bool) -> Option<LiftRecord> {
+    if item_input.sets.is_empty() && item_input.final_set_reps.is_none() {
+        return None;
+    }
+    let exercise = item_input
+        .performed_exercise
+        .clone()
+        .unwrap_or_else(|| item_input.item_id.clone());
+    let mut sets = item_input.sets.clone();
+    sets.sort_by_key(|set| set.set);
+    let reps = if sets.is_empty() {
+        item_input.final_set_reps.into_iter().collect()
+    } else {
+        sets.iter().map(|set| set.reps).collect()
+    };
+    let actual = sets
+        .iter()
+        .filter(|set| !set.metrics.is_empty())
+        .cloned()
+        .collect();
+    Some(LiftRecord {
+        item_id: include_item_id.then(|| item_input.item_id.clone()),
+        exercise,
+        weight: item_input
+            .load
+            .clone()
+            .or_else(|| sets.first().and_then(|set| set.load.clone())),
+        sets: reps,
+        actual,
+        metrics: Default::default(),
+        note: None,
+    })
+}
+
 fn find_input<'a>(input: &'a ExecutionInput, item_id: &str) -> Option<&'a ItemInput> {
     input
         .inputs
@@ -217,12 +260,63 @@ fn find_input<'a>(input: &'a ExecutionInput, item_id: &str) -> Option<&'a ItemIn
         .find(|candidate| candidate.item_id == item_id)
 }
 
+/// Per-set detail for metrics that cannot fit in the compact `sets` vector.
+/// AMRAP inputs normally carry only `final_set_reps`, but clients may include
+/// set-numbered metrics alongside them; those metrics are merged into the
+/// reconstructed prescribed sets here.
+fn performed_actual(item: &RenderedItem, item_input: &ItemInput) -> Vec<ActualSet> {
+    if item_input.mode == "amrap_final_set" {
+        let mut sets = item
+            .prescription
+            .sets
+            .iter()
+            .map(|set| {
+                let logged = item_input.sets.iter().find(|actual| actual.set == set.set);
+                ActualSet {
+                    set: set.set,
+                    load: item_input
+                        .load
+                        .clone()
+                        .or_else(|| logged.and_then(|actual| actual.load.clone()))
+                        .or_else(|| set.load.clone()),
+                    reps: set.target_reps,
+                    metrics: logged
+                        .map(|actual| actual.metrics.clone())
+                        .unwrap_or_default(),
+                }
+            })
+            .collect::<Vec<_>>();
+        if let (Some(last), Some(final_reps)) = (sets.last_mut(), item_input.final_set_reps) {
+            last.reps = final_reps;
+        }
+        let prescribed = item
+            .prescription
+            .sets
+            .iter()
+            .map(|set| set.set)
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut extras = item_input
+            .sets
+            .iter()
+            .filter(|actual| !prescribed.contains(&actual.set))
+            .cloned()
+            .collect::<Vec<_>>();
+        extras.sort_by_key(|set| set.set);
+        sets.extend(extras);
+        return sets;
+    }
+
+    let mut sets = item_input.sets.clone();
+    sets.sort_by_key(|set| set.set);
+    sets
+}
+
 /// Reps achieved per set, in order. For `per_set_reps` inputs this is the
 /// recorded sets; for `amrap_final_set` inputs (e.g. GZCLP T1) the preceding
 /// sets are reconstructed from the prescription and the final set carries the
 /// AMRAP result.
 fn performed_reps(item: &RenderedItem, item_input: &ItemInput) -> Vec<u32> {
-    if !item_input.sets.is_empty() {
+    if item_input.mode != "amrap_final_set" && !item_input.sets.is_empty() {
         let mut sets: Vec<&_> = item_input.sets.iter().collect();
         sets.sort_by_key(|set| set.set);
         return sets.into_iter().map(|set| set.reps).collect();
@@ -236,6 +330,19 @@ fn performed_reps(item: &RenderedItem, item_input: &ItemInput) -> Vec<u32> {
     if let (Some(last), Some(final_reps)) = (reps.last_mut(), item_input.final_set_reps) {
         *last = final_reps;
     }
+    let prescribed = item
+        .prescription
+        .sets
+        .iter()
+        .map(|set| set.set)
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut extras = item_input
+        .sets
+        .iter()
+        .filter(|actual| !prescribed.contains(&actual.set))
+        .collect::<Vec<_>>();
+    extras.sort_by_key(|set| set.set);
+    reps.extend(extras.into_iter().map(|set| set.reps));
     reps
 }
 
@@ -262,8 +369,11 @@ fn performed_weight(item: &RenderedItem, item_input: &ItemInput) -> Option<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{compile_plan, create_initial_state, render_next, synthetic_execution_input};
+    use crate::core::{
+        compile_plan, create_initial_state, reduce_input, render_next, synthetic_execution_input,
+    };
     use crate::templates::render_lockfile;
+    use std::collections::BTreeMap;
 
     fn gzclp() -> CompiledPlan {
         let plan = r#"plan "Submit Test" {
@@ -322,6 +432,159 @@ mod tests {
         // A passing T1 advances its lane's load, so state moved.
         assert_ne!(outcome.new_state.lanes, state.lanes);
         assert!(!outcome.effects.is_empty());
+    }
+
+    #[test]
+    fn submit_preserves_per_set_metrics_in_record_detail() {
+        let compiled = gzclp();
+        let state = create_initial_state(&compiled);
+        let rendered = render_next(&compiled, &state).unwrap();
+        let mut input = passing_input(&rendered);
+        let t1 = rendered
+            .items
+            .iter()
+            .find(|item| item.item_id == "a1.t1")
+            .unwrap();
+        let final_set = t1.prescription.sets.last().unwrap();
+        let item_input = input
+            .inputs
+            .iter_mut()
+            .find(|item| item.item_id == "a1.t1")
+            .unwrap();
+        item_input.final_set_reps = Some(7);
+        item_input.sets = vec![ActualSet {
+            set: final_set.set,
+            load: final_set.load.clone(),
+            reps: 7,
+            metrics: BTreeMap::from([("rpe".into(), "8.5".into())]),
+        }];
+
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::Advance,
+            "2026-06-24",
+        )
+        .unwrap();
+
+        let squat = outcome
+            .record_day
+            .lifts
+            .iter()
+            .find(|lift| lift.exercise == "squat")
+            .unwrap();
+        assert_eq!(squat.sets.last(), Some(&7));
+        assert_eq!(squat.actual.len(), 1);
+        assert_eq!(
+            squat.actual[0].metrics.get("rpe").map(String::as_str),
+            Some("8.5")
+        );
+    }
+
+    #[test]
+    fn submit_records_tracking_only_extra_inputs_in_input_order() {
+        let compiled = gzclp();
+        let state = create_initial_state(&compiled);
+        let rendered = render_next(&compiled, &state).unwrap();
+        let mut input = passing_input(&rendered);
+        let extra = ItemInput {
+            item_id: "extra.landmine_press".into(),
+            mode: "per_set_reps".into(),
+            final_set_reps: None,
+            sets: vec![
+                ActualSet {
+                    set: 1,
+                    load: Some("20kg".into()),
+                    reps: 12,
+                    metrics: BTreeMap::new(),
+                },
+                ActualSet {
+                    set: 2,
+                    load: Some("20kg".into()),
+                    reps: 12,
+                    metrics: BTreeMap::new(),
+                },
+            ],
+            load: None,
+            performed_exercise: Some("landmine_press".into()),
+            swap_reason: None,
+            swap_policy: None,
+        };
+        input.inputs.insert(0, extra);
+
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::Advance,
+            "2026-06-24",
+        )
+        .unwrap();
+
+        assert_eq!(outcome.validation.status, ValidationStatus::Valid);
+        assert_eq!(outcome.record_day.lifts[0].exercise, "landmine_press");
+        assert_eq!(outcome.record_day.lifts[0].sets, vec![12, 12]);
+        assert_eq!(outcome.record_day.lifts[0].weight.as_deref(), Some("20kg"));
+    }
+
+    #[test]
+    fn bonus_sets_are_recorded_but_do_not_drive_progression() {
+        let compiled = gzclp();
+        let state = create_initial_state(&compiled);
+        let rendered = render_next(&compiled, &state).unwrap();
+        let t3 = rendered
+            .items
+            .iter()
+            .find(|item| item.progression_rule.ends_with(".t3"))
+            .unwrap();
+        let mut input = passing_input(&rendered);
+        let item_input = input
+            .inputs
+            .iter_mut()
+            .find(|candidate| candidate.item_id == t3.item_id)
+            .unwrap();
+        item_input.sets.push(ActualSet {
+            set: 99,
+            load: t3
+                .prescription
+                .sets
+                .first()
+                .and_then(|set| set.load.clone()),
+            reps: 99,
+            metrics: BTreeMap::new(),
+        });
+
+        let outcome = submit_session(
+            &compiled,
+            &state,
+            &rendered,
+            &input,
+            SubmitMode::Advance,
+            "2026-06-24",
+        )
+        .unwrap();
+
+        let recorded = outcome
+            .record_day
+            .lifts
+            .iter()
+            .find(|lift| lift.exercise == t3.exercise)
+            .unwrap();
+        assert_eq!(recorded.sets.last(), Some(&99));
+        let preview = reduce_input(&compiled, &state, &rendered, &input).unwrap();
+        assert!(
+            preview
+                .results
+                .iter()
+                .find(|result| result.slot_id == t3.slot_id)
+                .unwrap()
+                .actual
+                .iter()
+                .all(|set| set.set != 99)
+        );
     }
 
     #[test]

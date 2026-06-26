@@ -109,7 +109,7 @@ struct ChangeExerciseSheet: View {
     }
 }
 
-private enum LoadControl {
+enum LoadControl {
     static func parse(_ load: String?, defaultUnit: Units) -> (value: Double, unit: Units)? {
         guard let load else { return nil }
         let trimmed = load.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

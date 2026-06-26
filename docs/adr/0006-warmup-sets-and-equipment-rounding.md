@@ -55,6 +55,13 @@ Equipment is **plan-level only and never part of a template**: a template descri
 not the user's plates. It is applied as a post-computation rounding layer over whatever a template
 produces, which keeps the (future) authoring vocabulary free of gym-inventory concerns.
 
+The exercise catalogue introduced later is deliberately advisory here. Catalogue/custom-exercise
+metadata may say an exercise is `barbell`, `dumbbell`, `machine`, etc. so clients can present and
+create exercises cleanly, but equipment rounding still resolves from the `equipment { … }` block
+and the engine's implement inference/overrides. In other words, a repo-owned custom exercise can
+be displayable without forcing rounding semantics, and a lifter can still override implement
+handling per exercise in `equipment`.
+
 ### Determinism and backward compatibility
 
 - New fields (`Plan.warmup`, `Plan.equipment`, `Prescription.warmups`) are
@@ -76,13 +83,14 @@ produces, which keeps the (future) authoring vocabulary free of gym-inventory co
 - Programs render usable warmups out of the box, and lifters can fully reconfigure them per
   lift/tier/phase without touching the engine.
 - Prescribed numbers match what a lifter can actually load once they declare their equipment.
-- The split between warmups (guidance) and working sets (progression) keeps the reducer and event
-  log semantics intact.
+- The split between warmups (guidance) and working sets (progression) keeps the reducer and
+  current workout submission semantics intact.
 - Players (iOS/CLI/workbench) consume the additive JSON without engine-logic changes; warmups are
   shown as non-logged guidance.
 - Follow-on work, not done here: a patch-level `add-warmup` op (date-bounded warmup changes), and
   modelling limited plate **counts** (the current search assumes unlimited plates per
   denomination).
+- The built-in/custom exercise catalogue can improve defaults and picker UX, but it does not
+  replace explicit equipment configuration for precise load rounding.
 - See [ADR 0003](0003-template-authoring-model.md) for how warmups slot into the template-authoring
   vocabulary if/when that lands, and why equipment rounding stays orthogonal to it.
-```

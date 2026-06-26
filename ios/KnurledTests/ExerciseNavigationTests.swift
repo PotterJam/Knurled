@@ -73,6 +73,59 @@ import Foundation
         #expect(controller.currentTarget?.item.id == before)
     }
 
+    @Test func movingExerciseChangesCursorOrder() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let controller = WorkoutLiveController.shared
+        controller.begin(workout)
+        defer { controller.end() }
+
+        let first = try #require(workout.items.first)
+        let second = try #require(workout.items.dropFirst().first)
+
+        workout.moveItem(from: second.id, before: first.id)
+
+        #expect(workout.items.first?.id == second.id)
+        #expect(controller.currentTarget?.item.id == second.id)
+    }
+
+    @Test func addedSetDoesNotBlockCompletionButIsLoggedWhenDone() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(workout.requiredItems.first)
+        item.addSet()
+        let extra = try #require(item.sets.last)
+
+        for set in item.requiredSets { set.logged = true }
+
+        #expect(item.isComplete)
+        extra.logged = true
+        extra.reps = 12
+
+        let input = item.itemInput()
+        #expect(input.sets.contains { $0.set == extra.id && $0.reps == 12 })
+        if item.isAmrap {
+            #expect(input.finalSetReps == item.requiredSets.last?.reps)
+        }
+    }
+
+    @Test func addedExerciseIsOptionalAndIncludedWhenLogged() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let extra = workout.addExtraExercise(exercise: "landmine press", load: "20kg", setCount: 2, reps: 12)
+        #expect(!workout.requiredItems.contains { $0.id == extra.id })
+        #expect(!workout.canSubmit)
+
+        extra.sets[0].logged = true
+        let input = workout.finishInput(timestamp: "2026-06-24T11:00:00Z")
+        let extraInput = try #require(input.inputs.first { $0.itemId == extra.id })
+
+        #expect(extraInput.performedExercise == "landmine_press")
+        #expect(extraInput.sets.map(\.reps) == [12])
+        #expect(input.status == ExecutionStatus.partial)
+    }
+
     // An exercise the user never started (its equipment was busy, say) is omitted from the inputs
     // and, if it's required, keeps the finish a partial — what skipping used to guarantee.
     @Test func untouchedRequiredExerciseIsOmittedAndStaysPartial() async throws {

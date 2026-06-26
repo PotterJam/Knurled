@@ -16,7 +16,7 @@ struct RestLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.leading) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(state.exerciseTitle).font(.headline).lineLimit(1)
-                        Text(state.setProgress).font(.caption).foregroundStyle(.secondary)
+                        Text(state.compactSetLine).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -24,8 +24,6 @@ struct RestLiveActivity: Widget {
                         countdown(to: state.restEndDate)
                             .font(.title2.monospacedDigit().weight(.semibold))
                             .frame(width: 70)
-                    } else if state.phase == .ready {
-                        Text(state.loadReps).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -38,7 +36,7 @@ struct RestLiveActivity: Widget {
                 if state.phase == .resting {
                     countdown(to: state.restEndDate).monospacedDigit().frame(width: 44)
                 } else if state.phase == .ready {
-                    Text("S\(state.setNumber)").monospacedDigit()
+                    Text(state.isWarmup ? "W\(state.setNumber)" : "S\(state.setNumber)").monospacedDigit()
                 } else {
                     Image(systemName: "checkmark").foregroundStyle(.green)
                 }
@@ -53,17 +51,17 @@ struct RestLiveActivity: Widget {
     @ViewBuilder private func controls(_ state: RestActivityAttributes.ContentState) -> some View {
         switch state.phase {
         case .ready:
-            if state.isWarmup {
-                WarmupControls(advanceTitle: state.warmupAdvanceTitle)
-            } else if state.isAmrap {
+            if state.isAmrap {
                 AmrapControls(reps: state.amrapReps)
             } else {
                 Button(intent: LogSetIntent()) {
-                    Label("Log set", systemImage: "checkmark.circle.fill")
-                        .lineLimit(1)
+                    Image(systemName: "checkmark.circle")
+                        .font(.title3)
                         .frame(maxWidth: .infinity)
                 }
                 .tint(.cyan)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         case .resting:
             HStack(spacing: 10) {
@@ -116,26 +114,25 @@ private struct LockScreenView: View {
     }
 
     private var readyBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(state.exerciseTitle).font(.headline).lineLimit(1)
-                    Text("\(state.setProgress) · \(state.loadReps)")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                }
-                Spacer()
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(state.exerciseTitle).font(.headline).lineLimit(1)
+                Text(state.compactSetLine)
+                    .font(.subheadline).foregroundStyle(.secondary)
             }
-            if state.isWarmup {
-                WarmupControls(advanceTitle: state.warmupAdvanceTitle)
-            } else if state.isAmrap {
+            Spacer(minLength: 8)
+            if state.isAmrap {
                 AmrapControls(reps: state.amrapReps)
+                    .frame(maxWidth: 176)
             } else {
                 Button(intent: LogSetIntent()) {
-                    Label("Log set", systemImage: "checkmark.circle.fill")
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
+                    Image(systemName: "checkmark.circle")
+                        .font(.title3)
+                        .frame(width: 40, height: 30)
                 }
                 .tint(.cyan)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         }
     }
@@ -146,7 +143,7 @@ private struct LockScreenView: View {
                 Label("Rest", systemImage: "timer")
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Text("Next: \(state.exerciseTitle)").font(.subheadline).lineLimit(1)
-                Text("\(state.setProgress) · \(state.loadReps)")
+                Text(state.compactSetLine)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -171,32 +168,7 @@ private struct LockScreenView: View {
     }
 }
 
-/// A warmup ramp set: log it, or move past this guidance-only set. Warmups never start
-/// a rest countdown.
-private struct WarmupControls: View {
-    let advanceTitle: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Button(intent: SkipWarmupIntent()) {
-                Label(advanceTitle, systemImage: "forward.fill")
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-            }
-            .tint(.secondary)
-            Button(intent: LogSetIntent()) {
-                Label("Log warmup", systemImage: "checkmark.circle.fill")
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-            }
-            .tint(.orange)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-    }
-}
-
-/// −/+ stepper plus a Log button for an AMRAP final set, all driven by App Intents so it
+/// −/+ stepper plus a tick button for an AMRAP final set, all driven by App Intents so it
 /// works directly on the lock screen.
 private struct AmrapControls: View {
     let reps: Int
@@ -215,8 +187,8 @@ private struct AmrapControls: View {
             }
             .tint(.secondary)
             Button(intent: LogSetIntent()) {
-                Label("Log \(reps)", systemImage: "checkmark.circle.fill")
-                    .lineLimit(1)
+                Image(systemName: "checkmark.circle")
+                    .font(.title3)
                     .frame(maxWidth: .infinity)
             }
             .tint(.cyan)

@@ -45,6 +45,11 @@ struct Prescription: Codable, Sendable, Hashable {
     var warmups: [PrescribedSet]
     var sets: [PrescribedSet]
 
+    init(warmups: [PrescribedSet] = [], sets: [PrescribedSet]) {
+        self.warmups = warmups
+        self.sets = sets
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         warmups = try container.decodeIfPresent([PrescribedSet].self, forKey: .warmups) ?? []

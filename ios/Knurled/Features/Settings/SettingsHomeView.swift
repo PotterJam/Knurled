@@ -66,6 +66,16 @@ struct SettingsHomeView: View {
                     }
                 }
 
+                if let repo = app.activeRepo {
+                    Section("Custom Exercises") {
+                        NavigationLink {
+                            CustomExercisesView(repo: repo)
+                        } label: {
+                            Label("Manage custom exercises", systemImage: "figure.strengthtraining.traditional")
+                        }
+                    }
+                }
+
                 Section("Engine") {
                     LabeledContent("knurled-core", value: app.engineVersion ?? "—")
                 }

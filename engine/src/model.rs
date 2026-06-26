@@ -35,12 +35,36 @@ pub struct Plan {
     pub starts: Map<String>,
     pub training_maxes: Map<String>,
     pub accessories: Map<String>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub exercises: Map<CustomExercise>,
     pub exercise_options: Map<ExerciseOptions>,
     pub rest: RestPolicy,
     #[serde(default, skip_serializing_if = "WarmupPolicy::is_empty")]
     pub warmup: WarmupPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub equipment: Option<EquipmentProfile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomExercise {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub implement: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExerciseCatalogEntry {
+    pub id: String,
+    pub label: String,
+    pub pattern: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub muscles: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub implement: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub custom: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -192,6 +216,8 @@ pub struct CompiledPlan {
     pub starts: Map<String>,
     pub training_maxes: Map<String>,
     pub accessories: Map<String>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub exercises: Map<CustomExercise>,
     pub exercise_options: Map<ExerciseOptions>,
     pub rest: RestPolicy,
     #[serde(default, skip_serializing_if = "WarmupPolicy::is_empty")]

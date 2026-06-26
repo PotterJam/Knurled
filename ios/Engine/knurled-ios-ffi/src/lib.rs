@@ -17,8 +17,9 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    ENGINE_VERSION, ExecutionInput, RenderedSession, SubmitMode, append_day_record, build_outputs,
-    build_repo, builtin_templates, init_training_repo, read_state, read_training_repo, reduce_input,
+    ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode, append_day_record,
+    apply_plan_edit, build_outputs, build_repo, builtin_templates, exercise_catalog,
+    init_training_repo, preview_plan_edit, read_state, read_training_repo, reduce_input,
     render_session, submit_session, validate_execution_input, validate_repo, write_state,
 };
 use serde::Serialize;
@@ -302,6 +303,56 @@ pub extern "C" fn knurled_validate_execution_input(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn knurled_preview_plan_edit(
+    dir: *const c_char,
+    plan_edit_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_preview_plan_edit", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let edit_json = match unsafe { borrow(plan_edit_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let edit: PlanEdit = match serde_json::from_str(edit_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid plan edit: {error}")),
+        };
+        match preview_plan_edit(dir, edit) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_apply_plan_edit(
+    dir: *const c_char,
+    plan_edit_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_apply_plan_edit", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let edit_json = match unsafe { borrow(plan_edit_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let edit: PlanEdit = match serde_json::from_str(edit_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid plan edit: {error}")),
+        };
+        match apply_plan_edit(dir, edit) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn knurled_engine_version() -> *mut c_char {
     guard("knurled_engine_version", || ok(ENGINE_VERSION))
 }
@@ -324,6 +375,11 @@ pub extern "C" fn knurled_builtin_templates() -> *mut c_char {
             .collect();
         ok(templates)
     })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_exercise_catalog() -> *mut c_char {
+    guard("knurled_exercise_catalog", || ok(exercise_catalog()))
 }
 
 /// Frees a string previously returned by any `knurled_*` function.

@@ -288,14 +288,14 @@ extension AppModel {
         }
     }
 
-    private func push(repo: ActiveRepo, message: String) async throws {
+    func push(repo: ActiveRepo, message: String, files explicitFiles: [String]? = nil) async throws {
         guard let remote = repo.remote, let client = github.client() else { return }
         let head = try await client.commit(
             owner: remote.owner,
             repo: remote.name,
             branch: remote.branch,
             baseCommit: remote.headCommit,
-            files: GitHubChangedFiles.present(in: repo.url),
+            files: explicitFiles ?? GitHubChangedFiles.present(in: repo.url),
             dir: repo.url,
             message: message
         )

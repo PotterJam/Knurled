@@ -18,6 +18,7 @@ final class AppModel {
     var activeRepo: ActiveRepo?
     var engineVersion: String?
     var starterTemplates: [StarterTemplate] = []
+    var exerciseCatalog: [ExerciseCatalogEntry] = []
 
     init(
         engine: WorkoutEngine = RustWorkoutEngine(),
@@ -32,6 +33,7 @@ final class AppModel {
     func bootstrap() async {
         engineVersion = try? await engine.engineVersion()
         await loadStarterTemplates()
+        await loadExerciseCatalog()
         await github.restore()
         if await restoreSelection() { return }
         await loadSampleRepo()
@@ -42,6 +44,11 @@ final class AppModel {
     func loadStarterTemplates() async {
         guard starterTemplates.isEmpty else { return }
         starterTemplates = (try? await engine.builtinTemplates()) ?? []
+    }
+
+    func loadExerciseCatalog() async {
+        guard exerciseCatalog.isEmpty else { return }
+        exerciseCatalog = (try? await engine.exerciseCatalog()) ?? []
     }
 
     func loadSampleRepo() async {

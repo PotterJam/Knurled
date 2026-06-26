@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{KnurledError, Result};
 use crate::json::compact_pretty_json;
+use crate::model::ActualSet;
 
 /// One performed lift within a day: the exercise, the working weight it was done
 /// at, and the reps achieved per set. Open, units-explicit metrics (`rpe`,
@@ -38,6 +39,11 @@ pub struct LiftRecord {
     /// Reps achieved per set, in order: `[5, 5, 3]`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sets: Vec<u32>,
+    /// Optional per-set detail. Omitted for ordinary strength logs so the
+    /// human-facing record stays compact; present when a set carries metrics
+    /// such as RPE that cannot be represented by `sets` alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actual: Vec<ActualSet>,
     /// Free-form, units-explicit measured metrics for the lift. A richer
     /// per-set form is a future additive change; the keys here apply to the
     /// effort as a whole for now.
@@ -56,6 +62,7 @@ impl LiftRecord {
             exercise: exercise.into(),
             weight: Some(weight.into()),
             sets,
+            actual: Vec::new(),
             metrics: BTreeMap::new(),
             note: None,
         }

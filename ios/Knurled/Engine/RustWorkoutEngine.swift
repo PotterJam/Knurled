@@ -12,6 +12,11 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode([StarterTemplate].self, from: raw)
     }
 
+    func exerciseCatalog() throws -> [ExerciseCatalogEntry] {
+        let raw = try call { knurled_exercise_catalog() }
+        return try decode([ExerciseCatalogEntry].self, from: raw)
+    }
+
     func initRepo(dir: URL, template: String) throws {
         let raw = try call(dir: dir, json: template) { knurled_init_repo($0, $1) }
         _ = try decode(JSONValue.self, from: raw)
@@ -36,6 +41,18 @@ actor RustWorkoutEngine: WorkoutEngine {
         let json = try encode(input)
         let raw = try call(dir: dir, json: json) { knurled_validate_execution_input($0, $1) }
         return try decode(ExecutionInputValidation.self, from: raw)
+    }
+
+    func previewPlanEdit(dir: URL, edit: PlanEdit) throws -> PlanEditOutcome {
+        let json = try encode(edit)
+        let raw = try call(dir: dir, json: json) { knurled_preview_plan_edit($0, $1) }
+        return try decode(PlanEditOutcome.self, from: raw)
+    }
+
+    func applyPlanEdit(dir: URL, edit: PlanEdit) throws -> PlanEditOutcome {
+        let json = try encode(edit)
+        let raw = try call(dir: dir, json: json) { knurled_apply_plan_edit($0, $1) }
+        return try decode(PlanEditOutcome.self, from: raw)
     }
 
     func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionResult {

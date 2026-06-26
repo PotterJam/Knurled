@@ -52,6 +52,22 @@ rounding is deliberately *not* an axis:** the available plates/dumbbells are a p
 lifter's gym, not the program, so it stays a plan-level post-computation layer applied over any
 template's output, keeping this vocabulary free of equipment concerns.
 
+**Exercise catalogues are also not template authoring.** Exercise names in programs remain
+normalized strings, and the engine now exposes a broad built-in exercise catalogue plus
+repo-owned custom exercise metadata via `plan.fitspec`:
+
+```kdl
+exercises {
+  landmine_press { label "Landmine Press"; pattern vertical_push; implement barbell }
+}
+```
+
+That catalogue powers picker/search UI, labels, and "create this exercise" flows. It is advisory
+metadata, not a restrictive registry and not progression logic. A template may prescribe or swap
+to any exercise string; a plan may add metadata for exercises the built-in catalogue does not
+know. This keeps the future template DSL focused on schemes, triggers, and effects rather than
+turning it into a global exercise database.
+
 ### Coverage
 
 | Program | basis | sequence | trigger → effect |
@@ -76,8 +92,9 @@ logged input* cannot live here:
 - **Algorithmic fatigue management** (RTS fatigue percents, Sheiko individualisation) — genuine
   program-as-code, excluded by §10.
 - **Macro/block periodisation** — this is *sequencing of blocks*, handled by
-  [ADR 0002](0002-plan-lifecycle-events.md) (`plan_changed` / phases) plus multi-phase templates,
-  not a single template's concern. (Starting Strength phases are already separate templates.)
+  multi-phase templates plus the post-[ADR 0007](0007-logs-as-record-state-as-truth.md) model of
+  re-authoring `state` and optionally writing human-facing program markers, not a single
+  template's concern. (Starting Strength phases are already separate templates.)
 
 ### Validation / acceptance test
 
@@ -99,3 +116,5 @@ vocabulary is proven. The built-ins thus become the first documents written in t
   4. Keep the lockfile content-hash + engine-version pinning for determinism (mvp-spec §9).
 - Common mechanisms (`amrap`, `fsl`, `ssl`, `bbb`) can ship as terse sugar over the primitives.
 - The ~1% boundary is a stated non-goal; autoregulation/VBT would be a separate ADR if revisited.
+- Exercise catalogue expansion and repo-owned custom exercises can evolve independently of the
+  template DSL because they describe available/displayable movements, not progression semantics.

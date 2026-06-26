@@ -88,9 +88,12 @@ struct GitHubClient: GitHubClientProtocol {
         var entries: [[String: Any]] = []
         for path in files {
             let fileURL = dir.appending(path: path)
-            guard let data = try? Data(contentsOf: fileURL) else { continue }
-            let blobSha = try await createBlob(owner: owner, repo: repo, content: data)
-            entries.append(["path": path, "mode": "100644", "type": "blob", "sha": blobSha])
+            if let data = try? Data(contentsOf: fileURL) {
+                let blobSha = try await createBlob(owner: owner, repo: repo, content: data)
+                entries.append(["path": path, "mode": "100644", "type": "blob", "sha": blobSha])
+            } else {
+                entries.append(["path": path, "mode": "100644", "type": "blob", "sha": NSNull()])
+            }
         }
 
         let treeBody = try JSONSerialization.data(

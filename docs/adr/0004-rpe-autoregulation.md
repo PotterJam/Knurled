@@ -20,6 +20,12 @@ RPE losslessly via `ActualSet.metrics`, so the data is captured today.
 RPE/RIR-targeted training is now mainstream-intermediate (RTS, Juggernaut, GZCL, most modern
 hypertrophy), so it belongs in scope, not in the excluded tail.
 
+Since this ADR was written, the logs-as-record model ([ADR 0007](0007-logs-as-record-state-as-truth.md))
+has replaced replay events. The core idea still holds: RPE is an actual performed input, not
+something inferred by the engine. Today the iOS set-detail editor can capture per-set RPE and the
+lean record preserves it in `LiftRecord.actual[].metrics`; the engine still does not compute e1RM
+or make progression decisions from it.
+
 ## Decision
 
 Support RPE/e1RM autoregulation as **Tier 1**, layered on the [ADR 0003](0003-template-authoring-model.md)
@@ -73,15 +79,18 @@ Rules:
   dissolves once the two guarantees are separated.
 - This **revises [ADR 0003](0003-template-authoring-model.md)'s boundary**: RPE/e1RM moves from
   out-of-scope into Tier 1. Still out: velocity-based training (needs a velocity input stream /
-  hardware) and bespoke coach individualisation (served by manual plan edits / `state_adjusted`,
-  [ADR 0002](0002-plan-lifecycle-events.md)).
+  hardware) and bespoke coach individualisation (served by manual plan edits or explicit
+  `state/current.json` edits under [ADR 0007](0007-logs-as-record-state-as-truth.md)).
 - Two things must be fixed + versioned for reproducibility: the **RPE→%1RM table** and the
   **default simulation growth rate(s)**.
 - Simulation output for autoregulated programs is explicitly model-based (assumption stated),
   distinct from percentage programs (intrinsically prescribed) — but both remain deterministic.
-- Implied work (not done here), gated on the ADR 0003 DSL landing first:
+- Implementation status:
+  - Done: per-set `metrics.rpe` can be captured by the iOS workout UI and is serialized through
+    `ActualSet.metrics` into lean monthly logs when present.
+  - Not done: RPE/e1RM progression semantics.
+- Implied work, gated on the ADR 0003 DSL landing first:
   1. e1RM calculator + versioned RPE→%1RM table in the engine.
   2. `e1rm` basis, `rpe` scheme flag, `on rpe`/`e1rm_pr` triggers, `set_load = pct*e1rm` effect.
   3. Linear simulation model + versioned default growth rates.
-  4. App work to capture RPE during logging (Tier 0 records it in the format, but nothing
-     populates it until the app sends it).
+  4. App work to surface RPE-driven consequences once the engine consumes RPE.

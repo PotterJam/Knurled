@@ -111,6 +111,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
     var exercise: String
     var weight: String?
     var sets: [Int]
+    var actual: [ActualSet]
     var metrics: [String: String]
     var note: String?
 
@@ -121,7 +122,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case itemId, exercise, weight, sets, metrics, note
+        case itemId, exercise, weight, sets, actual, metrics, note
     }
 
     init(
@@ -129,6 +130,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
         exercise: String,
         weight: String? = nil,
         sets: [Int] = [],
+        actual: [ActualSet] = [],
         metrics: [String: String] = [:],
         note: String? = nil
     ) {
@@ -136,6 +138,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
         self.exercise = exercise
         self.weight = weight
         self.sets = sets
+        self.actual = actual
         self.metrics = metrics
         self.note = note
     }
@@ -146,6 +149,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
         exercise = try container.decode(String.self, forKey: .exercise)
         weight = try container.decodeIfPresent(String.self, forKey: .weight)
         sets = try container.decodeIfPresent([Int].self, forKey: .sets) ?? []
+        actual = try container.decodeIfPresent([ActualSet].self, forKey: .actual) ?? []
         metrics = try container.decodeIfPresent([String: String].self, forKey: .metrics) ?? [:]
         note = try container.decodeIfPresent(String.self, forKey: .note)
     }
@@ -156,6 +160,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
         try container.encode(exercise, forKey: .exercise)
         try container.encodeIfPresent(weight, forKey: .weight)
         if !sets.isEmpty { try container.encode(sets, forKey: .sets) }
+        if !actual.isEmpty { try container.encode(actual, forKey: .actual) }
         if !metrics.isEmpty { try container.encode(metrics, forKey: .metrics) }
         try container.encodeIfPresent(note, forKey: .note)
     }

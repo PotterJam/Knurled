@@ -3,6 +3,11 @@
 - Status: Superseded by [ADR 0007](0007-logs-as-record-state-as-truth.md)
 - Date: 2026-06-24
 
+> Supersession note: the event-log/replay assumptions below are historical. The current canonical
+> record is ADR 0007's pretty monthly `DayRecord` log plus authored-forward `state/current.json`.
+> The measured-effort direction survives only where it maps to lean record details such as
+> `LiftRecord.actual[].metrics`.
+
 ## Context
 
 `logs/**/*.jsonl` is the canonical training record. Everything else the user sees —
@@ -88,9 +93,10 @@ Key facts that constrain the answer:
   (`engine/src/model.rs`) — the first concrete step of the measured-effort schema. It records
   metrics like `rpe` / `rir` (and later velocity) losslessly: the engine passes them through
   replay without acting on them, the `per_set_reps` path preserves them automatically, and the
-  field is `skip_serializing_if` empty so existing logs and hashes are byte-identical. Nothing in
-  the app populates it yet — that's deliberate (Tier 0 is format-only). `rpe` becomes meaningful
-  to the engine under [ADR 0004](0004-rpe-autoregulation.md).
+  field is `skip_serializing_if` empty so existing logs and hashes are byte-identical. In the
+  post-[ADR 0007](0007-logs-as-record-state-as-truth.md) shape, the iOS app can populate per-set
+  RPE and the lean monthly log preserves it in `LiftRecord.actual[].metrics`; `rpe` becomes
+  meaningful to progression only under [ADR 0004](0004-rpe-autoregulation.md).
 - **Still to do:** the `knurled export` projection; promoting the strength keys (`reps`, `load`)
   into the same `metrics` model; a `discipline` tag on the rendered/prescribed shapes; engine
   pass-through for unknown disciplines.
