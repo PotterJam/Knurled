@@ -75,7 +75,7 @@ final class WorkoutLiveController {
         if cursorAtEnd { return nil }
         if let focusedItemID,
            let item = workout.items.first(where: { $0.id == focusedItemID }),
-           let set = nextSet(in: item) {
+           let set = resumeSet(in: item) {
             return (item, set)
         }
         for item in workout.items {
@@ -89,6 +89,21 @@ final class WorkoutLiveController {
     private func nextSet(in item: LiveItem) -> LiveSet? {
         for set in item.warmups where !set.logged && !set.bypassed { return set }
         for set in item.sets where !set.logged { return set }
+        return nil
+    }
+
+    /// Where to resume an exercise the user comes back to. If they've already logged something
+    /// here, continue from *after* the last set they did rather than snapping back to an earlier
+    /// set they skipped (e.g. a warmup they deliberately passed). With nothing logged yet, this is
+    /// just the first set.
+    private func resumeSet(in item: LiveItem) -> LiveSet? {
+        let ordered = item.warmups + item.sets
+        guard let lastLogged = ordered.lastIndex(where: { $0.logged }) else {
+            return nextSet(in: item)
+        }
+        for set in ordered.dropFirst(lastLogged + 1) where !set.logged && !set.bypassed {
+            return set
+        }
         return nil
     }
 
@@ -238,7 +253,7 @@ final class WorkoutLiveController {
     /// Move the cursor onto `item` because the user tapped it (e.g. its equipment is free now).
     /// The current set becomes its first unlogged set; if it's already done this is a no-op.
     func focus(_ item: LiveItem) {
-        guard let set = nextSet(in: item) else { return }
+        guard let set = resumeSet(in: item) else { return }
         focusedItemID = item.id
         preferredTarget = ref(for: item, set: set)
         cursorAtEnd = false

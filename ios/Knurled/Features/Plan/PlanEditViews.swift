@@ -37,9 +37,7 @@ struct QuickPlanEditView: View {
             PlanEditOutcomeSection(outcome: outcome, errorMessage: errorMessage)
 
             Section("Suggested days") {
-                ForEach(Self.days, id: \.self) { day in
-                    Toggle(day.capitalized, isOn: dayBinding(day))
-                }
+                WeekdayPicker(days: Self.days, selected: $selectedDays)
             }
 
             EquipmentEditor(
@@ -76,15 +74,6 @@ struct QuickPlanEditView: View {
                 EditButton()
             }
         }
-    }
-
-    private func dayBinding(_ day: String) -> Binding<Bool> {
-        Binding(
-            get: { selectedDays.contains(day) },
-            set: { enabled in
-                if enabled { selectedDays.insert(day) } else { selectedDays.remove(day) }
-            }
-        )
     }
 
     private func save() {
@@ -129,6 +118,43 @@ struct QuickPlanEditView: View {
     }
 
     private static let days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+}
+
+/// A compact week strip: one tappable circle per day instead of seven full-width toggles.
+private struct WeekdayPicker: View {
+    let days: [String]
+    @Binding var selected: Set<String>
+
+    @Environment(\.knurledPalette) private var palette
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(days, id: \.self) { day in
+                let isOn = selected.contains(day)
+                Button {
+                    if isOn { selected.remove(day) } else { selected.insert(day) }
+                } label: {
+                    Text(Self.letter(day))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isOn ? Color.white : .primary)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            Circle().fill(isOn ? palette.accent : Color(uiColor: .tertiarySystemFill))
+                        )
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(day.capitalized)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private static func letter(_ day: String) -> String {
+        String(day.prefix(1)).uppercased()
+    }
 }
 
 private struct EquipmentEditor: View {
@@ -315,6 +341,10 @@ private struct SessionExercisesEditor: View {
     let systemImage: String
     @Binding var exercises: [SessionExercise]
 
+    /// Which row is open for editing. Only one expands at a time; everything else stays as a thin
+    /// summary line. A freshly added exercise opens automatically.
+    @State private var expandedIndex: Int?
+
     var body: some View {
         Section {
             if exercises.isEmpty {
@@ -322,37 +352,96 @@ private struct SessionExercisesEditor: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(exercises.indices, id: \.self) { index in
-                SessionExerciseRow(exercise: $exercises[index])
+                SessionExerciseRow(
+                    exercise: $exercises[index],
+                    isExpanded: expandedIndex == index,
+                    onToggle: {
+                        withAnimation(.snappy) {
+                            expandedIndex = expandedIndex == index ? nil : index
+                        }
+                    }
+                )
             }
             .onDelete { offsets in
                 exercises.remove(atOffsets: offsets)
+                expandedIndex = nil
             }
             .onMove { offsets, destination in
                 exercises.move(fromOffsets: offsets, toOffset: destination)
+                expandedIndex = nil
             }
 
             Button {
                 exercises.append(SessionExercise(exercise: "", sets: 1, reps: title == "Warmdown" ? 60 : 10))
+                expandedIndex = exercises.count - 1
             } label: {
                 Label("Add \(title.lowercased()) exercise", systemImage: "plus.circle")
             }
         } header: {
             Label(title, systemImage: systemImage)
         } footer: {
-            Text("Use Edit to drag items into the order they should appear.")
+            Text("Tap an exercise to edit its sets and reps. Use Edit to reorder.")
         }
     }
 }
 
 private struct SessionExerciseRow: View {
     @Binding var exercise: SessionExercise
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
+        if isExpanded {
+            expanded
+        } else {
+            summary
+        }
+    }
+
+    private var summary: some View {
+        Button(action: onToggle) {
+            HStack {
+                Text(exercise.exercise.isEmpty ? "New exercise" : exercise.exercise)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(exercise.exercise.isEmpty ? .secondary : .primary)
+                Spacer()
+                Text(summaryDetail)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var summaryDetail: String {
+        var parts: [String] = []
+        if let detail = exercise.load ?? exercise.note, !detail.isEmpty { parts.append(detail) }
+        parts.append("\(exercise.sets)×\(exercise.reps)")
+        return parts.joined(separator: " · ")
+    }
+
+    private var expanded: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Exercise", text: $exercise.exercise)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.subheadline.weight(.medium))
+            HStack {
+                TextField("Exercise", text: $exercise.exercise)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.subheadline.weight(.medium))
+                    .focused($nameFocused)
+                Button(action: onToggle) {
+                    Image(systemName: "chevron.up")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Collapse")
+            }
 
             TextField("load or note", text: loadOrNoteBinding)
                 .textInputAutocapitalization(.never)
@@ -365,6 +454,9 @@ private struct SessionExerciseRow: View {
             }
         }
         .padding(.vertical, 2)
+        .onAppear {
+            if exercise.exercise.isEmpty { nameFocused = true }
+        }
     }
 
     @ViewBuilder

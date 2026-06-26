@@ -74,36 +74,34 @@ struct FinishWorkoutView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Logged sets will be saved without applying progression.")
+                    Text("Finished lifts still progress — unfinished ones are saved as-is.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
                     Text("Effects").font(.headline)
-                    if !isComplete {
-                        Text("No progression changes.").foregroundStyle(.secondary)
-                    } else if mode == .advance {
+                    // For a partial save `mode` stays `.advance` (the picker is complete-only), so
+                    // progression is shown per exercise: finished lifts move, unfinished ones don't.
+                    if mode == .advance {
                         ForEach(Array(outcome.results.enumerated()), id: \.offset) { _, result in
                             EffectResultRow(result: result, title: title(forSlot: result.slotId))
+                        }
+                        if outcome.results.isEmpty {
+                            Text("No progression changes.").foregroundStyle(.secondary)
                         }
                     } else if mode == .offDay {
                         Text("No progression changes.").foregroundStyle(.secondary)
                     } else {
                         Text("Baselines will be reset from the performed loads.").foregroundStyle(.secondary)
                     }
-                    if mode == .advance && outcome.results.isEmpty {
-                        Text("No progression changes.").foregroundStyle(.secondary)
-                    }
                 }
 
-                if isComplete {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Next").font(.headline)
-                        Text(outcome.nextWorkout.displayName)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Next").font(.headline)
+                    Text(outcome.nextWorkout.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
 
                 Button {
@@ -192,7 +190,16 @@ struct EffectResultRow: View {
         case "pass": ("checkmark.circle.fill", .green)
         case "fail": ("xmark.circle.fill", .red)
         case "adjusted_today": ("arrow.down.circle.fill", .orange)
+        case "incomplete": ("circle.dashed", .secondary)
         default: ("circle", .secondary)
+        }
+    }
+
+    private var emptyEffectText: String {
+        switch result.outcome {
+        case "adjusted_today": "Adjusted today · repeat next time"
+        case "incomplete": "Not finished · no change"
+        default: "No change"
         }
     }
 
@@ -203,7 +210,7 @@ struct EffectResultRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.subheadline.weight(.medium))
                 if result.effects.isEmpty {
-                    Text(result.outcome == "adjusted_today" ? "Adjusted today · repeat next time" : "No change")
+                    Text(emptyEffectText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {

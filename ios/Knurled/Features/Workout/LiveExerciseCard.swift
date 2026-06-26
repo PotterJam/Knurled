@@ -115,8 +115,8 @@ struct LiveExerciseCard: View {
     }
 
     @ViewBuilder private var warmupSection: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            let visibleWarmups = live.visibleWarmups
+        let visibleWarmups = live.visibleWarmups
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(visibleWarmups.enumerated()), id: \.element.id) { _, set in
                 SetRowView(
                     set: set,
@@ -130,9 +130,10 @@ struct LiveExerciseCard: View {
                     onToggled: { controller.toggle(set: set, in: live) },
                     onChanged: { controller.modelChanged() }
                 )
+                if set.id != visibleWarmups.last?.id { Divider() }
             }
 
-            Divider().padding(.vertical, 2)
+            Divider().padding(.top, 2)
         }
     }
 
@@ -285,6 +286,9 @@ struct SetRowView: View {
     var onChanged: () -> Void
     /// Non-nil only for user-added sets, which can be swiped away.
     var onDelete: (() -> Void)? = nil
+    /// The completed "logged" band. Off when a parent (e.g. the warm-up block) paints completion at
+    /// the exercise level instead, so the band isn't a skinny stripe under a separate name label.
+    var showsCompletedBand: Bool = true
 
     @Environment(\.knurledPalette) private var palette
     @Environment(\.colorScheme) private var colorScheme
@@ -323,7 +327,7 @@ struct SetRowView: View {
         }
         .frame(minHeight: 34)
         .background {
-            if set.logged {
+            if set.logged && showsCompletedBand {
                 // Full-bleed band that fills the row up to the dividers and runs out to the card
                 // edges, rather than a narrow inset pill.
                 completedBackground
@@ -388,7 +392,8 @@ struct SetRowView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
-            ValueChip(text: loadText, isChanged: loadChanged, action: onEditLoad)
+            ValueChip(text: loadText, isChanged: loadChanged, truncates: true, action: onEditLoad)
+                .layoutPriority(1)
             Text("×")
                 .foregroundStyle(.secondary)
             ValueChip(text: "\(displayReps)\(amrapMarker)", isChanged: repsChanged, action: onEditReps)
@@ -425,7 +430,8 @@ struct SetRowView: View {
     }
 
     private var showRPEChip: Bool {
-        return set.logged || set.rpe != nil
+        // Warm-up sets are guidance-only ramp work — no RPE to track.
+        return !set.isWarmup && (set.logged || set.rpe != nil)
     }
 
     private var rpeText: String {
@@ -529,6 +535,10 @@ enum RPEColorScale {
 private struct ValueChip: View {
     let text: String
     let isChanged: Bool
+    /// When true the chip may shrink and tail-truncate instead of forcing its full intrinsic
+    /// width — used for the load, which can be a long note that would otherwise push the row
+    /// off the card edge.
+    var truncates: Bool = false
     var action: () -> Void
 
     @Environment(\.knurledPalette) private var palette
@@ -539,7 +549,8 @@ private struct ValueChip: View {
                 .font(.subheadline.monospacedDigit().weight(isChanged ? .semibold : .medium))
                 .foregroundStyle(isChanged ? .orange : .secondary)
                 .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: !truncates, vertical: false)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
                 .background(
@@ -758,25 +769,52 @@ struct WarmupBlockCard: View {
     }
 
     @ViewBuilder private func warmupItemSection(_ item: LiveItem) -> some View {
+        let done = item.isComplete
         VStack(alignment: .leading, spacing: 6) {
-            Text(item.item.display.title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                Text(item.item.display.title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(done ? completedForeground : .secondary)
+                if done {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(completedForeground)
+                }
+                Spacer(minLength: 0)
+            }
 
-            ForEach(Array(item.sets.enumerated()), id: \.element.id) { _, set in
-                SetRowView(
-                    set: set,
-                    indexLabel: "W",
-                    isAmrap: false,
-                    isLastSet: set.id == item.sets.last?.id,
-                    isCurrent: controller.isCurrent(set),
-                    onEditLoad: { editingValue = .load(set) },
-                    onEditReps: { editingValue = .reps(set) },
-                    onEditRPE: { editingValue = .rpe(set) },
-                    onToggled: { controller.toggle(set: set, in: item) },
-                    onChanged: { controller.modelChanged() }
-                )
+            VStack(spacing: 0) {
+                ForEach(Array(item.sets.enumerated()), id: \.element.id) { _, set in
+                    SetRowView(
+                        set: set,
+                        indexLabel: "W",
+                        isAmrap: false,
+                        isLastSet: set.id == item.sets.last?.id,
+                        isCurrent: controller.isCurrent(set),
+                        onEditLoad: { editingValue = .load(set) },
+                        onEditReps: { editingValue = .reps(set) },
+                        onEditRPE: { editingValue = .rpe(set) },
+                        onToggled: { controller.toggle(set: set, in: item) },
+                        onChanged: { controller.modelChanged() },
+                        showsCompletedBand: false
+                    )
+                    if set.id != item.sets.last?.id { Divider() }
+                }
             }
         }
+        // The whole exercise — name and its sets — turns sage when done, instead of a thin band
+        // under just the set rows. Full-bleed to the card edges to match the working-set treatment.
+        .padding(.horizontal, KnurledTheme.Spacing.m)
+        .padding(.vertical, 6)
+        .background {
+            if done {
+                Color(red: 0.55, green: 0.71, blue: 0.53).opacity(0.16)
+            }
+        }
+        .padding(.horizontal, -KnurledTheme.Spacing.m)
+    }
+
+    private var completedForeground: Color {
+        Color(red: 0.40, green: 0.58, blue: 0.40)
     }
 }
