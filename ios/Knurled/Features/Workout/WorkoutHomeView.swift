@@ -122,6 +122,7 @@ struct NextWorkoutView: View {
                     StatusChip(text: "Sample", style: .neutral)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 }

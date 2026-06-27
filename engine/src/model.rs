@@ -682,10 +682,11 @@ pub struct ExecutionInputValidation {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReductionResult {
     pub validation: ExecutionInputValidation,
-    /// Per-lift outcomes (pass/fail and the progression each triggered). In the
+    /// Per-progression-item outcomes (pass/fail and the progression each
+    /// triggered). Tracking-only session exercises are omitted: they remain in
+    /// the workout record but have no program consequence to preview. In the
     /// logs-as-record model (ADR 0007) this is surfaced for the consequence
-    /// preview and folded into the lean record by the caller; it is no longer
-    /// wrapped in an event.
+    /// preview and is no longer wrapped in an event.
     pub results: Vec<ExerciseResult>,
     pub effects: Vec<Effect>,
     pub new_state: StateProjection,

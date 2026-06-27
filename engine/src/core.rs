@@ -355,7 +355,13 @@ pub fn reduce_input(
     let mut results = Vec::new();
     let mut effects = Vec::new();
 
-    for item in &rendered_session.items {
+    // Tracking-only items still belong in the workout record, but they have no
+    // program consequence to preview as an exercise result.
+    for item in rendered_session
+        .items
+        .iter()
+        .filter(|item| item.progression_rule != "tracking_only")
+    {
         if let Some(item_input) = input
             .inputs
             .iter()

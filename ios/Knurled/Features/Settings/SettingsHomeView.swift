@@ -3,9 +3,11 @@ import SwiftUI
 struct SettingsHomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(ThemeStore.self) private var theme
+    @Environment(WorkoutSettings.self) private var workoutSettings
 
     var body: some View {
         @Bindable var theme = theme
+        @Bindable var workoutSettings = workoutSettings
         NavigationStack {
             List {
                 if let repo = app.activeRepo {
@@ -23,6 +25,21 @@ struct SettingsHomeView: View {
                             Spacer()
                             Text(theme.scheme.title)
                                 .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section("Workout") {
+                    Toggle(isOn: $workoutSettings.restTimersEnabled) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Rest timers")
+                                Text("Start a countdown after working sets")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "timer")
                         }
                     }
                 }

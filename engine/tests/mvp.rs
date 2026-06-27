@@ -1,6 +1,7 @@
 use knurled_core::{
-    PatchFile, RestSource, compile_plan, create_initial_state, reduce_input, render_lockfile,
-    render_next, simulate, synthetic_execution_input,
+    PatchFile, RestSource, SessionExercise, SubmitMode, compile_plan, create_initial_state,
+    reduce_input, render_lockfile, render_next, simulate, submit_session,
+    synthetic_execution_input,
 };
 
 fn gzclp_plan() -> String {
@@ -34,6 +35,50 @@ fn gzclp_plan() -> String {
 fn compiled_gzclp() -> knurled_core::CompiledPlan {
     let lock = render_lockfile("gzcl.gzclp@1.0.0").unwrap();
     compile_plan(&gzclp_plan(), &lock, &[]).unwrap()
+}
+
+#[test]
+fn progression_results_exclude_tracking_only_session_exercises() {
+    let mut compiled = compiled_gzclp();
+    compiled.session_exercises.warmup.push(SessionExercise {
+        exercise: "band_pull_apart".into(),
+        label: Some("Band Pull Aparts".into()),
+        sets: 1,
+        reps: 15,
+        load: None,
+        note: None,
+    });
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+    let input = synthetic_execution_input(&rendered, "all-pass", 0);
+
+    let preview = reduce_input(&compiled, &state, &rendered, &input).unwrap();
+    assert_eq!(
+        preview
+            .results
+            .iter()
+            .map(|result| result.slot_id.as_str())
+            .collect::<Vec<_>>(),
+        ["a1.t1", "a1.t2", "a1.t3"]
+    );
+
+    let submitted = submit_session(
+        &compiled,
+        &state,
+        &rendered,
+        &input,
+        SubmitMode::Advance,
+        "2026-06-27",
+    )
+    .unwrap();
+    assert!(
+        submitted
+            .record_day
+            .lifts
+            .iter()
+            .any(|lift| lift.exercise == "band_pull_apart"),
+        "tracking-only session exercises remain part of the saved workout record"
+    );
 }
 
 fn starting_strength_plan(template: &str) -> String {

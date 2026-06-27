@@ -75,6 +75,67 @@ import Foundation
         #expect(controller.currentTarget?.set === expectedNext)
     }
 
+    @Test func advancingWithinExerciseScrollsToNextSet() {
+        let previous = WorkoutScrollTarget(exerciseID: "squat", setID: 2, isWarmup: false)
+        let current = WorkoutScrollTarget(exerciseID: "squat", setID: 3, isWarmup: false)
+
+        #expect(
+            WorkoutScrollRequest.afterAdvance(from: previous, to: current)
+                == WorkoutScrollRequest(destination: .set(current), delayForLayout: false)
+        )
+    }
+
+    @Test func finishingExerciseScrollsToNextExerciseAfterLayoutSettles() {
+        let previous = WorkoutScrollTarget(exerciseID: "squat", setID: 3, isWarmup: false)
+        let current = WorkoutScrollTarget(exerciseID: "bench", setID: 1, isWarmup: false)
+
+        #expect(
+            WorkoutScrollRequest.afterAdvance(from: previous, to: current)
+                == WorkoutScrollRequest(destination: .exercise("bench"), delayForLayout: true)
+        )
+    }
+
+    @Test func completingAmrapRecordsExplicitReps() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let controller = WorkoutLiveController.shared
+        controller.begin(workout)
+        defer { controller.end() }
+
+        let amrapItem = workout.items.first { $0.isAmrap }
+        let item = try #require(amrapItem)
+        let set = try #require(item.requiredSets.last)
+
+        controller.completeAmrap(set: set, in: item, reps: 7)
+
+        #expect(set.logged)
+        #expect(set.reps == 7)
+    }
+
+    @Test func completedAmrapPresentationShowsExactRepsWithoutMarker() {
+        let presentation = SetRepsPresentation(
+            prescribedReps: 5,
+            performedReps: 7,
+            isAmrapFinal: true,
+            isLogged: true
+        )
+
+        #expect(presentation.reps == 7)
+        #expect(!presentation.showsAmrapMarker)
+    }
+
+    @Test func pendingAmrapPresentationShowsPrescription() {
+        let presentation = SetRepsPresentation(
+            prescribedReps: 5,
+            performedReps: 5,
+            isAmrapFinal: true,
+            isLogged: false
+        )
+
+        #expect(presentation.reps == 5)
+        #expect(presentation.showsAmrapMarker)
+    }
+
     // Focusing an already-finished exercise does nothing — there's nothing left to do there.
     @Test func focusingCompletedExerciseIsNoOp() async throws {
         let (dir, workout) = try await makeWorkout()

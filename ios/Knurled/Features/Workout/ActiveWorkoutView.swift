@@ -8,10 +8,12 @@ struct ActiveWorkoutView: View {
     @State private var draggingItemID: String?
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var pendingScroll: Task<Void, Never>?
 
     private let controller = WorkoutLiveController.shared
 
     @Environment(AppModel.self) private var app
+    @Environment(WorkoutSettings.self) private var workoutSettings
     @Environment(\.dismiss) private var dismiss
 
     init(repo: ActiveRepo, session: RenderedSession, restoring record: DayRecord? = nil) {
@@ -25,7 +27,6 @@ struct ActiveWorkoutView: View {
                     progress
                     if !warmupItems.isEmpty {
                         WarmupBlockCard(items: warmupItems, controller: controller)
-                            .id(Self.warmupAnchorID)
                     }
                     ForEach(bodyItems) { item in
                         LiveExerciseCard(
@@ -38,7 +39,7 @@ struct ActiveWorkoutView: View {
                                 }
                             } : nil
                         )
-                            .id(item.id)
+                            .id(WorkoutScrollDestination.exercise(item.id))
                             .onDrag {
                                 draggingItemID = item.id
                                 return NSItemProvider(object: item.id as NSString)
@@ -60,12 +61,24 @@ struct ActiveWorkoutView: View {
                 .onDrop(of: [.plainText], delegate: ResetDragDelegate(draggingItemID: $draggingItemID))
             }
             .onAppear {
-                controller.begin(workout)
-                scrollToExercise(currentExerciseID, proxy: proxy, animated: false)
+                controller.begin(workout, restTimersEnabled: workoutSettings.restTimersEnabled)
+                if let target = controller.currentScrollTarget {
+                    proxy.scrollTo(WorkoutScrollDestination.exercise(target.exerciseID), anchor: .top)
+                }
             }
-            .onDisappear { controller.end() }
-            .onChange(of: currentExerciseID) { _, exerciseID in
-                scrollToExercise(exerciseID, proxy: proxy)
+            .onDisappear {
+                pendingScroll?.cancel()
+                controller.end()
+            }
+            .onChange(of: workoutSettings.restTimersEnabled) { _, enabled in
+                controller.setRestTimersEnabled(enabled)
+            }
+            .onChange(of: controller.currentScrollTarget) { previous, current in
+                guard let previous, let current else { return }
+                scroll(
+                    WorkoutScrollRequest.afterAdvance(from: previous, to: current),
+                    proxy: proxy
+                )
             }
         }
         .navigationTitle(workout.session.displayName)
@@ -94,25 +107,23 @@ struct ActiveWorkoutView: View {
         }
     }
 
-    private static let warmupAnchorID = "__warmup_block__"
-
     private var warmupItems: [LiveItem] { workout.items.filter(\.isSessionWarmup) }
     private var bodyItems: [LiveItem] { workout.items.filter { !$0.isSessionWarmup } }
 
-    private var currentExerciseID: String? {
-        controller.currentTarget?.item.id
-    }
-
-    private func scrollToExercise(_ exerciseID: String?, proxy: ScrollViewProxy, animated: Bool = true) {
-        guard let exerciseID else { return }
-        // Warm-ups all live in one block, so any warm-up target scrolls to that single anchor.
-        let anchor = warmupItems.contains { $0.id == exerciseID } ? Self.warmupAnchorID : exerciseID
-        if animated {
-            withAnimation(.snappy) {
-                proxy.scrollTo(anchor, anchor: .top)
+    private func scroll(_ request: WorkoutScrollRequest, proxy: ScrollViewProxy) {
+        pendingScroll?.cancel()
+        if request.delayForLayout {
+            pendingScroll = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { return }
+                withAnimation(.snappy) {
+                    proxy.scrollTo(request.destination, anchor: .center)
+                }
             }
         } else {
-            proxy.scrollTo(anchor, anchor: .top)
+            withAnimation(.snappy) {
+                proxy.scrollTo(request.destination, anchor: .center)
+            }
         }
     }
 

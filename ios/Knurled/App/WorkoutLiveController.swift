@@ -2,6 +2,34 @@ import ActivityKit
 import Foundation
 import Observation
 
+struct WorkoutScrollTarget: Hashable {
+    let exerciseID: String
+    let setID: Int
+    let isWarmup: Bool
+}
+
+enum WorkoutScrollDestination: Hashable {
+    case exercise(String)
+    case set(WorkoutScrollTarget)
+}
+
+struct WorkoutScrollRequest: Equatable {
+    let destination: WorkoutScrollDestination
+    let delayForLayout: Bool
+
+    /// A set-to-set advance can target the next row immediately. Completing an exercise changes
+    /// the card's layout, so target the next exercise only after that layout has settled.
+    static func afterAdvance(
+        from previous: WorkoutScrollTarget,
+        to current: WorkoutScrollTarget
+    ) -> WorkoutScrollRequest {
+        if previous.exerciseID == current.exerciseID {
+            return WorkoutScrollRequest(destination: .set(current), delayForLayout: false)
+        }
+        return WorkoutScrollRequest(destination: .exercise(current.exerciseID), delayForLayout: true)
+    }
+}
+
 /// Single source of truth for the live workout while it is being performed. Owns the rest
 /// countdown and the Live Activity, and exposes the actions the interactive widget intents
 /// (LogSet / SkipRest / AddRest / AmrapStep) call from the app process.
@@ -36,6 +64,7 @@ final class WorkoutLiveController {
     private(set) var amrapReps: Int = 0
 
     private var now: Date = .now
+    private var restTimersEnabled = true
     private var tickTask: Task<Void, Never>?
     private var activity: ActivityHandle?
 
@@ -82,6 +111,11 @@ final class WorkoutLiveController {
             if let set = nextSet(in: item) { return (item, set) }
         }
         return nil
+    }
+
+    var currentScrollTarget: WorkoutScrollTarget? {
+        guard let (item, set) = currentTarget else { return nil }
+        return WorkoutScrollTarget(exerciseID: item.id, setID: set.id, isWarmup: set.isWarmup)
     }
 
     /// The first set still to do within an exercise: an un-bypassed, unlogged warmup, then the
@@ -133,16 +167,25 @@ final class WorkoutLiveController {
     }
 
     private func isAmrapTarget(_ item: LiveItem, _ set: LiveSet) -> Bool {
-        !set.isWarmup && item.isAmrap && set.id == item.sets.last?.id
+        !set.isWarmup && item.isAmrap && set.id == item.lastRequiredSetID
     }
 
     // MARK: - Lifecycle
 
-    func begin(_ workout: LiveWorkout) {
+    func begin(_ workout: LiveWorkout, restTimersEnabled: Bool = true) {
         end()
         self.workout = workout
+        self.restTimersEnabled = restTimersEnabled
         syncAmrap()
         startActivity()
+    }
+
+    func setRestTimersEnabled(_ enabled: Bool) {
+        restTimersEnabled = enabled
+        if !enabled {
+            stopRest()
+            updateActivity()
+        }
     }
 
     func end() {
@@ -175,6 +218,15 @@ final class WorkoutLiveController {
             return
         }
 
+        set.bypassed = false
+        set.logged = true
+        afterLog(item: item, set: set)
+    }
+
+    /// Records the exact result for an AMRAP set after the user confirms the rep count.
+    func completeAmrap(set: LiveSet, in item: LiveItem, reps: Int) {
+        guard !set.logged, isAmrapTarget(item, set) else { return }
+        set.reps = max(0, reps)
         set.bypassed = false
         set.logged = true
         afterLog(item: item, set: set)
@@ -328,6 +380,11 @@ final class WorkoutLiveController {
     }
 
     private func startRest(seconds: Int) {
+        guard restTimersEnabled else {
+            stopRest()
+            updateActivity()
+            return
+        }
         now = .now
         restEndDate = now.addingTimeInterval(TimeInterval(max(1, seconds)))
         startTicker()

@@ -8,6 +8,7 @@ struct LiveExerciseCard: View {
     @State private var showChange = false
     @State private var confirmDelete = false
     @State private var editingValue: SetValueEdit?
+    @State private var completingAmrapSet: LiveSet?
 
     @Environment(\.knurledPalette) private var palette
 
@@ -53,29 +54,36 @@ struct LiveExerciseCard: View {
                 .foregroundStyle(.orange)
             }
 
-            if live.hasWarmups { warmupSection }
-
             VStack(spacing: 0) {
-                ForEach(Array(live.sets.enumerated()), id: \.element.id) { index, set in
-                    SetRowView(
-                        set: set,
-                        indexLabel: "\(index + 1)",
-                        isAmrap: live.isAmrap,
-                        isLastSet: set.id == live.lastRequiredSetID,
-                        isCurrent: controller.isCurrent(set),
-                        onEditLoad: { editingValue = .load(set) },
-                        onEditReps: { editingValue = .reps(set) },
-                        onEditRPE: { editingValue = .rpe(set) },
-                        onToggled: { controller.toggle(set: set, in: live) },
-                        onChanged: { controller.modelChanged() },
-                        onDelete: set.isExtra ? {
-                            withAnimation(.snappy) {
-                                live.removeSet(set)
-                                controller.modelChanged()
-                            }
-                        } : nil
-                    )
-                    if set.id != live.sets.last?.id { Divider() }
+                if live.hasWarmups { warmupSection }
+
+                VStack(spacing: 0) {
+                    ForEach(Array(live.sets.enumerated()), id: \.element.id) { index, set in
+                        SetRowView(
+                            set: set,
+                            indexLabel: "\(index + 1)",
+                            isAmrap: live.isAmrap,
+                            isLastSet: set.id == live.lastRequiredSetID,
+                            isCurrent: controller.isCurrent(set),
+                            onEditLoad: { editingValue = .load(set) },
+                            onEditReps: { editReps(for: set) },
+                            onEditRPE: { editingValue = .rpe(set) },
+                            onToggled: { toggle(set) },
+                            onChanged: { controller.modelChanged() },
+                            onDelete: set.isExtra ? {
+                                withAnimation(.snappy) {
+                                    live.removeSet(set)
+                                    controller.modelChanged()
+                                }
+                            } : nil
+                        )
+                        .id(
+                            WorkoutScrollDestination.set(
+                                WorkoutScrollTarget(exerciseID: live.id, setID: set.id, isWarmup: set.isWarmup)
+                            )
+                        )
+                        if set.id != live.sets.last?.id { Divider() }
+                    }
                 }
             }
 
@@ -100,6 +108,12 @@ struct LiveExerciseCard: View {
             ChangeExerciseSheet(live: live) {
                 controller.modelChanged()
             }
+        }
+        .sheet(item: $completingAmrapSet) { set in
+            AmrapRepsEditor(set: set) { reps in
+                controller.completeAmrap(set: set, in: live, reps: reps)
+            }
+            .presentationDetents([.height(330)])
         }
         .setEditingSheets(editingValue: $editingValue, units: live.units) {
             controller.modelChanged()
@@ -130,10 +144,15 @@ struct LiveExerciseCard: View {
                     onToggled: { controller.toggle(set: set, in: live) },
                     onChanged: { controller.modelChanged() }
                 )
+                .id(
+                    WorkoutScrollDestination.set(
+                        WorkoutScrollTarget(exerciseID: live.id, setID: set.id, isWarmup: set.isWarmup)
+                    )
+                )
                 if set.id != visibleWarmups.last?.id { Divider() }
             }
 
-            Divider().padding(.top, 2)
+            Divider()
         }
     }
 
@@ -179,6 +198,26 @@ struct LiveExerciseCard: View {
         case .main: return nil
         case .warmup: return "Warmup"
         case .warmdown: return "Warmdown"
+        }
+    }
+
+    private func isPendingAmrap(_ set: LiveSet) -> Bool {
+        live.isAmrap && set.id == live.lastRequiredSetID && !set.logged
+    }
+
+    private func editReps(for set: LiveSet) {
+        if isPendingAmrap(set) {
+            completingAmrapSet = set
+        } else {
+            editingValue = .reps(set)
+        }
+    }
+
+    private func toggle(_ set: LiveSet) {
+        if isPendingAmrap(set) {
+            completingAmrapSet = set
+        } else {
+            controller.toggle(set: set, in: live)
         }
     }
 
@@ -270,6 +309,21 @@ private struct SetIndexBadge: View {
     }
 }
 
+struct SetRepsPresentation: Equatable {
+    let reps: Int
+    let showsAmrapMarker: Bool
+
+    init(
+        prescribedReps: Int,
+        performedReps: Int,
+        isAmrapFinal: Bool,
+        isLogged: Bool
+    ) {
+        reps = isAmrapFinal && !isLogged ? prescribedReps : performedReps
+        showsAmrapMarker = isAmrapFinal && !isLogged
+    }
+}
+
 struct SetRowView: View {
     let set: LiveSet
     /// Number shown in the leading badge — the set position, or "W"/"W1"… for warm-ups.
@@ -326,6 +380,7 @@ struct SetRowView: View {
             .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
         }
         .frame(minHeight: 34)
+        .padding(.vertical, 2)
         .background {
             if set.logged && showsCompletedBand {
                 // Full-bleed band that fills the row up to the dividers and runs out to the card
@@ -396,7 +451,11 @@ struct SetRowView: View {
                 .layoutPriority(1)
             Text("×")
                 .foregroundStyle(.secondary)
-            ValueChip(text: "\(displayReps)\(amrapMarker)", isChanged: repsChanged, action: onEditReps)
+            ValueChip(
+                text: "\(repsPresentation.reps)\(repsPresentation.showsAmrapMarker ? "+" : "")",
+                isChanged: repsChanged,
+                action: onEditReps
+            )
             Spacer(minLength: 6)
             if showRPEChip {
                 RPEChip(text: rpeText, value: set.rpe, action: onEditRPE)
@@ -421,12 +480,13 @@ struct SetRowView: View {
         return set.load != set.prescribed.load
     }
 
-    private var displayReps: Int {
-        return isAmrapFinal && !set.logged && !repsChanged ? set.prescribed.targetReps : set.reps
-    }
-
-    private var amrapMarker: String {
-        return isAmrapFinal ? "+" : ""
+    private var repsPresentation: SetRepsPresentation {
+        SetRepsPresentation(
+            prescribedReps: set.prescribed.targetReps,
+            performedReps: set.reps,
+            isAmrapFinal: isAmrapFinal,
+            isLogged: set.logged
+        )
     }
 
     private var showRPEChip: Bool {
@@ -673,6 +733,53 @@ private struct RepsValueEditor: View {
     }
 }
 
+private struct AmrapRepsEditor: View {
+    let set: LiveSet
+    var onDone: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var reps: Int
+
+    init(set: LiveSet, onDone: @escaping (Int) -> Void) {
+        self.set = set
+        self.onDone = onDone
+        _reps = State(initialValue: set.reps)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 8) {
+                Text("Target: \(set.prescribed.targetReps)+")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Picker("Reps performed", selection: $reps) {
+                    ForEach(0...99, id: \.self) { value in
+                        Text("\(value)").tag(value)
+                    }
+                }
+                .pickerStyle(.wheel)
+
+            }
+            .padding(.horizontal)
+            .navigationTitle("AMRAP reps")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        onDone(reps)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+    }
+}
+
 private struct RPEValueEditor: View {
     let set: LiveSet
     var onChanged: () -> Void
@@ -798,20 +905,26 @@ struct WarmupBlockCard: View {
                         onChanged: { controller.modelChanged() },
                         showsCompletedBand: false
                     )
+                    .id(
+                        WorkoutScrollDestination.set(
+                            WorkoutScrollTarget(exerciseID: item.id, setID: set.id, isWarmup: set.isWarmup)
+                        )
+                    )
                     if set.id != item.sets.last?.id { Divider() }
                 }
             }
         }
         // The whole exercise — name and its sets — turns sage when done, instead of a thin band
-        // under just the set rows. Full-bleed to the card edges to match the working-set treatment.
+        // under just the set rows. Keep it vertically flush with its content and full-bleed to the
+        // card edges to match the working-set treatment.
         .padding(.horizontal, KnurledTheme.Spacing.m)
-        .padding(.vertical, 6)
         .background {
             if done {
                 Color(red: 0.55, green: 0.71, blue: 0.53).opacity(0.16)
             }
         }
         .padding(.horizontal, -KnurledTheme.Spacing.m)
+        .id(WorkoutScrollDestination.exercise(item.id))
     }
 
     private var completedForeground: Color {
