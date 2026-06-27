@@ -23,12 +23,16 @@ pub use parser::{parse_lock, parse_patch, parse_plan};
 pub use plan_edit::{
     PlanEdit, PlanEditOutcome, apply_plan_edit, preview_plan_edit, suggest_initial_numbers,
 };
-pub use record::{DayRecord, LiftRecord, LogMonth, month_key, month_path};
+pub use record::{
+    AmendRecordOutcome, AmendRecordRequest, LiftRecord, LogMonth, RecordAmendment, RecordKind,
+    TrainingRecord, lift_record_id, month_key, month_path, workout_record_id,
+};
 pub use repo::{
-    InitResult, TrainingRepo, append_day_record, backtest_records_repo, build_repo,
-    check_generated_repo, clear_partials_for_session, init_training_repo, preview_repo,
-    read_records, read_state, read_training_repo, simulate_repo, submit_repo, validate_repo,
-    write_generated_files, write_state,
+    InitResult, TrainingRepo, amend_training_record, backtest_records_repo, build_repo,
+    check_generated_repo, init_training_repo, merge_record_repos, merge_training_records,
+    preview_repo, read_records, read_state, read_training_repo, serialize_record_files,
+    simulate_repo, submit_rendered_repo, submit_repo, validate_repo, write_generated_files,
+    write_state, write_training_record,
 };
 pub use session::{SubmitMode, SubmitOutcome, submit_session};
 pub use templates::{

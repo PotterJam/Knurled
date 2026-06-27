@@ -39,12 +39,6 @@ function recompute() {
   }
 }
 
-function upsertRecord(records, day) {
-  const merged = [...(records || []).filter((record) => record.date !== day.date), day];
-  merged.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-  return merged;
-}
-
 export const workbench = createRoot(() => {
   const [ready, setReady] = createSignal(false);
   const [view, setView] = createSignal("overview");
@@ -95,17 +89,18 @@ export const workbench = createRoot(() => {
     simulate: (weeks, strategy) =>
       engine.simulate(state.planText, build().lock, state.patches, state.currentState, weeks, strategy),
     backtestRecords: () => engine.backtestRecords(state.planText, build().lock, state.patches, state.records),
+    engineMergeRecords: (existing, incoming) => engine.mergeRecords(existing, incoming),
     submit: (input, mode = "advance", date) => {
       const outcome = engine.submit(state.planText, build().lock, state.patches, state.currentState, input, mode, date);
       if (outcome.validation?.status === "valid") {
         const historyNotice = {
           kind: "ok",
           title: "Session recorded",
-          message: `Recorded ${outcome.record_day?.date || date} and updated current state.`,
+          message: `Recorded ${outcome.record?.date || date} and updated current state.`,
         };
         setState({
           currentState: outcome.new_state,
-          records: upsertRecord(state.records, outcome.record_day),
+          records: engine.mergeRecords(state.records, [outcome.record]),
           ui: { ...state.ui, historyNotice },
         });
       }
@@ -127,7 +122,13 @@ export const workbench = createRoot(() => {
         const githubConfig = { ...state.github, ...config };
         const { result, lock } = build();
         const commitState = { ...state, github: githubConfig };
-        const plan = buildCommitPlan({ state: commitState, result, lock, templateRef: templateRef(state.planText) });
+        const plan = buildCommitPlan({
+          state: commitState,
+          result,
+          lock,
+          templateRef: templateRef(state.planText),
+          recordFiles: engine.recordFiles(commitState.records),
+        });
         return github.commitFiles(githubConfig.token, githubConfig.repo, githubConfig.branch, plan);
       },
     },

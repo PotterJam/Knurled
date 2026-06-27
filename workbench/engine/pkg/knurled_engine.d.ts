@@ -7,12 +7,12 @@
  * state.
  */
 export function build(plan_text: string, lock_text: string, patches_json: string, state_json: string): string;
-export function engine_version(): string;
+export function exercise_catalog_json(): string;
 /**
  * Submit a finished session (ADR 0007). The browser holds `state` and the
  * record, so they are passed in and returned: this renders the next workout
  * from `state_json`, reduces the input per `mode` (`advance` | `off_day` |
- * `reset`), and returns a `SubmitOutcome` (`validation`, `record_day` to
+ * `reset`), and returns a `SubmitOutcome` (`validation`, `record` to
  * upsert into the month file, `new_state` to persist, `effects`). An empty
  * `state_json` means the program's initial state.
  */
@@ -21,15 +21,11 @@ export function submit(plan_text: string, lock_text: string, patches_json: strin
  * Compile + validate a plan. Returns a `ValidationReport`.
  */
 export function validate(plan_text: string, lock_text: string, patches_json: string): string;
+export function merge_records(existing_json: string, incoming_json: string): string;
+export function record_files(records_json: string): string;
 /**
- * List built-in templates with their session/slot/tier skeleton so the builder
- * canvas reflects real structure instead of hardcoded assumptions.
- */
-export function builtin_template_catalog(): string;
-export function exercise_catalog_json(): string;
-/**
- * Backtest the plan over recorded days (ADR 0007). `days_json` is a JSON array
- * of day records (`logs/<yyyy>/<mm>.json` `days[]`). Returns a
+ * Backtest the plan over training records (ADR 0007). `days_json` is a JSON array
+ * of records (`logs/<yyyy>/<mm>.json` `records[]`). Returns a
  * `BacktestProjection`.
  */
 export function backtest_records(plan_text: string, lock_text: string, patches_json: string, days_json: string): string;
@@ -37,6 +33,12 @@ export function backtest_records(plan_text: string, lock_text: string, patches_j
  * Project the plan forward from `state`. Returns a `SimulationReport`.
  */
 export function simulate_plan(plan_text: string, lock_text: string, patches_json: string, state_json: string, weeks: number, strategy: string): string;
+export function engine_version(): string;
+/**
+ * List built-in templates with their session/slot/tier skeleton so the builder
+ * canvas reflects real structure instead of hardcoded assumptions.
+ */
+export function builtin_template_catalog(): string;
 /**
  * Generate a correct `fitspec.lock` body for a freshly authored plan's template.
  */
@@ -52,6 +54,8 @@ export interface InitOutput {
   readonly engine_version: () => [number, number];
   readonly exercise_catalog_json: () => [number, number];
   readonly lock_for: (a: number, b: number) => [number, number];
+  readonly merge_records: (a: number, b: number, c: number, d: number) => [number, number];
+  readonly record_files: (a: number, b: number) => [number, number];
   readonly simulate_plan: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
   readonly submit: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
   readonly validate: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];

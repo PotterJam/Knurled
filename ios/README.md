@@ -69,10 +69,10 @@ Swift talks to it through the `WorkoutEngine` protocol:
   (`Knurled/repos/<owner>-<name>/`) mirroring the repo tree.
 - **Submit:** the live session builds an `ExecutionInput` → `knurled_reduce_input` for the
   **consequence-first effect preview** → on confirm, `knurled_submit` writes
-  `state/current.json` and upserts a `DayRecord` into `logs/<yyyy>/<mm>.json`, then one GitHub
-  commit of every changed file. The engine is the only source of progression effects.
-- **Record edits:** monthly log files are mutable human records. Swift reads them as
-  `LogMonth` / `DayRecord` / `LiftRecord`; the engine never replays them.
+  `state/current.json` and writes a session-grain `TrainingRecord` into
+  `logs/<yyyy>/<mm>.json`, then commits the engine-reported changed files.
+- **Record edits:** Swift sends typed amendment intent to the engine. The engine owns parsing,
+  identity, revision checks, merging, and serialization; amendments never rerun progression.
 
 ## ADR 0007 migration — Swift port checklist
 
@@ -81,14 +81,14 @@ the training log is a human-facing record the engine never replays, `state/curre
 authored-forward source of truth, and the event/replay/correction/continuation machinery is gone.
 The FFI and Swift app are ported:
 
-- **Models:** `Models/Events.swift` now contains `DayRecord` / `LiftRecord` / `LogMonth`,
+- **Models:** `Models/Events.swift` mirrors engine-returned `TrainingRecord` / `LiftRecord` values,
   `SubmitMode`, `SubmitOutcome`, and preview `ReductionResult`.
-- **`Repo/LogReader.swift`:** reads and upserts `logs/<yyyy>/<mm>.json` monthly records.
+- **Record I/O:** `WorkoutEngine` reads and amends monthly records through the Rust FFI.
 - **`Engine/RustWorkoutEngine.swift` + `WorkoutEngine.swift`:** expose preview-only `reduce` and
   persistent `submit(dir, renderedSnapshot, input, mode, date)`.
 - **Submit flow:** `AppModel+Commit` calls `knurled_submit`, refreshes generated outputs, then
   pushes one GitHub commit.
-- **History/Data:** both drive from `DayRecord[]`; partial/edited/skip badges are retired.
+- **History/Data:** both drive from engine-returned `TrainingRecord[]`.
 - **Tests:** removed correction/continue/skip event suites; added advance/off-day/reset submit
   coverage and record-shape round trips.
 

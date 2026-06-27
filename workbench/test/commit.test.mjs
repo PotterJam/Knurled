@@ -24,7 +24,15 @@ test("buildCommitPlan includes canonical and generated workbench files", () => {
     validation: { status: "valid" },
   };
 
-  const plan = buildCommitPlan({ state, result, lock: "lock text", templateRef: "gzcl.gzclp@1.0.0" });
+  const plan = buildCommitPlan({
+    state,
+    result,
+    lock: "lock text",
+    templateRef: "gzcl.gzclp@1.0.0",
+    recordFiles: {
+      "logs/2026/06.json": `${JSON.stringify({ format_version: 1, month: "2026-06", records: state.records }, null, 2)}\n`,
+    },
+  });
 
   assert.deepEqual(
     plan.files.map((file) => file.path),

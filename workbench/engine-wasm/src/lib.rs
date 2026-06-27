@@ -15,9 +15,10 @@
 //! unwraps the envelope and throws on `ok:false`.
 
 use knurled_core::{
-    CompiledPlan, DayRecord, ENGINE_VERSION, ExecutionInput, PatchFile, StateProjection, SubmitMode,
-    backtest, build_outputs, builtin_template, builtin_templates, compile_plan, create_initial_state,
-    exercise_catalog, render_lockfile, render_next, simulate, submit_session, validate_compiled,
+    CompiledPlan, ENGINE_VERSION, ExecutionInput, PatchFile, StateProjection, SubmitMode,
+    TrainingRecord, backtest, build_outputs, builtin_template, builtin_templates, compile_plan,
+    create_initial_state, exercise_catalog, merge_training_records, render_lockfile, render_next,
+    serialize_record_files, simulate, submit_session, validate_compiled,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -32,8 +33,9 @@ struct PatchInput {
 fn ok<T: Serialize>(data: T) -> String {
     match serde_json::to_value(&data) {
         Ok(value) => json!({ "ok": true, "data": value }).to_string(),
-        Err(error) => json!({ "ok": false, "error": format!("serialize error: {error}") })
-            .to_string(),
+        Err(error) => {
+            json!({ "ok": false, "error": format!("serialize error: {error}") }).to_string()
+        }
     }
 }
 
@@ -133,7 +135,7 @@ pub fn simulate_plan(
 /// Submit a finished session (ADR 0007). The browser holds `state` and the
 /// record, so they are passed in and returned: this renders the next workout
 /// from `state_json`, reduces the input per `mode` (`advance` | `off_day` |
-/// `reset`), and returns a `SubmitOutcome` (`validation`, `record_day` to
+/// `reset`), and returns a `SubmitOutcome` (`validation`, `record` to
 /// upsert into the month file, `new_state` to persist, `effects`). An empty
 /// `state_json` means the program's initial state.
 #[wasm_bindgen]
@@ -182,8 +184,8 @@ pub fn submit(
     }
 }
 
-/// Backtest the plan over recorded days (ADR 0007). `days_json` is a JSON array
-/// of day records (`logs/<yyyy>/<mm>.json` `days[]`). Returns a
+/// Backtest the plan over training records (ADR 0007). `days_json` is a JSON array
+/// of records (`logs/<yyyy>/<mm>.json` `records[]`). Returns a
 /// `BacktestProjection`.
 #[wasm_bindgen]
 pub fn backtest_records(
@@ -200,7 +202,7 @@ pub fn backtest_records(
         Ok(value) => value,
         Err(error) => return fail(error),
     };
-    let days: Vec<DayRecord> = if days_json.trim().is_empty() {
+    let days: Vec<TrainingRecord> = if days_json.trim().is_empty() {
         Vec::new()
     } else {
         match serde_json::from_str(days_json) {
@@ -210,6 +212,34 @@ pub fn backtest_records(
     };
     match backtest(&compiled, &days) {
         Ok(projection) => ok(projection),
+        Err(error) => fail(error),
+    }
+}
+
+#[wasm_bindgen]
+pub fn merge_records(existing_json: &str, incoming_json: &str) -> String {
+    let existing: Vec<TrainingRecord> = match serde_json::from_str(existing_json) {
+        Ok(value) => value,
+        Err(error) => return fail(format!("invalid existing records json: {error}")),
+    };
+    let incoming: Vec<TrainingRecord> = match serde_json::from_str(incoming_json) {
+        Ok(value) => value,
+        Err(error) => return fail(format!("invalid incoming records json: {error}")),
+    };
+    match merge_training_records(existing, incoming) {
+        Ok(records) => ok(records),
+        Err(error) => fail(error),
+    }
+}
+
+#[wasm_bindgen]
+pub fn record_files(records_json: &str) -> String {
+    let records: Vec<TrainingRecord> = match serde_json::from_str(records_json) {
+        Ok(value) => value,
+        Err(error) => return fail(format!("invalid records json: {error}")),
+    };
+    match serialize_record_files(&records) {
+        Ok(files) => ok(files),
         Err(error) => fail(error),
     }
 }

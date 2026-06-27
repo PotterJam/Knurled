@@ -211,13 +211,18 @@ import Foundation
         exercise: String,
         load: String,
         date: String
-    ) -> DayRecord {
-        DayRecord(
+    ) -> TrainingRecord {
+        TrainingRecord(
+            id: "\(date)-\(exercise)",
             date: date,
+            sessionId: "history",
+            startedAt: "\(date)T10:00:00Z",
+            completedAt: "\(date)T11:00:00Z",
             program: nil,
             note: nil,
             lifts: [
                 LiftRecord(
+                    liftId: "\(date)-\(exercise)-lift",
                     exercise: exercise,
                     weight: load,
                     sets: [5],

@@ -67,8 +67,8 @@ import Foundation
         )
 
         #expect(outcome.validation.isValid)
-        #expect(outcome.recordDay.date == "2026-06-24")
-        #expect(outcome.recordDay.lifts.first?.sets.isEmpty == false)
+        #expect(outcome.record.date == "2026-06-24")
+        #expect(outcome.record.lifts.first?.sets.isEmpty == false)
         #expect(FileManager.default.fileExists(atPath: dir.appending(path: "logs/2026/06.json").path()))
     }
 

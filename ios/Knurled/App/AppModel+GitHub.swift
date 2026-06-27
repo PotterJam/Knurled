@@ -279,9 +279,9 @@ extension AppModel {
 
     /// Pushes the working copy's changed files as one commit. Best-effort: a failure
     /// (e.g. offline) marks the repo pending rather than losing the local commit (spec §30).
-    func pushIfConnected(repo: ActiveRepo, message: String) async {
+    func pushIfConnected(repo: ActiveRepo, message: String, files: [String]? = nil) async {
         do {
-            try await push(repo: repo, message: message)
+            try await push(repo: repo, message: message, files: files)
         } catch {
             repo.pendingPush = true
             repo.loadError = "Saved locally. Couldn't push to GitHub yet: \(error.localizedDescription)"
@@ -308,7 +308,6 @@ extension AppModel {
         remote: GitHubRemote,
         client: any GitHubClientProtocol
     ) async throws {
-        let localLogs = Self.logFilesByRelativePath(in: repo.url)
         let remoteDir = FileManager.default.temporaryDirectory
             .appending(path: "KnurledSync-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: remoteDir) }
@@ -319,55 +318,13 @@ extension AppModel {
             branch: remote.branch,
             into: remoteDir
         )
-        let remoteLogs = Self.logFilesByRelativePath(in: remoteDir)
-        let localOnly = Self.localOnlyLogFiles(local: localLogs, remote: remoteLogs)
+        _ = try await engine.mergeRecordRepos(source: repo.url, target: remoteDir)
 
         try? FileManager.default.removeItem(at: repo.url)
         try FileManager.default.copyItem(at: remoteDir, to: repo.url)
-        try Self.writeLogFiles(localOnly, to: repo.url)
         repo.remote?.headCommit = latestHead
         _ = try await engine.build(dir: repo.url, write: true)
         try await push(repo: repo, message: "Sync pending Knurled changes")
     }
 
-    static func logFilesByRelativePath(in dir: URL) -> [String: String] {
-        let logs = dir.appending(path: "logs", directoryHint: .isDirectory)
-        guard let enumerator = FileManager.default.enumerator(at: logs, includingPropertiesForKeys: nil) else {
-            return [:]
-        }
-
-        var result: [String: String] = [:]
-        for case let url as URL in enumerator where url.pathExtension == "json" {
-            guard let path = GitHubChangedFiles.repoRelativePath(for: url, root: dir),
-                  let text = try? String(contentsOf: url, encoding: .utf8)
-            else { continue }
-            result[path] = text
-        }
-        return result
-    }
-
-    static func localOnlyLogFiles(
-        local: [String: String],
-        remote: [String: String]
-    ) -> [(path: String, text: String)] {
-        var localOnly: [(path: String, text: String)] = []
-        for (path, text) in local where remote[path] != text {
-            localOnly.append((path: path, text: text))
-        }
-
-        return localOnly.sorted { lhs, rhs in
-            lhs.path < rhs.path
-        }
-    }
-
-    static func writeLogFiles(_ files: [(path: String, text: String)], to dir: URL) throws {
-        for (path, text) in files {
-            let url = dir.appending(path: path)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try text.write(to: url, atomically: true, encoding: .utf8)
-        }
-    }
 }

@@ -7,11 +7,15 @@ use serde_json::json;
 use crate::backtest::{BacktestProjection, backtest};
 use crate::core::{
     PatchFile, build_outputs, compile_plan, create_initial_state, render_next, simulate,
+    validate_execution_input,
 };
 use crate::error::{KnurledError, Result};
 use crate::json::pretty_json;
 use crate::model::*;
-use crate::record::{DayRecord, LogMonth, month_key, month_path};
+use crate::record::{
+    AmendRecordOutcome, AmendRecordRequest, LiftRecord, LogMonth, RecordAmendment, RecordKind,
+    TrainingRecord, lift_record_id, month_key, month_path, record_order,
+};
 use crate::session::{SubmitMode, SubmitOutcome, submit_session};
 use crate::templates::{TemplateRef, parse_template_ref, render_lockfile};
 
@@ -195,8 +199,8 @@ pub fn write_state(repo_path: impl AsRef<Path>, state: &StateProjection) -> Resu
     fs::write(&path, pretty_json(state)?).map_err(|source| io_error(&path, source))
 }
 
-/// Read every day record under `logs/**/*.json`, in chronological order.
-pub fn read_records(repo_path: impl AsRef<Path>) -> Result<Vec<DayRecord>> {
+/// Read every training record under `logs/**/*.json`, in canonical order.
+pub fn read_records(repo_path: impl AsRef<Path>) -> Result<Vec<TrainingRecord>> {
     let logs_dir = repo_path.as_ref().join("logs");
     if !logs_dir.exists() {
         return Ok(Vec::new());
@@ -205,32 +209,32 @@ pub fn read_records(repo_path: impl AsRef<Path>) -> Result<Vec<DayRecord>> {
     collect_files(&logs_dir, &mut files)?;
     files.sort();
 
-    let mut days = Vec::new();
+    let mut records = Vec::new();
     for path in files.into_iter().filter(|path| {
         path.extension()
             .is_some_and(|extension| extension == "json")
     }) {
         let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
-        let month: LogMonth = serde_json::from_str(&text).map_err(|source| KnurledError::Json {
-            path: path.clone(),
-            source,
-        })?;
-        days.extend(month.days);
+        let month = LogMonth::parse(&text)
+            .map_err(|error| KnurledError::Parse(format!("{}: {error}", path.display())))?;
+        records.extend(month.records);
     }
-    days.sort_by(|left, right| left.date.cmp(&right.date));
-    Ok(days)
+    records.sort_by(record_order);
+    Ok(records)
 }
 
-/// Insert or replace a day in its month file (`logs/<yyyy>/<mm>.json`), keeping
-/// the file pretty-printed and chronological. Returns the repo-relative path.
-pub fn append_day_record(repo_path: impl AsRef<Path>, day: DayRecord) -> Result<String> {
-    let relative = month_path(&day.date)?;
+/// Insert or replace a record by ID in its month file (`logs/<yyyy>/<mm>.json`).
+pub fn write_training_record(
+    repo_path: impl AsRef<Path>,
+    record: TrainingRecord,
+) -> Result<String> {
+    let relative = month_path(&record.date)?;
     let path = repo_path.as_ref().join(&relative);
     let mut month = match read_optional(&path)? {
         Some(text) => LogMonth::parse(&text)?,
-        None => LogMonth::new(month_key(&day.date)?),
+        None => LogMonth::new(month_key(&record.date)?),
     };
-    month.upsert_day(day);
+    month.put_record(record);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|source| io_error(parent, source))?;
     }
@@ -238,49 +242,249 @@ pub fn append_day_record(repo_path: impl AsRef<Path>, day: DayRecord) -> Result<
     Ok(relative)
 }
 
-/// Remove any saved partial day records for `session_id`, regardless of date.
+pub fn amend_training_record(
+    repo_path: impl AsRef<Path>,
+    request: AmendRecordRequest,
+) -> Result<AmendRecordOutcome> {
+    if request.updated_at.is_empty() {
+        return Err(KnurledError::InvalidExecutionInput(
+            "record amendment requires updated_at".into(),
+        ));
+    }
+
+    let root = repo_path.as_ref();
+    let mut record = read_records(root)?
+        .into_iter()
+        .find(|record| record.id == request.record_id)
+        .ok_or_else(|| {
+            KnurledError::InvalidExecutionInput(format!(
+                "training record {:?} was not found",
+                request.record_id
+            ))
+        })?;
+    if record.kind != RecordKind::Workout
+        || record.status.as_deref() == Some("partial")
+        || record.completed_at.is_none()
+    {
+        return Err(KnurledError::InvalidExecutionInput(
+            "only completed workouts can be amended".into(),
+        ));
+    }
+    if record.revision != request.expected_revision {
+        return Err(KnurledError::InvalidExecutionInput(format!(
+            "training record revision conflict: expected {}, found {}",
+            request.expected_revision, record.revision
+        )));
+    }
+
+    match request.amendment {
+        RecordAmendment::AddSet {
+            lift_id,
+            load,
+            reps,
+            metrics,
+        } => {
+            let lift = record
+                .lifts
+                .iter_mut()
+                .find(|lift| lift.lift_id == lift_id)
+                .ok_or_else(|| {
+                    KnurledError::InvalidExecutionInput(format!(
+                        "lift {lift_id:?} was not found in training record"
+                    ))
+                })?;
+            let next_set = lift
+                .actual
+                .iter()
+                .map(|set| set.set)
+                .max()
+                .unwrap_or(lift.sets.len() as u32)
+                + 1;
+            lift.sets.push(reps);
+            if !metrics.is_empty() || load != lift.weight {
+                lift.actual.push(ActualSet {
+                    set: next_set,
+                    load,
+                    reps,
+                    metrics,
+                });
+            }
+        }
+        RecordAmendment::AddExercise {
+            exercise,
+            weight,
+            note,
+            mut sets,
+        } => {
+            if exercise.trim().is_empty() || sets.is_empty() {
+                return Err(KnurledError::InvalidExecutionInput(
+                    "added exercise requires a name and at least one set".into(),
+                ));
+            }
+            sets.sort_by_key(|set| set.set);
+            for (index, set) in sets.iter_mut().enumerate() {
+                set.set = index as u32 + 1;
+            }
+            let lift_id = lift_record_id(
+                &record.id,
+                &format!(
+                    "amendment-{}-{}",
+                    record.revision + 1,
+                    record.lifts.len() + 1
+                ),
+            );
+            let reps = sets.iter().map(|set| set.reps).collect();
+            let actual = sets
+                .into_iter()
+                .filter(|set| !set.metrics.is_empty() || set.load != weight)
+                .collect();
+            record.lifts.push(LiftRecord {
+                lift_id,
+                item_id: None,
+                exercise,
+                weight,
+                sets: reps,
+                actual,
+                metrics: BTreeMap::new(),
+                note,
+            });
+        }
+    }
+
+    record.updated_at = Some(request.updated_at);
+    let changed_path = write_training_record(root, record.clone())?;
+    record.revision += 1;
+    Ok(AmendRecordOutcome {
+        record,
+        changed_files: vec![changed_path],
+    })
+}
+
+pub fn merge_training_records(
+    left: Vec<TrainingRecord>,
+    right: Vec<TrainingRecord>,
+) -> Result<Vec<TrainingRecord>> {
+    let mut merged = BTreeMap::<String, TrainingRecord>::new();
+    for record in left.into_iter().chain(right) {
+        match merged.get(&record.id) {
+            None => {
+                merged.insert(record.id.clone(), record);
+            }
+            Some(existing) if existing == &record => {}
+            Some(existing)
+                if existing.status.as_deref() == Some("partial")
+                    && record.status.as_deref() != Some("partial") =>
+            {
+                merged.insert(record.id.clone(), record);
+            }
+            Some(existing)
+                if existing.status.as_deref() != Some("partial")
+                    && record.status.as_deref() == Some("partial") => {}
+            Some(existing) if existing.revision != record.revision => {
+                if record.revision > existing.revision {
+                    merged.insert(record.id.clone(), record);
+                }
+            }
+            Some(_) => {
+                return Err(KnurledError::InvalidExecutionInput(format!(
+                    "conflicting completed training record {:?}",
+                    record.id
+                )));
+            }
+        }
+    }
+    let mut records: Vec<_> = merged.into_values().collect();
+    records.sort_by(record_order);
+    Ok(records)
+}
+
+pub fn serialize_record_files(records: &[TrainingRecord]) -> Result<BTreeMap<String, String>> {
+    let mut months = BTreeMap::<String, LogMonth>::new();
+    for record in records {
+        let key = month_key(&record.date)?;
+        months
+            .entry(key.clone())
+            .or_insert_with(|| LogMonth::new(key))
+            .put_record(record.clone());
+    }
+    months
+        .into_values()
+        .map(|month| {
+            let first = month.records.first().ok_or_else(|| {
+                KnurledError::Parse("cannot serialize an empty record month".into())
+            })?;
+            Ok((month_path(&first.date)?, month.to_pretty_json()?))
+        })
+        .collect()
+}
+
+pub fn merge_record_repos(
+    source_repo: impl AsRef<Path>,
+    target_repo: impl AsRef<Path>,
+) -> Result<Vec<String>> {
+    let records = merge_training_records(
+        read_records(source_repo)?,
+        read_records(target_repo.as_ref())?,
+    )?;
+    let files = serialize_record_files(&records)?;
+    for (relative, text) in &files {
+        let path = target_repo.as_ref().join(relative);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|source| io_error(parent, source))?;
+        }
+        fs::write(&path, text).map_err(|source| io_error(&path, source))?;
+    }
+    Ok(files.into_keys().collect())
+}
+
+/// Remove any saved partial records for `session_id`, regardless of date.
 /// A partial only ever represents the current in-progress attempt at a session,
 /// so completing that session obsoletes it. Without this, finishing a session
-/// fresh (rather than resuming the partial, which upserts the same date) leaves
+/// fresh rather than resuming the same attempt leaves
 /// the old partial behind as a resumable "Continue" entry forever. Returns the
-/// number of partials removed.
-pub fn clear_partials_for_session(
+/// repo-relative paths changed by cleanup.
+fn clear_partials_for_session(
     repo_path: impl AsRef<Path>,
     session_id: &str,
-) -> Result<usize> {
-    let logs_dir = repo_path.as_ref().join("logs");
+) -> Result<Vec<String>> {
+    let root = repo_path.as_ref();
+    let logs_dir = root.join("logs");
     if !logs_dir.exists() {
-        return Ok(0);
+        return Ok(Vec::new());
     }
     let mut files = Vec::new();
     collect_files(&logs_dir, &mut files)?;
 
-    let mut removed = 0;
+    let mut changed = Vec::new();
     for path in files.into_iter().filter(|path| {
         path.extension()
             .is_some_and(|extension| extension == "json")
     }) {
         let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
         let mut month = LogMonth::parse(&text)?;
-        let before = month.days.len();
-        month.days.retain(|day| {
-            !(day.status.as_deref() == Some("partial")
-                && day
+        let before = month.records.len();
+        month.records.retain(|record| {
+            !(record.status.as_deref() == Some("partial")
+                && record
                     .session_id
                     .as_deref()
                     .is_some_and(|id| id.eq_ignore_ascii_case(session_id)))
         });
-        let dropped = before - month.days.len();
+        let dropped = before - month.records.len();
         if dropped > 0 {
-            removed += dropped;
             fs::write(&path, month.to_pretty_json()?).map_err(|source| io_error(&path, source))?;
+            let relative = path.strip_prefix(root).map_err(|_| {
+                KnurledError::Parse(format!("record path {} escaped repository", path.display()))
+            })?;
+            changed.push(relative.to_string_lossy().replace('\\', "/"));
         }
     }
-    Ok(removed)
+    changed.sort();
+    Ok(changed)
 }
 
 /// Submit a finished session against the next workout: advance `state` per
-/// `mode` and append the day to the record. On invalid input nothing is
+/// `mode` and persist its training record. On invalid input nothing is
 /// written; the returned outcome carries the validation errors.
 pub fn submit_repo(
     repo_path: impl AsRef<Path>,
@@ -292,24 +496,72 @@ pub fn submit_repo(
     let repo = read_training_repo(root)?;
     let state = read_state(root)?;
     let rendered = render_next(&repo.compiled, &state)?;
-    let outcome = submit_session(&repo.compiled, &state, &rendered, input, mode, date)?;
+    persist_rendered_submit(root, &repo.compiled, &state, &rendered, input, mode, date)
+}
+
+pub fn submit_rendered_repo(
+    repo_path: impl AsRef<Path>,
+    rendered: &RenderedSession,
+    input: &ExecutionInput,
+    mode: SubmitMode,
+    date: &str,
+) -> Result<SubmitOutcome> {
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let state = read_state(root)?;
+    persist_rendered_submit(root, &repo.compiled, &state, rendered, input, mode, date)
+}
+
+fn persist_rendered_submit(
+    root: &Path,
+    compiled: &CompiledPlan,
+    state: &StateProjection,
+    rendered: &RenderedSession,
+    input: &ExecutionInput,
+    mode: SubmitMode,
+    date: &str,
+) -> Result<SubmitOutcome> {
+    if input.status == "complete"
+        && let Some(started_at) = input.started_at.as_deref()
+    {
+        let record_id =
+            crate::record::workout_record_id(&rendered.rendered_session_hash, started_at);
+        if let Some(existing) = read_records(root)?
+            .into_iter()
+            .find(|record| record.id == record_id && record.status.as_deref() != Some("partial"))
+        {
+            return Ok(SubmitOutcome {
+                validation: validate_execution_input(rendered, input),
+                record: existing,
+                new_state: state.clone(),
+                effects: Vec::new(),
+                changed_files: Vec::new(),
+            });
+        }
+    }
+    let mut outcome = submit_session(compiled, state, rendered, input, mode, date)?;
     if outcome.validation.status == ValidationStatus::Valid {
         write_state(root, &outcome.new_state)?;
-        append_day_record(root, outcome.record_day.clone())?;
+        let record_path = write_training_record(root, outcome.record.clone())?;
+        outcome.changed_files = vec!["state/current.json".into(), record_path];
         if input.status != "partial" {
-            clear_partials_for_session(root, &rendered.session_id)?;
+            for path in clear_partials_for_session(root, &rendered.session_id)? {
+                if !outcome.changed_files.contains(&path) {
+                    outcome.changed_files.push(path);
+                }
+            }
         }
     }
     Ok(outcome)
 }
 
-/// Backtest the repo's plan over its recorded days (the opt-in, replay-free
+/// Backtest the repo's plan over its recorded workouts (the opt-in, replay-free
 /// projection of ADR 0007).
 pub fn backtest_records_repo(repo_path: impl AsRef<Path>) -> Result<BacktestProjection> {
     let root = repo_path.as_ref();
     let repo = read_training_repo(root)?;
-    let days = read_records(root)?;
-    backtest(&repo.compiled, &days)
+    let records = read_records(root)?;
+    backtest(&repo.compiled, &records)
 }
 
 pub fn write_generated_files(root: impl AsRef<Path>, outputs: &BuildOutputs) -> Result<()> {

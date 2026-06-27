@@ -56,13 +56,20 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
    Intent is chosen by the user **at finish time and applied to `state`** — never inferred from
    the logged numbers, and never stored as instruction metadata in the log.
 
-5. **Lean log schema.** A day is a record of what happened:
+5. **Lean, session-grain log schema.** Each workout is an independently identified record of
+   what happened. Dates group records; they are never identities:
 
    ```jsonc
    {
+     "id": "sha256:…",
+     "revision": 1,
+     "kind": "workout",
      "date": "2026-06-24",
+     "session_id": "a1",
+     "started_at": "2026-06-24T10:00:00Z",
+     "completed_at": "2026-06-24T11:00:00Z",
      "lifts": [
-       { "exercise": "squat", "weight": "82.5kg", "sets": [5, 5, 3] },
+       { "lift_id": "sha256:…", "exercise": "squat", "weight": "82.5kg", "sets": [5, 5, 3] },
        {
          "exercise": "bench",
          "weight": "45kg",
@@ -80,9 +87,9 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
    only when a set carries detail that cannot fit there, such as per-set metrics (`rpe`, `rir`,
    later velocity — the one good idea from ADR 0001).
 
-6. **File layout & format: pretty JSON, grouped monthly.** `logs/<yyyy>/<mm>.json`, a top-level
-   object with a `days[]` array. Pretty-printed (not minified). Monthly matches the existing iOS
-   convention and keeps files small (tens of KB).
+6. **File layout & format: versioned pretty JSON, grouped monthly.** `logs/<yyyy>/<mm>.json`
+   contains `{ "format_version": 1, "month": "yyyy-mm", "records": [] }`. Multiple records may
+   share a date. The deleted date-keyed format is not accepted.
 
 7. **A break or new program is just re-authoring `state`.** A layoff needs no representation — it
    is a gap in the dated record, and nothing computes off elapsed time. Restarting lighter, or
@@ -95,7 +102,8 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
    breaks and switches:
 
    ```jsonc
-   { "date": "2026-06-26", "program": "531.basic", "note": "finished novice LP" }
+   { "id": "sha256:…", "revision": 1, "kind": "program_marker",
+     "date": "2026-06-26", "program": "531.basic", "note": "finished novice LP" }
    ```
 
    This is **not** the old `plan_changed` replay-event (ADR 0002): the engine ignores it; it
@@ -114,10 +122,15 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
 
 11. **Tracking-only extra work is record data, not progression input.** A workout player may log
     optional sets beyond the rendered prescription, or entirely added exercises for the day. These
-    inputs are recorded in `DayRecord.lifts` in the order submitted, but the reducer only applies
-    progression to rendered program items and their prescribed working-set numbers. Extra work can
-    be saved in partial workouts with minimal `item_id` metadata for resume, then becomes ordinary
-    human-facing record data on completion.
+    inputs are recorded in `TrainingRecord.lifts` in the order submitted, but the reducer only applies
+ progression to rendered program items and their prescribed working-set numbers. Extra work can
+ be saved in partial workouts with minimal `item_id` metadata for resume, then becomes ordinary
+ human-facing record data on completion.
+
+12. **Completed records are amendable without replaying progression.** Typed engine amendments
+    add missed sets or exercises by record ID and expected revision. Amendments update only the
+    monthly record, increment its revision, and never write `state/current.json` or generated
+    workout files.
 
 ## Consequences
 

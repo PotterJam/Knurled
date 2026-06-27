@@ -31,7 +31,7 @@ struct LiftProgressData {
     }
 
     static func build(
-        records: [DayRecord],
+        records: [TrainingRecord],
         state: StateProjection?,
         units: Units,
         calendar: Calendar = .current,

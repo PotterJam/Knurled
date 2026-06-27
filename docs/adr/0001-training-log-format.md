@@ -4,7 +4,7 @@
 - Date: 2026-06-24
 
 > Supersession note: the event-log/replay assumptions below are historical. The current canonical
-> record is ADR 0007's pretty monthly `DayRecord` log plus authored-forward `state/current.json`.
+> record is ADR 0007's pretty monthly `TrainingRecord` log plus authored-forward `state/current.json`.
 > The measured-effort direction survives only where it maps to lean record details such as
 > `LiftRecord.actual[].metrics`.
 

@@ -1,7 +1,7 @@
 //! Submit-time progression against `state` (ADR 0007).
 //!
 //! In the logs-as-record model, finishing a session does two independent things:
-//! it appends a lean [`DayRecord`] to the log (what happened), and it advances
+//! it writes a lean [`TrainingRecord`] to the log (what happened), and it advances
 //! the source-of-truth `state` (where you are). How `state` advances is the
 //! user's intent, chosen at submit time, never inferred from the numbers:
 //!
@@ -31,7 +31,7 @@ use crate::model::{
     ActualSet, CompiledPlan, Effect, ExecutionInput, ExecutionInputValidation, ItemInput,
     RenderedItem, RenderedSession, StateProjection, ValidationStatus,
 };
-use crate::record::{DayRecord, LiftRecord};
+use crate::record::{LiftRecord, TrainingRecord, lift_record_id, workout_record_id};
 
 /// How a finished session should move `state`. Defaults to [`SubmitMode::Advance`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -52,12 +52,13 @@ pub enum SubmitMode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SubmitOutcome {
     pub validation: ExecutionInputValidation,
-    /// The day to upsert into `logs/<yyyy>/<mm>.json`.
-    pub record_day: DayRecord,
+    pub record: TrainingRecord,
     /// The new state to write to `state/current.json`.
     pub new_state: StateProjection,
     /// State changes applied, for the app's consequence-first preview.
     pub effects: Vec<Effect>,
+    #[serde(default)]
+    pub changed_files: Vec<String>,
 }
 
 /// Submit a finished session: build its record and advance `state` per `mode`.
@@ -69,15 +70,15 @@ pub fn submit_session(
     mode: SubmitMode,
     date: &str,
 ) -> Result<SubmitOutcome> {
-    let record_day = build_record_day(rendered_session, input, date);
-
     let validation = validate_execution_input(rendered_session, input);
+    let record = build_training_record(rendered_session, input, date);
     if validation.status != ValidationStatus::Valid {
         return Ok(SubmitOutcome {
             validation,
-            record_day,
+            record,
             new_state: state.clone(),
             effects: Vec::new(),
+            changed_files: Vec::new(),
         });
     }
 
@@ -109,9 +110,10 @@ pub fn submit_session(
 
     Ok(SubmitOutcome {
         validation,
-        record_day,
+        record,
         new_state,
         effects,
+        changed_files: Vec::new(),
     })
 }
 
@@ -180,11 +182,13 @@ fn reset_baselines(
 
 /// Build the lean record for the day from what was performed. Independent of
 /// mode and of the program — it is purely descriptive.
-fn build_record_day(
+fn build_training_record(
     rendered_session: &RenderedSession,
     input: &ExecutionInput,
     date: &str,
-) -> DayRecord {
+) -> TrainingRecord {
+    let started_at = input.started_at.clone().unwrap_or_default();
+    let record_id = workout_record_id(&rendered_session.rendered_session_hash, &started_at);
     let mut lifts = Vec::new();
     for item_input in &input.inputs {
         if let Some(item) = rendered_session
@@ -197,6 +201,7 @@ fn build_record_day(
                 .clone()
                 .unwrap_or_else(|| item.exercise.clone());
             lifts.push(LiftRecord {
+                lift_id: lift_record_id(&record_id, &item.item_id),
                 item_id: (input.status == "partial").then(|| item.item_id.clone()),
                 exercise,
                 weight: performed_weight(item, item_input),
@@ -208,22 +213,34 @@ fn build_record_day(
                 metrics: Default::default(),
                 note: None,
             });
-        } else if let Some(lift) = extra_lift_record(item_input, input.status == "partial") {
+        } else if let Some(lift) =
+            extra_lift_record(&record_id, item_input, input.status == "partial")
+        {
             lifts.push(lift);
         }
     }
-    let mut day = DayRecord::workout(date, lifts);
+    let mut record = TrainingRecord::workout(
+        record_id,
+        date,
+        rendered_session.session_id.clone(),
+        started_at,
+        lifts,
+    );
     if input.status == "partial" {
-        day.status = Some(input.status.clone());
-        day.session_id = Some(rendered_session.session_id.clone());
-        day.saved_at = input.saved_at.clone();
+        record.status = Some(input.status.clone());
+        record.completed_at = None;
+        record.saved_at = input.saved_at.clone();
     } else {
-        day.completed_at = input.completed_at.clone();
+        record.completed_at = input.completed_at.clone();
     }
-    day
+    record
 }
 
-fn extra_lift_record(item_input: &ItemInput, include_item_id: bool) -> Option<LiftRecord> {
+fn extra_lift_record(
+    record_id: &str,
+    item_input: &ItemInput,
+    include_item_id: bool,
+) -> Option<LiftRecord> {
     if item_input.sets.is_empty() && item_input.final_set_reps.is_none() {
         return None;
     }
@@ -244,6 +261,7 @@ fn extra_lift_record(item_input: &ItemInput, include_item_id: bool) -> Option<Li
         .cloned()
         .collect();
     Some(LiftRecord {
+        lift_id: lift_record_id(record_id, &item_input.item_id),
         item_id: include_item_id.then(|| item_input.item_id.clone()),
         exercise,
         weight: item_input
@@ -431,8 +449,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(outcome.validation.status, ValidationStatus::Valid);
-        assert_eq!(outcome.record_day.date, "2026-06-24");
-        assert!(!outcome.record_day.lifts.is_empty());
+        assert_eq!(outcome.record.date, "2026-06-24");
+        assert!(!outcome.record.lifts.is_empty());
         // A passing T1 advances its lane's load, so state moved.
         assert_ne!(outcome.new_state.lanes, state.lanes);
         assert!(!outcome.effects.is_empty());
@@ -474,7 +492,7 @@ mod tests {
         .unwrap();
 
         let squat = outcome
-            .record_day
+            .record
             .lifts
             .iter()
             .find(|lift| lift.exercise == "squat")
@@ -529,9 +547,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(outcome.validation.status, ValidationStatus::Valid);
-        assert_eq!(outcome.record_day.lifts[0].exercise, "landmine_press");
-        assert_eq!(outcome.record_day.lifts[0].sets, vec![12, 12]);
-        assert_eq!(outcome.record_day.lifts[0].weight.as_deref(), Some("20kg"));
+        assert_eq!(outcome.record.lifts[0].exercise, "landmine_press");
+        assert_eq!(outcome.record.lifts[0].sets, vec![12, 12]);
+        assert_eq!(outcome.record.lifts[0].weight.as_deref(), Some("20kg"));
     }
 
     #[test]
@@ -572,7 +590,7 @@ mod tests {
         .unwrap();
 
         let recorded = outcome
-            .record_day
+            .record
             .lifts
             .iter()
             .find(|lift| lift.exercise == t3.exercise)
@@ -612,7 +630,7 @@ mod tests {
         assert_eq!(outcome.new_state.lanes, state.lanes);
         assert!(outcome.effects.is_empty());
         // But the day is still recorded and the cursor still advanced.
-        assert!(!outcome.record_day.lifts.is_empty());
+        assert!(!outcome.record.lifts.is_empty());
         assert_ne!(
             outcome.new_state.cursor.next_session,
             state.cursor.next_session
@@ -701,10 +719,10 @@ mod tests {
         assert_eq!(outcome.new_state.cursor.next_session, "b1");
         assert_eq!(outcome.new_state.lanes, state.lanes);
         assert!(outcome.effects.is_empty());
-        assert_eq!(outcome.record_day.status.as_deref(), Some("partial"));
-        assert_eq!(outcome.record_day.session_id.as_deref(), Some("a1"));
+        assert_eq!(outcome.record.status.as_deref(), Some("partial"));
+        assert_eq!(outcome.record.session_id.as_deref(), Some("a1"));
         assert_eq!(
-            outcome.record_day.lifts[0].item_id.as_deref(),
+            outcome.record.lifts[0].item_id.as_deref(),
             Some(first_item.item_id.as_str())
         );
     }
@@ -733,6 +751,8 @@ mod tests {
         // A "save progress": T1 finished (every set passing), T2 only one set logged.
         let mut input = passing_input(&rendered);
         input.status = "partial".into();
+        input.completed_at = None;
+        input.saved_at = Some("2026-06-24T10:45:00Z".into());
         let t2_input = input
             .inputs
             .iter_mut()

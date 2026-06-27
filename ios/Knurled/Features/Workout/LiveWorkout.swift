@@ -291,16 +291,16 @@ final class LiveWorkout: Identifiable {
     let startedAt: String
     var items: [LiveItem]
 
-    init(repo: ActiveRepo, session: RenderedSession, restoring record: DayRecord? = nil) {
+    init(repo: ActiveRepo, session: RenderedSession, restoring record: TrainingRecord? = nil) {
         self.repo = repo
         self.session = session
-        self.startedAt = record?.savedAt ?? Self.timestamp()
+        self.startedAt = record?.startedAt ?? record?.savedAt ?? Self.timestamp()
         let units = repo.plan?.plan.units ?? .kg
         self.items = session.items.map { LiveItem(item: $0, units: units) }
         if let record { restore(record) }
     }
 
-    private func restore(_ record: DayRecord) {
+    private func restore(_ record: TrainingRecord) {
         var restoredItemIDs = Set<String>()
         for lift in record.lifts {
             guard let item = item(matching: lift, excluding: restoredItemIDs) ?? restoreExtra(from: lift) else { continue }

@@ -12,7 +12,7 @@ final class ActiveRepo: Identifiable {
     var outputs: BuildOutputs?
     var lastValidOutputs: BuildOutputs?
     var plan: PlanIR?
-    var records: [DayRecord] = []
+    var records: [TrainingRecord] = []
     var isRefreshing = false
     var loadError: String?
     var remote: GitHubRemote?
@@ -34,7 +34,7 @@ final class ActiveRepo: Identifiable {
     var validation: ValidationReport? { outputs?.validation }
     var isValid: Bool { outputs?.validation.isValid ?? false }
 
-    func refresh(engine: WorkoutEngine, logs: LogReader = LogReader()) async {
+    func refresh(engine: WorkoutEngine) async {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
@@ -42,7 +42,7 @@ final class ActiveRepo: Identifiable {
             outputs = built
             if built.validation.isValid { lastValidOutputs = built }
             plan = try? PlanIR.load(dir: url)
-            records = logs.records(dir: url)
+            records = try await engine.records(dir: url)
             loadError = nil
         } catch {
             loadError = error.localizedDescription

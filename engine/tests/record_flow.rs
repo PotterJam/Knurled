@@ -3,13 +3,14 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use knurled_core::session::{SubmitMode, submit_session};
+use knurled_core::session::SubmitMode;
 use knurled_core::{
-    ActualSet, ExecutionInput, ItemInput, SCHEMA_VERSION, ValidationStatus, append_day_record,
-    backtest_records_repo, clear_partials_for_session, init_training_repo, read_records, read_state,
-    read_training_repo, render_next, render_session, submit_repo, synthetic_execution_input,
-    write_state,
+    ActualSet, AmendRecordRequest, ExecutionInput, ItemInput, RecordAmendment, SCHEMA_VERSION,
+    ValidationStatus, amend_training_record, backtest_records_repo, init_training_repo,
+    merge_training_records, read_records, read_state, read_training_repo, render_next,
+    render_session, submit_rendered_repo, submit_repo, synthetic_execution_input,
 };
+use std::collections::BTreeMap;
 
 fn temp_repo(name: &str) -> std::path::PathBuf {
     let nanos = SystemTime::now()
@@ -53,8 +54,172 @@ fn submit_writes_state_and_record_then_backtest_reads_them() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+#[test]
+fn two_workouts_on_the_same_date_are_both_recorded() {
+    let root = temp_repo("same-day-records");
+    init_training_repo(&root, "gzcl.gzclp").unwrap();
+
+    for index in 0..2 {
+        let repo = read_training_repo(&root).unwrap();
+        let state = read_state(&root).unwrap();
+        let rendered = render_next(&repo.compiled, &state).unwrap();
+        let input = synthetic_execution_input(&rendered, "pass", index);
+        let outcome = submit_repo(&root, &input, SubmitMode::Advance, "2026-06-24").unwrap();
+        assert_eq!(outcome.validation.status, ValidationStatus::Valid);
+    }
+
+    let records = read_records(&root).unwrap();
+    assert_eq!(records.len(), 2);
+    assert!(records.iter().all(|record| record.date == "2026-06-24"));
+
+    let projection = backtest_records_repo(&root).unwrap();
+    assert_eq!(projection.sessions_replayed, 2);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn retrying_a_completed_attempt_is_idempotent() {
+    let root = temp_repo("idempotent-submit");
+    init_training_repo(&root, "gzcl.gzclp").unwrap();
+    let repo = read_training_repo(&root).unwrap();
+    let state = read_state(&root).unwrap();
+    let rendered = render_next(&repo.compiled, &state).unwrap();
+    let input = synthetic_execution_input(&rendered, "pass", 0);
+
+    submit_rendered_repo(&root, &rendered, &input, SubmitMode::Advance, "2026-06-24").unwrap();
+    let state_after_first = read_state(&root).unwrap();
+    let retry =
+        submit_rendered_repo(&root, &rendered, &input, SubmitMode::Advance, "2026-06-24").unwrap();
+
+    assert_eq!(read_records(&root).unwrap().len(), 1);
+    assert_eq!(read_state(&root).unwrap(), state_after_first);
+    assert!(retry.changed_files.is_empty());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn record_merge_unions_same_day_ids_and_rejects_equal_revision_conflicts() {
+    let root = temp_repo("merge-records");
+    init_training_repo(&root, "gzcl.gzclp").unwrap();
+    for index in 0..2 {
+        let repo = read_training_repo(&root).unwrap();
+        let state = read_state(&root).unwrap();
+        let rendered = render_next(&repo.compiled, &state).unwrap();
+        let input = synthetic_execution_input(&rendered, "pass", index);
+        submit_repo(&root, &input, SubmitMode::Advance, "2026-06-24").unwrap();
+    }
+    let records = read_records(&root).unwrap();
+    assert_eq!(
+        merge_training_records(vec![records[0].clone()], vec![records[1].clone()])
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let mut conflicting = records[0].clone();
+    conflicting.note = Some("different edit".into());
+    assert!(merge_training_records(vec![records[0].clone()], vec![conflicting]).is_err());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn completed_workout_can_be_amended_without_changing_training_state() {
+    let root = temp_repo("amend-record");
+    init_training_repo(&root, "gzcl.gzclp").unwrap();
+    let repo = read_training_repo(&root).unwrap();
+    let state = read_state(&root).unwrap();
+    let rendered = render_next(&repo.compiled, &state).unwrap();
+    let input = synthetic_execution_input(&rendered, "pass", 0);
+    submit_repo(&root, &input, SubmitMode::Advance, "2026-06-24").unwrap();
+
+    let state_before = std::fs::read(root.join("state/current.json")).unwrap();
+    let records = read_records(&root).unwrap();
+    let record = &records[0];
+    let lift = &record.lifts[0];
+
+    let added_set = amend_training_record(
+        &root,
+        AmendRecordRequest {
+            record_id: record.id.clone(),
+            expected_revision: 1,
+            updated_at: "2026-06-24T18:00:00Z".into(),
+            amendment: RecordAmendment::AddSet {
+                lift_id: lift.lift_id.clone(),
+                load: lift.weight.clone(),
+                reps: 8,
+                metrics: BTreeMap::from([("rpe".into(), "9".into())]),
+            },
+        },
+    )
+    .unwrap();
+    assert_eq!(added_set.record.revision, 2);
+    assert_eq!(added_set.changed_files, vec!["logs/2026/06.json"]);
+
+    let added_exercise = amend_training_record(
+        &root,
+        AmendRecordRequest {
+            record_id: record.id.clone(),
+            expected_revision: 2,
+            updated_at: "2026-06-24T18:05:00Z".into(),
+            amendment: RecordAmendment::AddExercise {
+                exercise: "curl".into(),
+                weight: Some("20kg".into()),
+                note: Some("forgotten finisher".into()),
+                sets: vec![
+                    ActualSet {
+                        set: 1,
+                        load: Some("20kg".into()),
+                        reps: 12,
+                        metrics: BTreeMap::new(),
+                    },
+                    ActualSet {
+                        set: 2,
+                        load: Some("20kg".into()),
+                        reps: 12,
+                        metrics: BTreeMap::new(),
+                    },
+                ],
+            },
+        },
+    )
+    .unwrap();
+
+    assert_eq!(added_exercise.record.revision, 3);
+    assert_eq!(added_exercise.record.lifts.last().unwrap().exercise, "curl");
+    assert_eq!(
+        std::fs::read(root.join("state/current.json")).unwrap(),
+        state_before
+    );
+
+    let log_before_conflict = std::fs::read(root.join("logs/2026/06.json")).unwrap();
+    let conflict = amend_training_record(
+        &root,
+        AmendRecordRequest {
+            record_id: record.id.clone(),
+            expected_revision: 1,
+            updated_at: "2026-06-24T18:10:00Z".into(),
+            amendment: RecordAmendment::AddSet {
+                lift_id: lift.lift_id.clone(),
+                load: lift.weight.clone(),
+                reps: 5,
+                metrics: BTreeMap::new(),
+            },
+        },
+    );
+    assert!(conflict.is_err());
+    assert_eq!(
+        std::fs::read(root.join("logs/2026/06.json")).unwrap(),
+        log_before_conflict
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// Saving a partial then finishing the session fresh on a later date (rather
-/// than resuming the partial, which upserts the same date) must not leave the
+/// rather than resuming the same attempt must not leave the
 /// old partial behind as a resumable "Continue" entry.
 #[test]
 fn completing_a_session_clears_an_outstanding_partial() {
@@ -110,12 +275,14 @@ fn completing_a_session_clears_an_outstanding_partial() {
     let rendered = render_session(&repo.compiled, &state, &session_id).unwrap();
     assert_eq!(rendered.session_id, session_id);
     let complete = synthetic_execution_input(&rendered, "pass", 0);
-    let outcome =
-        submit_session(&repo.compiled, &state, &rendered, &complete, SubmitMode::Advance, "2026-06-26")
-            .unwrap();
-    write_state(&root, &outcome.new_state).unwrap();
-    append_day_record(&root, outcome.record_day.clone()).unwrap();
-    clear_partials_for_session(&root, &rendered.session_id).unwrap();
+    submit_rendered_repo(
+        &root,
+        &rendered,
+        &complete,
+        SubmitMode::Advance,
+        "2026-06-26",
+    )
+    .unwrap();
 
     // The zombie partial is gone: only the completed day remains.
     let records = read_records(&root).unwrap();

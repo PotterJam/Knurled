@@ -110,7 +110,7 @@ export default function Next() {
             <Show when={!outcome().error} fallback={<p class="msg bad">{outcome().error}</p>}>
               <p class={`msg ${outcome().result.validation?.status === "valid" ? "ok" : "bad"}`}>
                 {outcome().result.validation?.status === "valid"
-                  ? `Recorded ${outcome().result.record_day?.date}.`
+                  ? `Recorded ${outcome().result.record?.date}.`
                   : outcome().result.validation?.errors?.[0]?.message || "Submission was not valid."}
               </p>
             </Show>

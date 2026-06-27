@@ -108,11 +108,11 @@ export function build(plan_text, lock_text, patches_json, state_json) {
 /**
  * @returns {string}
  */
-export function engine_version() {
+export function exercise_catalog_json() {
     let deferred1_0;
     let deferred1_1;
     try {
-        const ret = wasm.engine_version();
+        const ret = wasm.exercise_catalog_json();
         deferred1_0 = ret[0];
         deferred1_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -125,7 +125,7 @@ export function engine_version() {
  * Submit a finished session (ADR 0007). The browser holds `state` and the
  * record, so they are passed in and returned: this renders the next workout
  * from `state_json`, reduces the input per `mode` (`advance` | `off_day` |
- * `reset`), and returns a `SubmitOutcome` (`validation`, `record_day` to
+ * `reset`), and returns a `SubmitOutcome` (`validation`, `record` to
  * upsert into the month file, `new_state` to persist, `effects`). An empty
  * `state_json` means the program's initial state.
  * @param {string} plan_text
@@ -191,42 +191,49 @@ export function validate(plan_text, lock_text, patches_json) {
 }
 
 /**
- * List built-in templates with their session/slot/tier skeleton so the builder
- * canvas reflects real structure instead of hardcoded assumptions.
+ * @param {string} existing_json
+ * @param {string} incoming_json
  * @returns {string}
  */
-export function builtin_template_catalog() {
-    let deferred1_0;
-    let deferred1_1;
+export function merge_records(existing_json, incoming_json) {
+    let deferred3_0;
+    let deferred3_1;
     try {
-        const ret = wasm.builtin_template_catalog();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
+        const ptr0 = passStringToWasm0(existing_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(incoming_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.merge_records(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
 
 /**
+ * @param {string} records_json
  * @returns {string}
  */
-export function exercise_catalog_json() {
-    let deferred1_0;
-    let deferred1_1;
+export function record_files(records_json) {
+    let deferred2_0;
+    let deferred2_1;
     try {
-        const ret = wasm.exercise_catalog_json();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
+        const ptr0 = passStringToWasm0(records_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.record_files(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
 /**
- * Backtest the plan over recorded days (ADR 0007). `days_json` is a JSON array
- * of day records (`logs/<yyyy>/<mm>.json` `days[]`). Returns a
+ * Backtest the plan over training records (ADR 0007). `days_json` is a JSON array
+ * of records (`logs/<yyyy>/<mm>.json` `records[]`). Returns a
  * `BacktestProjection`.
  * @param {string} plan_text
  * @param {string} lock_text
@@ -285,6 +292,40 @@ export function simulate_plan(plan_text, lock_text, patches_json, state_json, we
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
+ * @returns {string}
+ */
+export function engine_version() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.engine_version();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * List built-in templates with their session/slot/tier skeleton so the builder
+ * canvas reflects real structure instead of hardcoded assumptions.
+ * @returns {string}
+ */
+export function builtin_template_catalog() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.builtin_template_catalog();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
 

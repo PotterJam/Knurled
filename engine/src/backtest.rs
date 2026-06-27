@@ -17,7 +17,7 @@ use crate::core::{create_initial_state, reduce_input, render_next, synthetic_exe
 use crate::error::Result;
 use crate::model::{CompiledPlan, ENGINE_VERSION, Effect, StateProjection};
 use crate::parser::normalize_exercise;
-use crate::record::DayRecord;
+use crate::record::TrainingRecord;
 
 /// What the candidate program would have done on one recorded day.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,23 +39,25 @@ pub struct BacktestProjection {
     pub final_state: StateProjection,
 }
 
-/// Run `compiled` forward over the workout days in `days`, feeding each day's
-/// recorded reps into the program's prescriptions and progressing as a live
-/// submit would. Program-boundary markers and empty days are skipped.
-pub fn backtest(compiled: &CompiledPlan, days: &[DayRecord]) -> Result<BacktestProjection> {
-    let mut workout_days: Vec<&DayRecord> =
-        days.iter().filter(|day| !day.lifts.is_empty()).collect();
-    workout_days.sort_by(|left, right| left.date.cmp(&right.date));
+/// Run `compiled` forward over workout records, feeding each record's reps into
+/// the program's prescriptions and progressing as a live submit would.
+/// Program-boundary markers and empty workout records are skipped.
+pub fn backtest(compiled: &CompiledPlan, records: &[TrainingRecord]) -> Result<BacktestProjection> {
+    let mut workout_records: Vec<&TrainingRecord> = records
+        .iter()
+        .filter(|record| !record.lifts.is_empty())
+        .collect();
+    workout_records.sort_by(|left, right| crate::record::record_order(left, right));
 
     let mut state = create_initial_state(compiled);
     let mut steps = Vec::new();
 
-    for day in workout_days {
+    for record in workout_records {
         let rendered = render_next(compiled, &state)?;
 
         // Recorded reps keyed by normalized exercise. Last entry wins if a day
         // repeats an exercise (a known limitation of name-based matching).
-        let recorded: BTreeMap<String, Vec<u32>> = day
+        let recorded: BTreeMap<String, Vec<u32>> = record
             .lifts
             .iter()
             .map(|lift| (normalize_exercise(&lift.exercise), lift.sets.clone()))
@@ -87,7 +89,7 @@ pub fn backtest(compiled: &CompiledPlan, days: &[DayRecord]) -> Result<BacktestP
 
         let reduced = reduce_input(compiled, &state, &rendered, &input)?;
         steps.push(BacktestStep {
-            date: day.date.clone(),
+            date: record.date.clone(),
             session_id: rendered.session_id.clone(),
             display_name: rendered.display_name.clone(),
             effects: reduced.effects.clone(),
@@ -147,7 +149,7 @@ mod tests {
     fn backtest_reproduces_live_progression() {
         let compiled = gzclp();
         let mut state = create_initial_state(&compiled);
-        let mut days = Vec::new();
+        let mut records = Vec::new();
 
         for i in 0..4u32 {
             let rendered = render_next(&compiled, &state).unwrap();
@@ -162,11 +164,11 @@ mod tests {
                 &date,
             )
             .unwrap();
-            days.push(outcome.record_day.clone());
+            records.push(outcome.record.clone());
             state = outcome.new_state;
         }
 
-        let projection = backtest(&compiled, &days).unwrap();
+        let projection = backtest(&compiled, &records).unwrap();
 
         assert_eq!(projection.sessions_replayed, 4);
         assert_eq!(projection.steps.len(), 4);
@@ -176,13 +178,19 @@ mod tests {
     }
 
     #[test]
-    fn markers_and_empty_days_are_skipped() {
+    fn markers_and_empty_workouts_are_skipped() {
         let compiled = gzclp();
-        let days = vec![
-            DayRecord::program_marker("2026-06-01", "gzcl.gzclp"),
-            DayRecord::workout("2026-06-02", Vec::new()),
+        let records = vec![
+            TrainingRecord::program_marker("2026-06-01", "gzcl.gzclp"),
+            TrainingRecord::workout(
+                "empty",
+                "2026-06-02",
+                "a1",
+                "2026-06-02T10:00:00Z",
+                Vec::new(),
+            ),
         ];
-        let projection = backtest(&compiled, &days).unwrap();
+        let projection = backtest(&compiled, &records).unwrap();
         assert_eq!(projection.sessions_replayed, 0);
     }
 }

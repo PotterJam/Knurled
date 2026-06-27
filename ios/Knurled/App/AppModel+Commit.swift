@@ -20,10 +20,13 @@ extension AppModel {
         guard outcome.validation.isValid else { return outcome }
 
         await repo.refresh(engine: engine)
-        await pushIfConnected(
-            repo: repo,
-            message: Self.commitMessage(session: session, mode: mode, status: input.status, date: date)
-        )
+        if !outcome.changedFiles.isEmpty {
+            await pushIfConnected(
+                repo: repo,
+                message: Self.commitMessage(session: session, mode: mode, status: input.status, date: date),
+                files: outcome.changedFiles
+            )
+        }
         persistSelection()
         return outcome
     }

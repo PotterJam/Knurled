@@ -41,7 +41,7 @@ const defaults = () => ({
   planText: SAMPLE_PLAN,
   lock: "",
   patches: [], // { filename, text, name, active }
-  records: [], // DayRecord[] loaded from logs/<yyyy>/<mm>.json (ADR 0007)
+  records: [], // TrainingRecord[] loaded from logs/<yyyy>/<mm>.json (ADR 0007)
   currentState: null, // state/current.json — the source of truth, or null when fresh
   repoLabel: "Static workbench",
   theme: "sage",

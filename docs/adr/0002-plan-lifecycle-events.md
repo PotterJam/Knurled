@@ -5,7 +5,7 @@
 
 > Reconciliation note: the `plan_changed` event shape below is historical. ADR 0007 removed
 > replay-bound lifecycle events along with JSONL event logs. Program boundaries are now optional,
-> human-facing `DayRecord` markers (`{ "date": "…", "program": "…" }`) in the monthly record;
+> human-facing `TrainingRecord` program markers in the monthly record;
 > the engine ignores them for progression.
 
 ## Context

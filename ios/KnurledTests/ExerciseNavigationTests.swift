@@ -271,13 +271,16 @@ import Foundation
         let (dir, workout) = try await makeWorkout()
         defer { try? FileManager.default.removeItem(at: dir) }
         let source = try #require(workout.requiredItems.first)
-        let record = DayRecord(
+        let record = TrainingRecord(
+            id: "partial-1",
             date: "2026-06-24",
             status: ExecutionStatus.partial,
             sessionId: workout.session.sessionId,
+            startedAt: "2026-06-24T10:00:00Z",
             savedAt: "2026-06-24T10:45:00Z",
             lifts: [
                 LiftRecord(
+                    liftId: "source-1",
                     itemId: source.id,
                     exercise: source.item.exercise,
                     weight: "77.5kg",
@@ -289,7 +292,7 @@ import Foundation
         let restored = LiveWorkout(repo: workout.repo, session: workout.session, restoring: record)
         let restoredItem = try #require(restored.items.first { $0.id == source.id })
 
-        #expect(restored.startedAt == "2026-06-24T10:45:00Z")
+        #expect(restored.startedAt == "2026-06-24T10:00:00Z")
         #expect(restoredItem.sets[0].logged)
         #expect(restoredItem.sets[0].reps == 5)
         #expect(restoredItem.sets[0].load == "77.5kg")

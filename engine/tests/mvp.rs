@@ -73,7 +73,7 @@ fn progression_results_exclude_tracking_only_session_exercises() {
     .unwrap();
     assert!(
         submitted
-            .record_day
+            .record
             .lifts
             .iter()
             .any(|lift| lift.exercise == "band_pull_apart"),

@@ -32,6 +32,24 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(BuildOutputs.self, from: raw)
     }
 
+    func records(dir: URL) throws -> [TrainingRecord] {
+        let raw = try call(dir: dir) { knurled_read_records($0) }
+        return try decode([TrainingRecord].self, from: raw)
+    }
+
+    func amendRecord(dir: URL, request: AmendRecordRequest) throws -> AmendRecordOutcome {
+        let json = try encode(request)
+        let raw = try call(dir: dir, json: json) { knurled_amend_record($0, $1) }
+        return try decode(AmendRecordOutcome.self, from: raw)
+    }
+
+    func mergeRecordRepos(source: URL, target: URL) throws -> [String] {
+        let raw = try call(dir: source, json: target.path(percentEncoded: false)) {
+            knurled_merge_record_repos($0, $1)
+        }
+        return try decode([String].self, from: raw)
+    }
+
     func renderSession(dir: URL, sessionId: String) throws -> RenderedSession {
         let raw = try call(dir: dir, json: sessionId) { knurled_render_session($0, $1) }
         return try decode(RenderedSession.self, from: raw)

@@ -122,12 +122,15 @@ async function readBlobPath(token, repo, tree, path) {
 }
 
 // ADR 0007: a log file is one pretty-printed month (`logs/<yyyy>/<mm>.json`)
-// holding `days[]`. Parse a month, returning its day records; malformed files
+// holding `records[]`. Parse a month, returning its training records; malformed files
 // are skipped with a warning rather than failing the load.
 function parseRecordMonth(text, path, warnings) {
   try {
     const month = JSON.parse(text);
-    return Array.isArray(month?.days) ? month.days : [];
+    if (month?.format_version !== 1 || !Array.isArray(month?.records)) {
+      throw new Error("unsupported training record format");
+    }
+    return month.records;
   } catch (error) {
     warnings.push(`${path}: skipped malformed record (${error.message})`);
     return [];

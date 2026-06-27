@@ -1,30 +1,39 @@
 {
+  "format_version": 1,
   "month": "2026-06",
-  "days": [
+  "records": [
     {
+      "id": "program-gzclp-2026-06-22",
+      "revision": 1,
+      "kind": "program_marker",
       "date": "2026-06-22",
       "program": "gzcl.gzclp",
       "note": "starting novice LP"
     },
     {
+      "id": "workout-a1-2026-06-24",
+      "revision": 1,
+      "kind": "workout",
       "date": "2026-06-24",
+      "session_id": "a1",
+      "started_at": "2026-06-24T10:00:00Z",
+      "completed_at": "2026-06-24T11:00:00Z",
       "lifts": [
-        { "exercise": "squat", "weight": "82.5kg", "sets": [5, 5, 7] },
-        { "exercise": "bench", "weight": "45kg", "sets": [10, 10, 8] },
-        { "exercise": "lat_pulldown", "weight": "45kg", "sets": [15, 15, 22] }
+        { "lift_id": "a1-squat", "exercise": "squat", "weight": "82.5kg", "sets": [5, 5, 7] },
+        { "lift_id": "a1-bench", "exercise": "bench", "weight": "45kg", "sets": [10, 10, 8] },
+        { "lift_id": "a1-pulldown", "exercise": "lat_pulldown", "weight": "45kg", "sets": [15, 15, 22] }
       ]
     },
     {
-      "date": "2026-06-26",
+      "id": "workout-b1-2026-06-24",
+      "revision": 1,
+      "kind": "workout",
+      "date": "2026-06-24",
+      "session_id": "b1",
+      "started_at": "2026-06-24T18:00:00Z",
+      "completed_at": "2026-06-24T19:00:00Z",
       "lifts": [
-        { "exercise": "squat", "weight": "85kg", "sets": [5, 5, 3] },
-        { "exercise": "bench", "weight": "47.5kg", "sets": [10, 10, 9], "note": "felt strong" }
-      ]
-    },
-    {
-      "date": "2026-06-28",
-      "lifts": [
-        { "exercise": "squat", "weight": "70kg", "sets": [5, 5, 5], "note": "felt beat up — backed off (off day)" }
+        { "lift_id": "b1-deadlift", "exercise": "deadlift", "weight": "100kg", "sets": [5, 5, 5] }
       ]
     }
   ]

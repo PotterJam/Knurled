@@ -16,7 +16,7 @@ struct ActiveWorkoutView: View {
     @Environment(WorkoutSettings.self) private var workoutSettings
     @Environment(\.dismiss) private var dismiss
 
-    init(repo: ActiveRepo, session: RenderedSession, restoring record: DayRecord? = nil) {
+    init(repo: ActiveRepo, session: RenderedSession, restoring record: TrainingRecord? = nil) {
         _workout = State(initialValue: LiveWorkout(repo: repo, session: session, restoring: record))
     }
 

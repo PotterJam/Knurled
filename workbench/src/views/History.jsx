@@ -2,33 +2,11 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { workbench } from "../workbench.js";
 import { titleCase } from "../lib/format.js";
 
-function normalizeDays(value) {
+function normalizeRecords(value) {
   if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.days)) return value.days;
+  if (Array.isArray(value?.records)) return value.records;
   if (value?.date) return [value];
-  throw new Error("Paste a DayRecord, a DayRecord array, or a LogMonth with a days array.");
-}
-
-function mergeRecords(existing, incoming) {
-  const merged = [...(existing || [])];
-  const indexByDate = new Map(merged.map((day, index) => [day.date, index]));
-  let added = 0;
-  let replaced = 0;
-
-  for (const day of incoming || []) {
-    if (!day?.date) throw new Error("Every DayRecord needs a date.");
-    if (indexByDate.has(day.date)) {
-      merged[indexByDate.get(day.date)] = day;
-      replaced++;
-    } else {
-      indexByDate.set(day.date, merged.length);
-      merged.push(day);
-      added++;
-    }
-  }
-
-  merged.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-  return { records: merged, added, replaced };
+  throw new Error("Paste a TrainingRecord, a TrainingRecord array, or a LogMonth with a records array.");
 }
 
 function liftSummary(lift) {
@@ -47,7 +25,8 @@ function recordDetail(day) {
 const sampleMonth = JSON.stringify(
   {
     month: "2026-06",
-    days: [{ date: "2026-06-24", lifts: [{ exercise: "squat", weight: "80kg", sets: [5, 5, 7] }] }],
+    format_version: 1,
+    records: [],
   },
   null,
   2,
@@ -62,20 +41,22 @@ export default function History() {
 
   const preview = () => {
     try {
-      setOutcome({ days: normalizeDays(JSON.parse(text())) });
+      setOutcome({ records: normalizeRecords(JSON.parse(text())) });
     } catch (err) {
       setOutcome({ error: err.message });
     }
   };
 
-  const accept = (days) => {
-    const merged = mergeRecords(records(), days);
+  const accept = (incomingRecords) => {
+    const existingIds = new Set(records().map((record) => record.id));
+    const merged = workbench.engineMergeRecords(records(), incomingRecords);
+    const added = incomingRecords.filter((record) => !existingIds.has(record.id)).length;
     const historyNotice = {
       kind: "ok",
       title: "Records updated",
-      message: `Added ${merged.added} day${merged.added === 1 ? "" : "s"} and replaced ${merged.replaced}.`,
+      message: `Added ${added} record${added === 1 ? "" : "s"}.`,
     };
-    workbench.setState({ records: merged.records, ui: { ...workbench.state.ui, historyNotice } });
+    workbench.setState({ records: merged, ui: { ...workbench.state.ui, historyNotice } });
   };
 
   let dropEl;
@@ -104,9 +85,9 @@ export default function History() {
       <div class="card">
         <div class="card-head">
           <h3>Records</h3>
-          <span class="pill ok">{records().length} days</span>
+          <span class="pill ok">{records().length} records</span>
         </div>
-        <p class="muted small">Paste or drop a DayRecord, a DayRecord array, or a monthly log JSON file.</p>
+        <p class="muted small">Paste or drop a TrainingRecord, a TrainingRecord array, or a monthly log JSON file.</p>
         <div
           class="dropzone"
           ref={dropEl}
@@ -135,14 +116,14 @@ export default function History() {
           }
         >
           {(() => {
-            const days = outcome().days || [];
+            const parsedRecords = outcome().records || [];
             return (
               <div class="card">
                 <div class="card-head">
-                  <h4>Parsed {days.length} day records</h4>
-                  <button onClick={() => accept(days)}>Merge records</button>
+                  <h4>Parsed {parsedRecords.length} training records</h4>
+                  <button onClick={() => accept(parsedRecords)}>Merge records</button>
                 </div>
-                <RecordList records={days.slice(0, 40)} />
+                <RecordList records={parsedRecords.slice(0, 40)} />
               </div>
             );
           })()}
@@ -154,7 +135,7 @@ export default function History() {
           <h3>Current timeline</h3>
           <button class="ghost" onClick={() => setText(JSON.stringify(records(), null, 2))}>Load as JSON</button>
         </div>
-        <Show when={records().length} fallback={<p class="muted small">No recorded days yet.</p>}>
+        <Show when={records().length} fallback={<p class="muted small">No training records yet.</p>}>
           <RecordList records={records()} />
         </Show>
       </div>

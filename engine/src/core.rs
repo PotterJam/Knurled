@@ -307,6 +307,61 @@ pub fn validate_execution_input(
         ));
     }
 
+    if input.status != "complete" && input.status != "partial" {
+        errors.push(message(
+            "invalid_execution_status",
+            "ExecutionInput status must be complete or partial",
+        ));
+    }
+    if input.started_at.as_deref().is_none_or(str::is_empty) {
+        errors.push(message(
+            "missing_started_at",
+            "ExecutionInput requires started_at for stable record identity",
+        ));
+    }
+    if input
+        .started_at
+        .as_deref()
+        .is_some_and(|value| !is_iso_timestamp(value))
+    {
+        errors.push(message(
+            "invalid_started_at",
+            "ExecutionInput started_at must be an ISO-8601 timestamp",
+        ));
+    }
+    if input.status == "complete" && input.completed_at.as_deref().is_none_or(str::is_empty) {
+        errors.push(message(
+            "missing_completed_at",
+            "A complete ExecutionInput requires completed_at",
+        ));
+    }
+    if input
+        .completed_at
+        .as_deref()
+        .is_some_and(|value| !is_iso_timestamp(value))
+    {
+        errors.push(message(
+            "invalid_completed_at",
+            "ExecutionInput completed_at must be an ISO-8601 timestamp",
+        ));
+    }
+    if input.status == "partial" && input.saved_at.as_deref().is_none_or(str::is_empty) {
+        errors.push(message(
+            "missing_saved_at",
+            "A partial ExecutionInput requires saved_at",
+        ));
+    }
+    if input
+        .saved_at
+        .as_deref()
+        .is_some_and(|value| !is_iso_timestamp(value))
+    {
+        errors.push(message(
+            "invalid_saved_at",
+            "ExecutionInput saved_at must be an ISO-8601 timestamp",
+        ));
+    }
+
     for item in rendered_session.items.iter().filter(|item| {
         item.execution_contract.required_for_completion && input.status == "complete"
     }) {
@@ -332,6 +387,19 @@ pub fn validate_execution_input(
         },
         errors,
     }
+}
+
+fn is_iso_timestamp(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 20
+        && bytes.get(4) == Some(&b'-')
+        && bytes.get(7) == Some(&b'-')
+        && bytes.get(10) == Some(&b'T')
+        && bytes.get(13) == Some(&b':')
+        && bytes.get(16) == Some(&b':')
+        && bytes[..4].iter().all(u8::is_ascii_digit)
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
 }
 
 pub fn reduce_input(

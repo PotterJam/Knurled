@@ -8,10 +8,10 @@ use crate::core::{PatchFile, build_outputs, compile_plan, create_initial_state};
 use crate::error::{KnurledError, Result};
 use crate::model::*;
 use crate::parser::{normalize_exercise, parse_plan};
-use crate::record::{DayRecord, month_path};
+use crate::record::{TrainingRecord, month_path};
 use crate::repo::{
-    append_day_record, read_records, read_state, read_training_repo, write_generated_files,
-    write_state,
+    read_records, read_state, read_training_repo, write_generated_files, write_state,
+    write_training_record,
 };
 use crate::templates::{builtin_template, parse_template_ref, render_lockfile};
 
@@ -107,7 +107,7 @@ struct Candidate {
     lock_text: String,
     patch_files: Vec<PatchFile>,
     writes: Vec<(String, Option<String>)>,
-    marker: Option<DayRecord>,
+    marker: Option<TrainingRecord>,
     changed_files: Vec<String>,
     switch_program: bool,
 }
@@ -153,7 +153,7 @@ pub fn apply_plan_edit(repo_path: impl AsRef<Path>, edit: PlanEdit) -> Result<Pl
     }
 
     if let Some(marker) = candidate.marker.clone() {
-        append_day_record(root, marker)?;
+        write_training_record(root, marker)?;
     }
     if candidate.switch_program {
         write_state(root, &outputs.state)?;
@@ -175,23 +175,28 @@ pub fn suggest_initial_numbers(
     let reference = parse_template_ref(template);
     let template_model = builtin_template(&reference.normalized)?;
     let exercises = initial_number_exercises(&template_model);
-    let days = read_records(repo_path)?;
+    let records = read_records(repo_path)?;
     let unit = unit_token(&units);
     let mut values = Map::new();
     let mut suggestions = Vec::new();
 
     for exercise in exercises {
         let normalized = normalize_exercise(&exercise);
-        let source = days
+        let source = records
             .iter()
             .rev()
             .take(12)
-            .flat_map(|day| day.lifts.iter().rev().map(move |lift| (day, lift)))
+            .flat_map(|record| record.lifts.iter().rev().map(move |lift| (record, lift)))
             .find(|(_, lift)| normalize_exercise(&lift.exercise) == normalized)
-            .and_then(|(day, lift)| {
+            .and_then(|(record, lift)| {
                 let load = lift.weight.as_ref()?;
                 let value = numeric_load_in_unit(load, unit)?;
-                Some((day.date.clone(), lift.exercise.clone(), load.clone(), value))
+                Some((
+                    record.date.clone(),
+                    lift.exercise.clone(),
+                    load.clone(),
+                    value,
+                ))
             });
 
         let (source_date, source_exercise, source_load, value) = match source {
@@ -325,7 +330,7 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
             changed.insert("fitspec.lock".to_owned());
             changed.insert("state/current.json".to_owned());
             changed.insert(month_path(&date)?);
-            let mut day = DayRecord::program_marker(date, reference.id);
+            let mut day = TrainingRecord::program_marker(date, reference.id);
             day.note = note;
             marker = Some(day);
             switch_program = true;
@@ -929,7 +934,7 @@ fn io_error(path: impl AsRef<Path>, source: std::io::Error) -> KnurledError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::repo::{append_day_record, init_training_repo};
+    use crate::repo::{init_training_repo, write_training_record};
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("knurled-plan-edit-{name}-{}", std::process::id()))
@@ -1013,22 +1018,29 @@ mod tests {
         let dir = temp_dir("initial-suggestions");
         let _ = fs::remove_dir_all(&dir);
         init_training_repo(&dir, "gzcl.gzclp@1.0.0").unwrap();
-        append_day_record(
+        write_training_record(
             &dir,
-            DayRecord::workout(
+            TrainingRecord::workout(
+                "workout-1",
                 "2026-06-20",
+                "a1",
+                "2026-06-20T10:00:00Z",
                 vec![
-                    crate::record::LiftRecord::new("squat", "80kg", vec![5, 5, 5]),
-                    crate::record::LiftRecord::new("bench", "55kg", vec![5, 5, 5]),
+                    crate::record::LiftRecord::new("squat-1", "squat", "80kg", vec![5, 5, 5]),
+                    crate::record::LiftRecord::new("bench-1", "bench", "55kg", vec![5, 5, 5]),
                 ],
             ),
         )
         .unwrap();
-        append_day_record(
+        write_training_record(
             &dir,
-            DayRecord::workout(
+            TrainingRecord::workout(
+                "workout-2",
                 "2026-06-24",
+                "b1",
+                "2026-06-24T10:00:00Z",
                 vec![crate::record::LiftRecord::new(
+                    "squat-2",
                     "squat",
                     "82.5kg",
                     vec![5, 5, 5],

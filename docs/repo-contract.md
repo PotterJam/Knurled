@@ -31,8 +31,9 @@ my-training/
 
 `patches/*.fitspec` contains explicit future-plan changes.
 
-`logs/<yyyy>/<mm>.json` contains the training record: a pretty-printed month of dated day
-records (performed lifts, plus optional human-facing program-boundary markers). The record is
+`logs/<yyyy>/<mm>.json` contains the training record: a versioned, pretty-printed month of
+session-grain `TrainingRecord` entries. Record IDs, not dates, define identity, so any number of
+workouts and program markers may share a date. The record is
 *what happened*; the engine never replays it to compute state. It is the input to the opt-in
 backtest and to the human's history/charts.
 

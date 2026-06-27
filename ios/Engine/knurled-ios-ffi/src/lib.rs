@@ -17,11 +17,11 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode, append_day_record,
-    apply_plan_edit, build_outputs, build_repo, builtin_templates, clear_partials_for_session,
-    exercise_catalog, init_training_repo, preview_plan_edit, read_state, read_training_repo,
-    reduce_input, render_session, submit_session, suggest_initial_numbers,
-    validate_execution_input, validate_repo, write_state, Units,
+    AmendRecordRequest, ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode,
+    Units, amend_training_record, apply_plan_edit, build_outputs, build_repo, builtin_templates,
+    exercise_catalog, init_training_repo, merge_record_repos, preview_plan_edit, read_records,
+    read_state, read_training_repo, reduce_input, render_session, submit_rendered_repo,
+    suggest_initial_numbers, validate_execution_input, validate_repo,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -164,7 +164,7 @@ pub extern "C" fn knurled_reduce_input(
 /// Submits a finished session against the rendered-session snapshot it was started from
 /// (ADR 0007): advances `state` per `mode` (`advance` | `off_day` | `reset`), persists
 /// `state/current.json`, and appends the day to `logs/<yyyy>/<mm>.json`. Returns the
-/// `SubmitOutcome` (`validation`, `record_day`, `new_state`, `effects`). On invalid input
+/// `SubmitOutcome` (`validation`, `record`, `new_state`, `effects`, `changed_files`). On invalid input
 /// nothing is written.
 #[unsafe(no_mangle)]
 pub extern "C" fn knurled_submit(
@@ -209,32 +209,71 @@ pub extern "C" fn knurled_submit(
             "advance" | "" => SubmitMode::Advance,
             other => return fail(format!("unknown submit mode: {other:?}")),
         };
-        let repo = match read_training_repo(dir) {
+        let outcome = match submit_rendered_repo(dir, &rendered, &input, mode, date) {
             Ok(value) => value,
             Err(error) => return fail(error),
         };
-        let state = match read_state(dir) {
-            Ok(value) => value,
-            Err(error) => return fail(error),
-        };
-        let outcome = match submit_session(&repo.compiled, &state, &rendered, &input, mode, date) {
-            Ok(value) => value,
-            Err(error) => return fail(error),
-        };
-        if outcome.validation.status == knurled_core::ValidationStatus::Valid {
-            if let Err(error) = write_state(dir, &outcome.new_state) {
-                return fail(error);
-            }
-            if let Err(error) = append_day_record(dir, outcome.record_day.clone()) {
-                return fail(error);
-            }
-            if input.status != "partial" {
-                if let Err(error) = clear_partials_for_session(dir, &rendered.session_id) {
-                    return fail(error);
-                }
-            }
-        }
         ok(outcome)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_read_records(dir: *const c_char) -> *mut c_char {
+    guard("knurled_read_records", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match read_records(dir) {
+            Ok(records) => ok(records),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_amend_record(
+    dir: *const c_char,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_amend_record", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request: AmendRecordRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid record amendment: {error}")),
+        };
+        match amend_training_record(dir, request) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_merge_record_repos(
+    source_dir: *const c_char,
+    target_dir: *const c_char,
+) -> *mut c_char {
+    guard("knurled_merge_record_repos", || {
+        let source = match unsafe { borrow(source_dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let target = match unsafe { borrow(target_dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match merge_record_repos(source, target) {
+            Ok(paths) => ok(paths),
+            Err(error) => fail(error),
+        }
     })
 }
 

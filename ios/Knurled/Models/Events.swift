@@ -10,9 +10,10 @@ struct ReductionResult: Codable, Sendable, Hashable {
 
 struct SubmitOutcome: Codable, Sendable, Hashable {
     var validation: ExecutionInputValidation
-    var recordDay: DayRecord
+    var record: TrainingRecord
     var newState: StateProjection
     var effects: [Effect]
+    var changedFiles: [String]
 }
 
 enum SubmitMode: String, Codable, Sendable, Hashable, CaseIterable {
@@ -45,37 +46,56 @@ enum SubmitMode: String, Codable, Sendable, Hashable, CaseIterable {
     }
 }
 
-struct DayRecord: Codable, Sendable, Hashable, Identifiable {
+enum RecordKind: String, Codable, Sendable, Hashable {
+    case workout
+    case programMarker = "program_marker"
+}
+
+struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
+    var id: String
+    var revision: Int
+    var kind: RecordKind
     var date: String
     var status: String?
     var sessionId: String?
+    var startedAt: String?
     var savedAt: String?
     var completedAt: String?
+    var updatedAt: String?
     var program: String?
     var note: String?
     var lifts: [LiftRecord]
 
-    var id: String { date }
-
     enum CodingKeys: String, CodingKey {
-        case date, status, sessionId, savedAt, completedAt, program, note, lifts
+        case id, revision, kind, date, status, sessionId, startedAt, savedAt, completedAt
+        case updatedAt, program, note, lifts
     }
 
     init(
+        id: String,
+        revision: Int = 1,
+        kind: RecordKind = .workout,
         date: String,
         status: String? = nil,
         sessionId: String? = nil,
+        startedAt: String? = nil,
         savedAt: String? = nil,
         completedAt: String? = nil,
+        updatedAt: String? = nil,
         program: String? = nil,
         note: String? = nil,
         lifts: [LiftRecord] = []
     ) {
+        self.id = id
+        self.revision = revision
+        self.kind = kind
         self.date = date
         self.status = status
         self.sessionId = sessionId
+        self.startedAt = startedAt
         self.savedAt = savedAt
         self.completedAt = completedAt
+        self.updatedAt = updatedAt
         self.program = program
         self.note = note
         self.lifts = lifts
@@ -83,11 +103,16 @@ struct DayRecord: Codable, Sendable, Hashable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        revision = try container.decode(Int.self, forKey: .revision)
+        kind = try container.decode(RecordKind.self, forKey: .kind)
         date = try container.decode(String.self, forKey: .date)
         status = try container.decodeIfPresent(String.self, forKey: .status)
         sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
+        startedAt = try container.decodeIfPresent(String.self, forKey: .startedAt)
         savedAt = try container.decodeIfPresent(String.self, forKey: .savedAt)
         completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
         program = try container.decodeIfPresent(String.self, forKey: .program)
         note = try container.decodeIfPresent(String.self, forKey: .note)
         lifts = try container.decodeIfPresent([LiftRecord].self, forKey: .lifts) ?? []
@@ -95,18 +120,25 @@ struct DayRecord: Codable, Sendable, Hashable, Identifiable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(revision, forKey: .revision)
+        try container.encode(kind, forKey: .kind)
         try container.encode(date, forKey: .date)
         try container.encodeIfPresent(status, forKey: .status)
         try container.encodeIfPresent(sessionId, forKey: .sessionId)
+        try container.encodeIfPresent(startedAt, forKey: .startedAt)
         try container.encodeIfPresent(savedAt, forKey: .savedAt)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(program, forKey: .program)
         try container.encodeIfPresent(note, forKey: .note)
         if !lifts.isEmpty { try container.encode(lifts, forKey: .lifts) }
     }
+
 }
 
 struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
+    var liftId: String
     var itemId: String?
     var exercise: String
     var weight: String?
@@ -115,17 +147,14 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
     var metrics: [String: String]
     var note: String?
 
-    var id: String {
-        [exercise, weight, sets.map(String.init).joined(separator: "-")]
-            .compactMap { $0 }
-            .joined(separator: "#")
-    }
+    var id: String { liftId }
 
     enum CodingKeys: String, CodingKey {
-        case itemId, exercise, weight, sets, actual, metrics, note
+        case liftId, itemId, exercise, weight, sets, actual, metrics, note
     }
 
     init(
+        liftId: String,
         itemId: String? = nil,
         exercise: String,
         weight: String? = nil,
@@ -134,6 +163,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
         metrics: [String: String] = [:],
         note: String? = nil
     ) {
+        self.liftId = liftId
         self.itemId = itemId
         self.exercise = exercise
         self.weight = weight
@@ -145,6 +175,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        liftId = try container.decode(String.self, forKey: .liftId)
         itemId = try container.decodeIfPresent(String.self, forKey: .itemId)
         exercise = try container.decode(String.self, forKey: .exercise)
         weight = try container.decodeIfPresent(String.self, forKey: .weight)
@@ -156,6 +187,7 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(liftId, forKey: .liftId)
         try container.encodeIfPresent(itemId, forKey: .itemId)
         try container.encode(exercise, forKey: .exercise)
         try container.encodeIfPresent(weight, forKey: .weight)
@@ -166,29 +198,53 @@ struct LiftRecord: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-struct LogMonth: Codable, Sendable, Hashable {
-    var month: String
-    var days: [DayRecord]
+struct AmendRecordRequest: Encodable, Sendable {
+    var recordId: String
+    var expectedRevision: Int
+    var updatedAt: String
+    var amendment: RecordAmendment
 
-    init(month: String, days: [DayRecord] = []) {
-        self.month = month
-        self.days = days
+    func encode(to encoder: Encoder) throws {
+        try amendment.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(recordId, forKey: .recordId)
+        try container.encode(expectedRevision, forKey: .expectedRevision)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        month = try container.decode(String.self, forKey: .month)
-        days = try container.decodeIfPresent([DayRecord].self, forKey: .days) ?? []
-    }
+    private enum CodingKeys: String, CodingKey { case recordId, expectedRevision, updatedAt }
+}
 
-    mutating func upsert(day: DayRecord) {
-        if let index = days.firstIndex(where: { $0.date == day.date }) {
-            days[index] = day
-        } else {
-            days.append(day)
+enum RecordAmendment: Encodable, Sendable {
+    case addSet(liftId: String, load: String?, reps: Int, metrics: [String: String])
+    case addExercise(exercise: String, weight: String?, note: String?, sets: [ActualSet])
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .addSet(let liftId, let load, let reps, let metrics):
+            try container.encode("add_set", forKey: .op)
+            try container.encode(liftId, forKey: .liftId)
+            try container.encodeIfPresent(load, forKey: .load)
+            try container.encode(reps, forKey: .reps)
+            try container.encode(metrics, forKey: .metrics)
+        case .addExercise(let exercise, let weight, let note, let sets):
+            try container.encode("add_exercise", forKey: .op)
+            try container.encode(exercise, forKey: .exercise)
+            try container.encodeIfPresent(weight, forKey: .weight)
+            try container.encodeIfPresent(note, forKey: .note)
+            try container.encode(sets, forKey: .sets)
         }
-        days.sort { $0.date < $1.date }
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case op, liftId, load, reps, metrics, exercise, weight, note, sets
+    }
+}
+
+struct AmendRecordOutcome: Codable, Sendable, Hashable {
+    var record: TrainingRecord
+    var changedFiles: [String]
 }
 
 struct ExerciseResult: Codable, Sendable, Hashable {

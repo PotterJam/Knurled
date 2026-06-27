@@ -7,6 +7,9 @@ protocol WorkoutEngine: Sendable {
     func initRepo(dir: URL, template: String) async throws
     func validate(dir: URL) async throws -> ValidationReport
     func build(dir: URL, write: Bool) async throws -> BuildOutputs
+    func records(dir: URL) async throws -> [TrainingRecord]
+    func amendRecord(dir: URL, request: AmendRecordRequest) async throws -> AmendRecordOutcome
+    func mergeRecordRepos(source: URL, target: URL) async throws -> [String]
     func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) async throws -> ReductionResult
     func submit(
         dir: URL,

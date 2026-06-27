@@ -31,7 +31,7 @@ export default function Backtest() {
               {r().validation.status}
             </span>
           </div>
-          <p class="muted small">{records().length} day records projected through the candidate plan.</p>
+          <p class="muted small">{records().length} training records projected through the candidate plan.</p>
           <Show when={projection()?.error}>
             <p class="msg bad">{projection().error}</p>
           </Show>

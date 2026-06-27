@@ -94,7 +94,7 @@ test("loadRepo reads plan, lock, patches, record logs, and state from the git tr
     "sha-plan": 'plan "Loaded" {}',
     "sha-lock": "lock",
     "sha-patch": 'patch "travel" {}',
-    "sha-log": '{"month":"2026-06","days":[{"date":"2026-06-24","lifts":[{"exercise":"squat","weight":"82.5kg","sets":[5,5,7]}]}]}',
+    "sha-log": '{"format_version":1,"month":"2026-06","records":[{"id":"workout-1","revision":1,"kind":"workout","date":"2026-06-24","session_id":"a1","started_at":"2026-06-24T10:00:00Z","completed_at":"2026-06-24T11:00:00Z","lifts":[{"lift_id":"squat-1","exercise":"squat","weight":"82.5kg","sets":[5,5,7]}]}]}',
     "sha-bad-log": "{ not json",
     "sha-state": '{"type":"state_projection","program":"gzcl.gzclp@1.0.0","lanes":{}}',
   };

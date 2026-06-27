@@ -73,6 +73,11 @@ export const engine = {
   backtestRecords: (planText, lockText = "", patches = [], records = []) =>
     unwrap(wasmCall("backtest_records", planText, lockText, patchesJson(patches), JSON.stringify(records))),
 
+  mergeRecords: (existing = [], incoming = []) =>
+    unwrap(wasmCall("merge_records", JSON.stringify(existing), JSON.stringify(incoming))),
+
+  recordFiles: (records = []) => unwrap(wasmCall("record_files", JSON.stringify(records))),
+
   templateCatalog: () => unwrap(wasmCall("builtin_template_catalog")),
 
   exerciseCatalog: () => unwrap(wasmCall("exercise_catalog_json")),

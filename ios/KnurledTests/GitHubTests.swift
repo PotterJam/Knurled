@@ -10,7 +10,7 @@ import Foundation
         defer { try? FileManager.default.removeItem(at: dir) }
         let engine = RustWorkoutEngine()
         _ = try await engine.build(dir: dir, write: true)
-        try LogReader().upsert(day: Self.recordDay(), dir: dir)
+        try await Self.submitRecord(engine: engine, dir: dir)
 
         let files = Set(GitHubChangedFiles.present(in: dir))
         #expect(files.contains("state/current.json"))
@@ -28,7 +28,7 @@ import Foundation
         let dir = try SampleRepo.makeWorkingCopy()
         defer { try? FileManager.default.removeItem(at: dir) }
         _ = try await app.engine.build(dir: dir, write: true)
-        try LogReader().upsert(day: Self.recordDay(), dir: dir)
+        try await Self.submitRecord(engine: app.engine, dir: dir)
 
         let repo = ActiveRepo(displayName: "owner/repo", url: dir, isSample: false)
         repo.remote = GitHubRemote(owner: "owner", name: "repo", branch: "main", headCommit: "base")
@@ -44,6 +44,33 @@ import Foundation
         #expect(calls.pullCount == 1)
         #expect(repo.pendingPush == false)
         #expect(repo.remote?.headCommit == "pulled-head")
+    }
+
+    @Test func engineMergesDistinctSameMonthRecordsByIdentity() async throws {
+        let source = try SampleRepo.makeWorkingCopy()
+        let target = try SampleRepo.makeWorkingCopy()
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: target)
+        }
+        let engine = RustWorkoutEngine()
+        try await Self.submitRecord(
+            engine: engine,
+            dir: source,
+            startedAt: "2026-06-24T10:00:00Z"
+        )
+        try await Self.submitRecord(
+            engine: engine,
+            dir: target,
+            startedAt: "2026-06-24T14:00:00Z",
+            completedAt: "2026-06-24T15:00:00Z"
+        )
+
+        _ = try await engine.mergeRecordRepos(source: source, target: target)
+
+        let records = try await engine.records(dir: target)
+        #expect(records.count == 2)
+        #expect(Set(records.map(\.id)).count == 2)
     }
 
     @Test func zeroSizeRepositoryStillConnectsWhenPullSucceeds() async throws {
@@ -200,22 +227,44 @@ import Foundation
 }
 
 private extension GitHubTests {
-    static func recordDay() -> DayRecord {
-        DayRecord(
-            date: "2026-06-24",
-            program: nil,
-            note: nil,
-            lifts: [
-                LiftRecord(
-                    exercise: "squat",
-                    weight: "80kg",
-                    sets: [5, 5, 5],
-                    metrics: [:],
-                    note: nil
-                ),
-            ]
+    static func submitRecord(
+        engine: any WorkoutEngine,
+        dir: URL,
+        startedAt: String = "2026-06-24T10:00:00Z",
+        completedAt: String = "2026-06-24T11:00:00Z"
+    ) async throws {
+        let session = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
+        let input = ExecutionInput(
+            renderedSessionHash: session.renderedSessionHash,
+            status: ExecutionStatus.complete,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            inputs: session.items.map { item in
+                if item.executionContract.recommendedInput == InputMode.amrapFinalSet {
+                    return ItemInput(
+                        itemId: item.itemId,
+                        mode: InputMode.amrapFinalSet,
+                        finalSetReps: item.prescription.sets.last?.targetReps ?? 1
+                    )
+                }
+                return ItemInput(
+                    itemId: item.itemId,
+                    mode: InputMode.perSetReps,
+                    sets: item.prescription.sets.map {
+                        ActualSet(set: $0.set, load: $0.load, reps: $0.targetReps)
+                    }
+                )
+            }
+        )
+        _ = try await engine.submit(
+            dir: dir,
+            session: session,
+            input: input,
+            mode: .advance,
+            date: "2026-06-24"
         )
     }
+
 }
 
 private extension RenderedSession {

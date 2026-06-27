@@ -6,8 +6,8 @@ const ACTIONS = [
   ["editor", "Edit program", "Build & tune the plan visually"],
   ["next", "Next workout", "See the rendered session"],
   ["simulation", "Simulate", "Project weeks forward"],
-  ["backtest", "Backtest", "Project recorded days"],
-  ["history", "Records", "Review logged days"],
+  ["backtest", "Backtest", "Project recorded workouts"],
+  ["history", "Records", "Review training records"],
   ["git", "Commit", "Push to GitHub"],
 ];
 
