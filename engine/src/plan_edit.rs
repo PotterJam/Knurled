@@ -4,10 +4,13 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::core::{PatchFile, build_outputs, compile_plan, create_initial_state};
+use crate::core::{
+    PatchFile, build_outputs, compile_plan, compile_plan_with_template, create_initial_state,
+};
 use crate::error::{KnurledError, Result};
 use crate::model::*;
 use crate::parser::{normalize_exercise, parse_plan};
+use crate::programs::{active_program_dir, active_program_relative_path};
 use crate::record::{TrainingRecord, month_path};
 use crate::repo::{
     read_records, read_state, read_training_repo, write_generated_files, write_state,
@@ -29,6 +32,8 @@ pub enum PlanEdit {
         accessory: Option<AccessoryEdit>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session_exercises: Option<SessionExercisePolicy>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rest: Option<RestPolicy>,
     },
     SavePatch {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -228,6 +233,48 @@ pub fn suggest_initial_numbers(
     })
 }
 
+/// Most recent globally recorded load for one normalized exercise. This is deliberately a
+/// suggestion only: clients prefill it and the lifter can edit it before logging.
+pub fn suggest_load(
+    repo_path: impl AsRef<Path>,
+    exercise: &str,
+    units: Units,
+) -> Result<InitialNumberSuggestion> {
+    let normalized = normalize_exercise(exercise);
+    let unit = unit_token(&units);
+    let source = read_records(repo_path)?
+        .iter()
+        .rev()
+        .flat_map(|record| record.lifts.iter().rev().map(move |lift| (record, lift)))
+        .find(|(_, lift)| normalize_exercise(&lift.exercise) == normalized)
+        .and_then(|(record, lift)| {
+            let load = lift.weight.as_ref()?;
+            let value = numeric_load_in_unit(load, unit)?;
+            Some((
+                record.date.clone(),
+                lift.exercise.clone(),
+                load.clone(),
+                value,
+            ))
+        });
+    Ok(match source {
+        Some((source_date, source_exercise, source_load, value)) => InitialNumberSuggestion {
+            exercise: normalized,
+            value: Some(value),
+            source_exercise: Some(source_exercise),
+            source_date: Some(source_date),
+            source_load: Some(source_load),
+        },
+        None => InitialNumberSuggestion {
+            exercise: normalized,
+            value: None,
+            source_exercise: None,
+            source_date: None,
+            source_load: None,
+        },
+    })
+}
+
 fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
     let repo = read_training_repo(root)?;
     let mut plan_text = repo.plan_text.clone();
@@ -245,6 +292,7 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
             custom_exercise,
             accessory,
             session_exercises,
+            rest,
         } => {
             let mut plan = parse_plan(&plan_text)?;
             if let Some(days) = suggested_days {
@@ -276,9 +324,13 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
             if let Some(session_exercises) = session_exercises {
                 plan.session_exercises = normalize_session_exercises(session_exercises);
             }
+            if let Some(rest) = rest {
+                plan.rest = rest;
+            }
             plan_text = render_plan(&plan);
-            writes.push(("plan.fitspec".into(), Some(plan_text.clone())));
-            changed.insert("plan.fitspec".to_owned());
+            let plan_path = active_program_relative_path(root, "plan.fitspec")?;
+            writes.push((plan_path.clone(), Some(plan_text.clone())));
+            changed.insert(plan_path);
         }
         PlanEdit::SavePatch {
             filename,
@@ -291,14 +343,16 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
             let filename = patch_filename(filename.as_deref(), &name)?;
             let text = render_patch(&name, &description, active_from, expires, &operations);
             upsert_patch_file(&mut patch_files, &filename, text.clone());
-            writes.push((filename.clone(), Some(text)));
-            changed.insert(filename);
+            let write_path = active_program_relative_path(root, &filename)?;
+            writes.push((write_path.clone(), Some(text)));
+            changed.insert(write_path);
         }
         PlanEdit::DeletePatch { filename } => {
             let filename = patch_filename(Some(&filename), "patch")?;
             patch_files.retain(|file| file.filename != filename);
-            writes.push((filename.clone(), None));
-            changed.insert(filename);
+            let write_path = active_program_relative_path(root, &filename)?;
+            writes.push((write_path.clone(), None));
+            changed.insert(write_path);
         }
         PlanEdit::SwitchProgram {
             template,
@@ -324,11 +378,13 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
             plan_text = render_plan(&plan);
             lock_text = render_lockfile(&reference.normalized)?;
             patch_files.clear();
-            writes.push(("plan.fitspec".into(), Some(plan_text.clone())));
-            writes.push(("fitspec.lock".into(), Some(lock_text.clone())));
-            changed.insert("plan.fitspec".to_owned());
-            changed.insert("fitspec.lock".to_owned());
-            changed.insert("state/current.json".to_owned());
+            let plan_path = active_program_relative_path(root, "plan.fitspec")?;
+            let lock_path = active_program_relative_path(root, "fitspec.lock")?;
+            writes.push((plan_path.clone(), Some(plan_text.clone())));
+            writes.push((lock_path.clone(), Some(lock_text.clone())));
+            changed.insert(plan_path);
+            changed.insert(lock_path);
+            changed.insert(active_program_relative_path(root, "state/current.json")?);
             changed.insert(month_path(&date)?);
             let mut day = TrainingRecord::program_marker(date, reference.id);
             day.note = note;
@@ -337,8 +393,8 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
         }
     }
 
+    changed.insert(active_program_relative_path(root, "state/current.json")?);
     for generated in [
-        "state/current.json",
         "build/current.ir.json",
         "build/next-workout.json",
         "build/validation.json",
@@ -358,11 +414,29 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
 }
 
 fn candidate_outputs(root: &Path, candidate: &Candidate) -> Result<BuildOutputs> {
-    let compiled = compile_plan(
-        &candidate.plan_text,
-        &candidate.lock_text,
-        &candidate.patch_files,
-    )?;
+    let plan = parse_plan(&candidate.plan_text)?;
+    let compiled = if plan.template.starts_with("./") {
+        let relative = plan.template.trim_start_matches("./");
+        if relative.split('/').any(|part| part == "..") {
+            return Err(KnurledError::Parse(
+                "custom template path may not contain `..`".into(),
+            ));
+        }
+        let path = active_program_dir(root)?.join(relative);
+        let template = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
+        compile_plan_with_template(
+            &candidate.plan_text,
+            &candidate.lock_text,
+            &candidate.patch_files,
+            Some(&template),
+        )?
+    } else {
+        compile_plan(
+            &candidate.plan_text,
+            &candidate.lock_text,
+            &candidate.patch_files,
+        )?
+    };
     let state = if candidate.switch_program {
         create_initial_state(&compiled)
     } else {
@@ -371,7 +445,7 @@ fn candidate_outputs(root: &Path, candidate: &Candidate) -> Result<BuildOutputs>
     build_outputs(&compiled, &state)
 }
 
-fn starter_plan(
+pub(crate) fn starter_plan(
     reference: &crate::templates::TemplateRef,
     template: &BuiltinTemplate,
     plan_name: Option<String>,
@@ -383,7 +457,7 @@ fn starter_plan(
     let mut training_maxes = Map::new();
     match template.kind {
         TemplateKind::FiveThreeOne => training_maxes = normalize_lift_map(initial_numbers),
-        TemplateKind::Gzclp | TemplateKind::StartingStrength => {
+        TemplateKind::Gzclp | TemplateKind::StartingStrength | TemplateKind::Custom => {
             starts = normalize_lift_map(initial_numbers)
         }
     }
@@ -465,7 +539,7 @@ fn current_suggested_days(plan_text: &str) -> Result<Vec<String>> {
     Ok(parse_plan(plan_text)?.schedule.suggested_days)
 }
 
-fn default_suggested_days(template_id: &str) -> Vec<String> {
+pub(crate) fn default_suggested_days(template_id: &str) -> Vec<String> {
     if template_id.starts_with("531.") {
         vec!["mon", "wed", "fri", "sat"]
     } else {
@@ -567,7 +641,7 @@ fn slug(value: &str) -> String {
     }
 }
 
-fn render_plan(plan: &Plan) -> String {
+pub(crate) fn render_plan(plan: &Plan) -> String {
     let mut out = Vec::new();
     let reference = parse_template_ref(&plan.template);
     out.push(format!("plan \"{}\" {{", escape(&plan.name)));
@@ -708,7 +782,7 @@ fn render_rest(out: &mut Vec<String>, rest: &RestPolicy) {
     out.push(String::new());
     out.push("  rest {".into());
     if let Some(seconds) = rest.default_seconds {
-        out.push(format!("    default {seconds}s"));
+        out.push(format!("    default {seconds} s"));
     }
     for (scope, values) in [
         ("tier", &rest.by_tier),
@@ -717,7 +791,7 @@ fn render_rest(out: &mut Vec<String>, rest: &RestPolicy) {
         ("exercise", &rest.by_exercise),
     ] {
         for (key, seconds) in values {
-            out.push(format!("    {scope} {key} {seconds}s"));
+            out.push(format!("    {scope} {key} {seconds} s"));
         }
     }
     out.push("  }".into());
@@ -903,6 +977,7 @@ fn implement_token(implement: &Implement) -> &'static str {
     match implement {
         Implement::Barbell => "barbell",
         Implement::Dumbbell => "dumbbell",
+        Implement::Bodyweight => "bodyweight",
     }
 }
 
@@ -934,6 +1009,7 @@ fn io_error(path: impl AsRef<Path>, source: std::io::Error) -> KnurledError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::programs::active_program_dir;
     use crate::repo::{init_training_repo, write_training_record};
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
@@ -945,7 +1021,8 @@ mod tests {
         let dir = temp_dir("preview");
         let _ = fs::remove_dir_all(&dir);
         init_training_repo(&dir, "gzcl.gzclp@1.0.0").unwrap();
-        let before = fs::read_to_string(dir.join("plan.fitspec")).unwrap();
+        let program_dir = active_program_dir(&dir).unwrap();
+        let before = fs::read_to_string(program_dir.join("plan.fitspec")).unwrap();
 
         let result = preview_plan_edit(
             &dir,
@@ -955,16 +1032,21 @@ mod tests {
                 custom_exercise: None,
                 accessory: None,
                 session_exercises: None,
+                rest: None,
             },
         )
         .unwrap();
 
         assert!(!result.applied);
         assert_eq!(
-            fs::read_to_string(dir.join("plan.fitspec")).unwrap(),
+            fs::read_to_string(program_dir.join("plan.fitspec")).unwrap(),
             before
         );
-        assert!(result.changed_files.contains(&"plan.fitspec".into()));
+        assert!(
+            result
+                .changed_files
+                .contains(&active_program_relative_path(&dir, "plan.fitspec").unwrap())
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -999,6 +1081,7 @@ mod tests {
                         note: Some("Cooldown".into()),
                     }],
                 }),
+                rest: None,
             },
         )
         .unwrap();
@@ -1008,8 +1091,40 @@ mod tests {
         assert_eq!(items.first().unwrap().exercise, "band_pull_apart");
         assert_eq!(items.last().unwrap().phase, RenderedItemPhase::Warmdown);
         assert_eq!(items.last().unwrap().exercise, "easy_bike");
-        let plan = fs::read_to_string(dir.join("plan.fitspec")).unwrap();
+        let plan =
+            fs::read_to_string(active_program_dir(&dir).unwrap().join("plan.fitspec")).unwrap();
         assert!(plan.contains("session_exercises"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn quick_edit_round_trips_program_rest() {
+        let dir = temp_dir("rest");
+        let _ = fs::remove_dir_all(&dir);
+        init_training_repo(&dir, "gzcl.gzclp@1.0.0").unwrap();
+        let result = apply_plan_edit(
+            &dir,
+            PlanEdit::Quick {
+                suggested_days: None,
+                equipment: None,
+                custom_exercise: None,
+                accessory: None,
+                session_exercises: None,
+                rest: Some(RestPolicy {
+                    default_seconds: Some(75),
+                    ..RestPolicy::default()
+                }),
+            },
+        )
+        .unwrap();
+        assert!(result.applied);
+        assert_eq!(
+            result.outputs.next_workout.unwrap().items[0].rest.seconds,
+            75
+        );
+        let plan =
+            fs::read_to_string(active_program_dir(&dir).unwrap().join("plan.fitspec")).unwrap();
+        assert!(plan.contains("default 75 s"));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1060,6 +1175,9 @@ mod tests {
             Some("55")
         );
         assert!(!suggestions.values.contains_key("deadlift"));
+        let per_exercise = suggest_load(&dir, "Squat", Units::Kg).unwrap();
+        assert_eq!(per_exercise.value.as_deref(), Some("82.5"));
+        assert_eq!(per_exercise.source_date.as_deref(), Some("2026-06-24"));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1087,7 +1205,12 @@ mod tests {
         .unwrap();
 
         assert!(result.applied);
-        assert!(dir.join("patches/shoulder-friendly.fitspec").exists());
+        assert!(
+            active_program_dir(&dir)
+                .unwrap()
+                .join("patches/shoulder-friendly.fitspec")
+                .exists()
+        );
         assert!(
             result
                 .changed_files
@@ -1123,7 +1246,7 @@ mod tests {
 
         assert!(result.applied);
         assert!(
-            fs::read_to_string(dir.join("plan.fitspec"))
+            fs::read_to_string(active_program_dir(&dir).unwrap().join("plan.fitspec"))
                 .unwrap()
                 .contains("training_maxes")
         );

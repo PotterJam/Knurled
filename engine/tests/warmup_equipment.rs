@@ -211,6 +211,45 @@ fn bodyweight_lifts_get_no_warmups() {
 }
 
 #[test]
+fn explicit_bodyweight_implement_removes_work_load_and_warmups() {
+    let plan = gzclp_plan(
+        r#"
+  exercises {
+    squat { label "Air Squat"; implement bodyweight }
+  }
+"#,
+    );
+    let session = render(&plan, GZCLP);
+    let squat = item(&session, "a1.t1");
+    assert_eq!(squat.implement, knurled_core::Implement::Bodyweight);
+    assert!(squat.prescription.warmups.is_empty());
+    assert!(squat.prescription.sets.iter().all(|set| set.load.is_none()));
+}
+
+#[test]
+fn warmup_rounding_uses_monotonic_work_plate_prefixes() {
+    let plan = gzclp_plan(
+        r#"
+  equipment {
+    bar default 20
+    plates 20 10 5 2.5 1.25
+  }
+"#,
+    );
+    let session = render(&plan, GZCLP);
+    let warmups = &item(&session, "a1.t1").prescription.warmups;
+    // 80kg = 20kg bar + 20kg + 10kg per side. Prefixes are therefore 20, 60, 80;
+    // the independently rounded 52.5kg/65kg prescriptions are deliberately avoided.
+    assert_eq!(
+        warmups
+            .iter()
+            .filter_map(|set| set.load.as_deref())
+            .collect::<Vec<_>>(),
+        vec!["20kg", "60kg"]
+    );
+}
+
+#[test]
 fn equipment_snaps_barbell_loads_to_available_plates() {
     // Only 20/10/5 plates: barbell totals are bar (20) + 2 x multiples of 5,
     // i.e. multiples of 10. The 65/75/85% loads (65/75/85kg) snap to the

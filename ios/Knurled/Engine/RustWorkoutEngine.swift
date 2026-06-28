@@ -79,6 +79,38 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(InitialNumberSuggestions.self, from: raw)
     }
 
+    func suggestLoad(dir: URL, request: LoadSuggestionRequest) throws -> InitialNumberSuggestion {
+        let json = try encode(request)
+        let raw = try call(dir: dir, json: json) { knurled_suggest_load($0, $1) }
+        return try decode(InitialNumberSuggestion.self, from: raw)
+    }
+
+    func listPrograms(dir: URL) throws -> [ProgramSummary] {
+        let raw = try call(dir: dir) { knurled_list_programs($0) }
+        return try decode([ProgramSummary].self, from: raw)
+    }
+
+    func addProgram(dir: URL, request: AddProgramRequest) throws -> ProgramMutationOutcome {
+        let json = try encode(request)
+        let raw = try call(dir: dir, json: json) { knurled_add_program($0, $1) }
+        return try decode(ProgramMutationOutcome.self, from: raw)
+    }
+
+    func setActiveProgram(dir: URL, slug: String) throws -> ProgramMutationOutcome {
+        let raw = try call(dir: dir, json: slug) { knurled_set_active_program($0, $1) }
+        return try decode(ProgramMutationOutcome.self, from: raw)
+    }
+
+    func deleteProgram(dir: URL, slug: String) throws -> ProgramMutationOutcome {
+        let raw = try call(dir: dir, json: slug) { knurled_delete_program($0, $1) }
+        return try decode(ProgramMutationOutcome.self, from: raw)
+    }
+
+    func suggestProgramAdjustments(dir: URL) throws -> [ProgramAdjustmentSuggestion] {
+        let raw = try call(dir: dir) { knurled_suggest_program_adjustments($0) }
+        return try decode([ProgramAdjustmentSuggestion].self, from: raw)
+    }
+
     func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionResult {
         let sessionJSON = try encode(session)
         let inputJSON = try encode(input)

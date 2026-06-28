@@ -1,10 +1,8 @@
 # FitSpec language reference
 
-FitSpec is a small, declarative [KDL](https://kdl.dev) dialect. Today it is a **plan
-configuration** language: it configures a built-in, versioned template and applies patches. It is
-**not** (yet) a template-*authoring* language — progression logic lives in the engine
-([engine/src/templates.rs](../engine/src/templates.rs), [engine/src/core.rs](../engine/src/core.rs)).
-A user-authored template DSL is proposed in [ADR 0003](adr/0003-template-authoring-model.md).
+FitSpec is a small, declarative [KDL](https://kdl.dev) dialect. Plans configure built-ins or refer
+to repository-owned templates. Template documents use the bounded progression primitives from
+[ADR 0003](adr/0003-template-authoring-model.md); evaluation remains engine-owned.
 
 This file is the maintained reference. The source of truth is the parser
 ([engine/src/parser.rs](../engine/src/parser.rs)); anything below marked **Implemented** is what
@@ -58,7 +56,7 @@ A plan is a single `plan "name" { … }` node. Inside it:
 
 | Directive | Required | Form | Notes |
 |---|---|---|---|
-| `template` | ✅ | `template "id@version"` or `template "id" version="x"` | Resolves to a built-in template; both spellings normalise to the same ref. |
+| `template` | ✅ | `template "id@version"`, `template "id" version="x"`, or `template "./templates/x.fitspec"` | Resolves to a built-in or repo-owned template. |
 | `units` | ✅ | `units kg` / `units lb` | Unrecognised values fall back to `kg`. |
 | `schedule` | | `schedule [mode] { rotation …; suggested_days … }` | `mode` defaults to `next_workout`. `rotation` and `suggested_days` are lowercased token lists. |
 | `starts` | | `starts { squat "80kg" … }` | Per-lift starting working weights. |
@@ -85,8 +83,8 @@ exercises {
 }
 ```
 
-IDs are normalized like every other exercise name. `pattern` and `implement` are advisory metadata
-for clients; the engine does not reject unknown values.
+IDs are normalized like every other exercise name. `implement bodyweight` is semantic: the engine
+omits prescription loads and warmup plate math. Other implement strings remain catalogue metadata.
 
 ### `rest`
 
@@ -141,7 +139,41 @@ so different lifts, tiers, and program phases carry different warmup volume. Bui
 GZCLP and Starting Strength ship a compact novice ramp (1×5 empty bar, then 65/80% of the work
 weight, skipping a step when rounding would repeat the previous warmup load); 5/3/1 ships the
 canonical 40/50/60% of the training max. Warmup loads are rounded by the same equipment-aware
-logic as working loads.
+logic as working loads and, for barbells, use prefixes of the work-set plate stack so a ramp never
+requires removing a small plate before the work set.
+
+## Template documents (`templates/*.fitspec`) — Implemented
+
+```kdl
+template "Wave + AMRAP" version="1.0.0" {
+  rotation day
+  rest 150
+  session day { item "squat.main" slot="day.squat" }
+  lane "squat.main" exercise="squat" basis="working_weight" sequence="cycle" {
+    warmup intensity=50 reps=5
+    stage "wave" {
+      set count=1 reps=5 intensity=80
+      set count=1 reps=3 intensity=90
+      set count=1 reps=1 intensity=100 amrap=#true
+    }
+    stage "deload" { set count=3 reps=5 intensity=60 }
+    on pass { increase_load by=2.5; advance_stage }
+    on amrap_gte reps=8 { increase_load by="5%" }
+    on cycle_end { reset_stage; advance_cycle }
+  }
+}
+```
+
+- Basis: `working_weight`, `training_max`, `bodyweight`.
+- Sequence: `none`, `stages`, `cycle`, `waves`, `rotation`.
+- Set facets: `count`, `reps`, percentage `intensity`, `amrap`, `rep_min`/`rep_max`, `rpe`.
+- Triggers: `pass`, `fail`, `amrap_gte`, `stall`, `cycle_end`, `range_top`.
+- Effects: `increase_load`, `deload`, `reset_load`, `advance_stage`, `reset_stage`,
+  `increase_reps`, `recompute_tm`, `advance_cycle`.
+- Warmup facet: repeated `warmup intensity=<percent> reps=<count>` nodes on a lane.
+
+There are no variables, loops, functions, or arbitrary conditionals. `template vendor` produces a
+pinned built-in DSL document; parity tests require its rendered output to remain byte-identical.
 
 ### `equipment`
 
@@ -247,8 +279,6 @@ Specced in mvp-spec §11 but **not** currently accepted by the parser:
   `temporary load adjustment`, `enable` / `disable`. (Plan-level `warmup` and `equipment` are now
   implemented — see above; a patch-level `add-warmup` op that layers a warmup change for a
   date-bounded period is still future work.)
-- **Template authoring:** the `fitspec template vendor` escape hatch and
-  `template "./templates/x.fitspec"` file references (mvp-spec §9) are specced but unimplemented.
 
 ## Out of scope (by design)
 

@@ -23,11 +23,11 @@ final class AppModel {
     init(
         engine: WorkoutEngine = RustWorkoutEngine(),
         repos: RepoManager = RepoManager(),
-        github: GitHubStore = GitHubStore()
+        github: GitHubStore? = nil
     ) {
         self.engine = engine
         self.repos = repos
-        self.github = github
+        self.github = github ?? GitHubStore()
     }
 
     func bootstrap() async {
@@ -65,5 +65,39 @@ final class AppModel {
 
     func refresh() async {
         await activeRepo?.refresh(engine: engine)
+    }
+
+    @discardableResult
+    func addProgram(_ request: AddProgramRequest, in repo: ActiveRepo) async throws -> ProgramMutationOutcome {
+        let outcome = try await engine.addProgram(dir: repo.url, request: request)
+        await repo.refresh(engine: engine)
+        try await pushProgramChange(outcome.changedFiles, in: repo, message: "Add program")
+        return outcome
+    }
+
+    @discardableResult
+    func setActiveProgram(_ slug: String, in repo: ActiveRepo) async throws -> ProgramMutationOutcome {
+        let outcome = try await engine.setActiveProgram(dir: repo.url, slug: slug)
+        await repo.refresh(engine: engine)
+        try await pushProgramChange(outcome.changedFiles, in: repo, message: "Switch active program")
+        return outcome
+    }
+
+    @discardableResult
+    func deleteProgram(_ slug: String, in repo: ActiveRepo) async throws -> ProgramMutationOutcome {
+        let outcome = try await engine.deleteProgram(dir: repo.url, slug: slug)
+        await repo.refresh(engine: engine)
+        try await pushProgramChange(outcome.changedFiles, in: repo, message: "Delete program")
+        return outcome
+    }
+
+    private func pushProgramChange(_ files: [String], in repo: ActiveRepo, message: String) async throws {
+        do {
+            try await push(repo: repo, message: message, files: files)
+        } catch {
+            repo.pendingPush = true
+            repo.loadError = "Saved locally. Couldn't push to GitHub yet: \(error.localizedDescription)"
+        }
+        persistSelection()
     }
 }

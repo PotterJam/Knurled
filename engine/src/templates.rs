@@ -894,6 +894,7 @@ pub fn builtin_template(input: &str) -> Result<BuiltinTemplate> {
         TemplateKind::Gzclp => gzclp_template(reference.id),
         TemplateKind::FiveThreeOne => five_three_one_template(reference.id),
         TemplateKind::StartingStrength => starting_strength_template(reference.id),
+        TemplateKind::Custom => unreachable!("custom templates are loaded from repository files"),
     })
 }
 
@@ -940,6 +941,7 @@ fn gzclp_template(id: String) -> BuiltinTemplate {
             lower: 5.0,
         },
         weeks: Vec::new(),
+        dsl: None,
     }
 }
 
@@ -989,6 +991,7 @@ fn five_three_one_template(id: String) -> BuiltinTemplate {
                 reps: vec!["5".into(), "5".into(), "5".into()],
             },
         ],
+        dsl: None,
     }
 }
 
@@ -1039,6 +1042,7 @@ fn starting_strength_template(id: String) -> BuiltinTemplate {
             lower: 5.0,
         },
         weeks: Vec::new(),
+        dsl: None,
     }
 }
 

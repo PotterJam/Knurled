@@ -11,6 +11,7 @@ struct ActiveWorkoutView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var pendingScroll: Task<Void, Never>?
+    @State private var restTarget: LiveItem?
 
     private let resumeDraft: WorkoutDraft?
     private let controller = WorkoutLiveController.shared
@@ -111,7 +112,9 @@ struct ActiveWorkoutView: View {
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                RestTimerBar(controller: controller)
+                RestTimerBar(controller: controller) {
+                    restTarget = controller.currentTarget?.item
+                }
                     .animation(.snappy, value: controller.isResting)
                 bottomBar
             }
@@ -137,6 +140,35 @@ struct ActiveWorkoutView: View {
                 let item = workout.addExtraExercise(exercise: exercise, load: load, setCount: sets, reps: reps)
                 controller.focus(item)
                 controller.modelChanged()
+            }
+        }
+        .sheet(item: $restTarget) { item in
+            SessionRestEditor(item: item, plan: workout.repo.plan) { seconds, saveToProgram in
+                item.restSeconds = seconds
+                if controller.isResting {
+                    controller.addRest(seconds - Int(controller.remaining.rounded(.up)))
+                }
+                guard saveToProgram else { return }
+                var policy = workout.repo.plan?.rest ?? RestPolicy()
+                policy.byExercise[LiveItem.normalized(item.performedExercise ?? item.item.exercise)] = seconds
+                Task {
+                    do {
+                        _ = try await app.applyPlanEdit(
+                            .quick(QuickPlanEdit(
+                                suggestedDays: nil,
+                                equipment: nil,
+                                customExercise: nil,
+                                accessory: nil,
+                                sessionExercises: nil,
+                                rest: policy
+                            )),
+                            in: workout.repo,
+                            message: "Update exercise rest"
+                        )
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
             }
         }
         .alert("Couldn't save", isPresented: .constant(errorMessage != nil)) {
@@ -294,6 +326,46 @@ struct ActiveWorkoutView: View {
             controller.discard()
             dismiss()
         }
+    }
+}
+
+private struct SessionRestEditor: View {
+    let item: LiveItem
+    let plan: PlanIR?
+    var onSave: (Int, Bool) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var seconds: Int
+    @State private var saveToProgram = false
+
+    init(item: LiveItem, plan: PlanIR?, onSave: @escaping (Int, Bool) -> Void) {
+        self.item = item
+        self.plan = plan
+        self.onSave = onSave
+        _seconds = State(initialValue: item.restSeconds)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("This workout") {
+                    Stepper("\(seconds / 60)m \(seconds % 60)s", value: $seconds, in: 15...600, step: 15)
+                }
+                Section {
+                    Toggle("Save for this exercise", isOn: $saveToProgram)
+                } footer: {
+                    Text("Saving updates the program; otherwise this applies only to the current workout.")
+                }
+            }
+            .navigationTitle("Rest after \(item.performedExerciseName)")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Apply") { onSave(seconds, saveToProgram); dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

@@ -1,6 +1,7 @@
 # Training Repo Contract
 
-> **Updated by [ADR 0007](adr/0007-logs-as-record-state-as-truth.md).** Logs are
+> **Updated by [ADR 0007](adr/0007-logs-as-record-state-as-truth.md) and
+> [ADR 0009](adr/0009-program-bank-and-shared-history.md).** Logs are
 > a human-facing record the engine never replays; `state/current.json` is the
 > authored-forward source of truth, not a projection of logs. The clauses below
 > reflect that model. The pre-ADR-0007 event-log/replay description survives in
@@ -11,12 +12,16 @@ A valid Knurled training repo keeps user-owned source files separate from genera
 ```text
 my-training/
   fitspec.toml
-  plan.fitspec
-  fitspec.lock
-  patches/
-  templates/
+  programs/
+    my-gzclp/
+      plan.fitspec
+      fitspec.lock
+      patches/
+      templates/
+      state/current.json
+    my-531/
+      ...
   logs/
-  state/current.json
   build/current.ir.json
   build/next-workout.json
   build/validation.json
@@ -25,11 +30,14 @@ my-training/
 
 ## Canonical Files
 
-`plan.fitspec` defines the plan and template configuration.
+`fitspec.toml` names one active program and lists the program bank. The engine resolves all hot
+path operations through that active entry.
 
-`fitspec.lock` freezes template versions, content hashes, and engine compatibility.
+`programs/<slug>/plan.fitspec` defines one plan and template configuration.
 
-`patches/*.fitspec` contains explicit future-plan changes.
+`programs/<slug>/fitspec.lock` freezes template versions, content hashes, and engine compatibility.
+
+`programs/<slug>/patches/*.fitspec` contains explicit future-plan changes.
 
 `logs/<yyyy>/<mm>.json` contains the training record: a versioned, pretty-printed month of
 session-grain `TrainingRecord` entries. Record IDs, not dates, define identity, so any number of
@@ -39,13 +47,13 @@ backtest and to the human's history/charts.
 
 ## State and Generated Files
 
-`state/current.json` is the **source of truth** for where the lifter is: the active program plus
+`programs/<slug>/state/current.json` is the **source of truth** for where that program is:
 the program-shaped progression cursor per lane (working load, stage, fail-count, or training
 max/week). It is authored forward — updated when a session is submitted (`advance`/`off day`/
 `reset`) — not re-derived from logs. Starting a new program, or restarting lighter after a
 layoff, is just re-authoring `state`.
 
-`build/current.ir.json` is the compiled plan.
+`build/current.ir.json` is the compiled active plan.
 
 `build/next-workout.json` is the rendered execution contract for the next session.
 
@@ -53,3 +61,7 @@ layoff, is just re-authoring `state`.
 
 `build/*` files derive from `state` + the compiled plan and are committed for MVP convenience.
 They are regenerated on demand; `knurled check-generated` reports drift.
+
+Legacy repositories with root `plan.fitspec`, `fitspec.lock`, `patches/`, and `state/` remain
+readable as one implicit program. The first program-bank mutation migrates those files under
+`programs/<slug>/`; shared `logs/` and generated `build/` stay at the repository root.

@@ -239,6 +239,8 @@ final class WorkoutLiveController {
             renderedSessionHash: workout.session.renderedSessionHash,
             sessionId: workout.session.sessionId,
             displayName: workout.session.displayName,
+            session: workout.session,
+            unitsRaw: workout.units.rawValue,
             startedAt: workout.startedAt,
             savedAt: LiveWorkout.timestamp(),
             items: workout.draftItems(),
@@ -253,6 +255,9 @@ final class WorkoutLiveController {
     private func restoreCursor(from draft: WorkoutDraft, in workout: LiveWorkout) {
         cursorAtEnd = draft.cursorAtEnd
         focusedItemID = draft.focusedItemID
+        lastLoggedSet = workout.items
+            .flatMap(\.sets)
+            .last(where: \.logged)
         guard let itemID = draft.cursorItemID,
               let setID = draft.cursorSetID,
               let item = workout.items.first(where: { $0.id == itemID }) else { return }
@@ -262,9 +267,27 @@ final class WorkoutLiveController {
         }
     }
 
+    /// Interactive intents can launch a new process. Rehydrate the observable workout from the
+    /// crash-safe draft before attempting any lock-screen mutation.
+    @discardableResult
+    private func ensureWorkoutLoaded() -> Bool {
+        if workout != nil { return true }
+        guard let draft = DraftStore.shared.load(),
+              let units = Units(rawValue: draft.unitsRaw) else { return false }
+        let restored = LiveWorkout(session: draft.session, units: units, draft: draft)
+        workout = restored
+        restoreCursor(from: draft, in: restored)
+        syncAmrap()
+        if activity == nil, let existing = Activity<RestActivityAttributes>.activities.first {
+            activity = ActivityHandle(activity: existing)
+        }
+        return true
+    }
+
     // MARK: - Actions from the Live Activity
 
     func logCurrentSet() {
+        guard ensureWorkoutLoaded() else { return }
         guard let (item, set) = currentTarget else { return }
         // Mirror the in-app gate: a weighted set with no value can't be logged from the lock screen
         // either. The activity surfaces a weight stepper instead (see `needsLoad`).
@@ -279,14 +302,16 @@ final class WorkoutLiveController {
 
     /// Skip the current warm-up ramp set from the lock screen (guidance-only, no progression effect).
     func skipWarmup() {
+        guard ensureWorkoutLoaded() else { return }
         advanceCurrentWarmup()
     }
 
     /// Nudge the current working set's load by ±one plate step, so the weight can be corrected (or
     /// set for the first time) from the lock screen. Starts from the prescription/default when empty.
     func adjustLoad(steps: Int) {
+        guard ensureWorkoutLoaded() else { return }
         guard let (item, set) = currentTarget, !set.isWarmup, steps != 0 else { return }
-        let units = workout?.repo.plan?.plan.units ?? .kg
+        let units = workout?.units ?? .kg
         let increment = units == .lb ? 5.0 : 2.5
         let base = LoadControl.parse(set.load, defaultUnit: units)?.value
             ?? LoadControl.parse(set.prescribed.load, defaultUnit: units)?.value
@@ -300,6 +325,7 @@ final class WorkoutLiveController {
 
     /// Adjust the RPE on the set just completed, during rest, in half-point steps.
     func adjustRPE(delta: Double) {
+        guard ensureWorkoutLoaded() else { return }
         guard let set = lastLoggedSet else { return }
         let base = set.rpe ?? 8
         set.rpe = min(10, max(1, ((base + delta) * 2).rounded() / 2))
@@ -373,17 +399,20 @@ final class WorkoutLiveController {
     }
 
     func adjustAmrap(delta: Int) {
+        guard ensureWorkoutLoaded() else { return }
         guard let (item, set) = currentTarget, isAmrapTarget(item, set) else { return }
         amrapReps = max(0, amrapReps + delta)
         updateActivity()
     }
 
     func skipRest() {
+        guard ensureWorkoutLoaded() else { return }
         stopRest()
         updateActivity()
     }
 
     func addRest(_ seconds: Int) {
+        guard ensureWorkoutLoaded() else { return }
         guard let restEndDate else { return }
         now = .now
         self.restEndDate = max(now.addingTimeInterval(1), restEndDate.addingTimeInterval(TimeInterval(seconds)))
@@ -397,7 +426,7 @@ final class WorkoutLiveController {
     func didLogSetInApp(item: LiveItem, wasWarmup: Bool = false) {
         syncAmrap()
         if currentTarget != nil, !wasWarmup {
-            startRest(seconds: item.item.rest.seconds)
+            startRest(seconds: item.restSeconds)
         } else {
             stopRest()
             updateActivity()
@@ -432,7 +461,7 @@ final class WorkoutLiveController {
         syncAmrap()
         // Ramp-up sets and whole warm-up exercises are guidance only — no rest countdown between them.
         if currentTarget != nil, !set.isWarmup, !item.isSessionWarmup {
-            startRest(seconds: item.item.rest.seconds)
+            startRest(seconds: item.restSeconds)
         } else {
             stopRest()
             updateActivity()

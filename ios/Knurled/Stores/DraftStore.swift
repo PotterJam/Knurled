@@ -12,6 +12,10 @@ struct WorkoutDraft: Codable, Sendable {
     var renderedSessionHash: String
     var sessionId: String
     var displayName: String
+    /// The complete engine rendering is required when an interactive Live Activity intent
+    /// relaunches the app after termination: there is no `ActiveRepo` in that fresh process.
+    var session: RenderedSession
+    var unitsRaw: String
     var startedAt: String
     var savedAt: String
     var items: [DraftItem]
@@ -24,7 +28,7 @@ struct WorkoutDraft: Codable, Sendable {
     var cursorAtEnd: Bool
 }
 
-struct DraftItem: Codable, Sendable {
+struct DraftItem: Codable, Sendable, Equatable {
     var itemId: String
     var exercise: String
     var isExtra: Bool
@@ -36,7 +40,7 @@ struct DraftItem: Codable, Sendable {
     var sets: [DraftSet]
 }
 
-struct DraftSet: Codable, Sendable {
+struct DraftSet: Codable, Sendable, Equatable {
     var id: Int
     var reps: Int
     var load: String?

@@ -304,7 +304,7 @@ private struct SetIndexBadge: View {
             .font(.caption.weight(.bold))
             .monospacedDigit()
             .foregroundStyle(isCurrent ? palette.accent : .secondary)
-            .frame(width: 26, height: 26)
+            .frame(width: 24, height: 24)
             .background(
                 Color(uiColor: .tertiarySystemFill),
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -376,7 +376,7 @@ struct SetRowView: View {
 
     private var rowContent: some View {
         @Bindable var set = set
-        return HStack(spacing: 12) {
+        return HStack(spacing: 10) {
             SetIndexBadge(label: indexLabel, isCurrent: isCurrent && !set.logged)
 
             prescriptionView
@@ -385,15 +385,15 @@ struct SetRowView: View {
 
             Button(action: onToggled) {
                 Image(systemName: set.logged ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
+                    .font(.title3)
                     .foregroundStyle(set.logged ? completedForeground : .secondary)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
         }
-        .frame(minHeight: 34)
-        .padding(.vertical, 2)
+        .frame(minHeight: 30)
+        .padding(.vertical, 1)
         .background {
             if set.logged && showsCompletedBand {
                 // Full-bleed band that fills the row up to the dividers and runs out to the card

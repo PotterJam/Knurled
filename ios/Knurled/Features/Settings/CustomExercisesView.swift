@@ -65,6 +65,7 @@ private struct EditCustomExerciseSheet: View {
     let exercise: EditableCustomExercise
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var app
     @State private var label: String
     @State private var pattern: String
     @State private var implement: String
@@ -115,10 +116,24 @@ private struct EditCustomExerciseSheet: View {
             implement: implement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "custom" : LiveItem.normalized(implement),
             custom: true
         )
-        try? ExercisePlanWriter.upsertCustomExercise(entry, in: repo.url)
-        if var exercises = repo.plan?.exercises {
-            exercises[entry.id] = CustomExercise(label: entry.label, pattern: entry.pattern, implement: entry.implement)
-            repo.plan?.exercises = exercises
+        Task {
+            _ = try? await app.applyPlanEdit(
+                .quick(QuickPlanEdit(
+                    suggestedDays: nil,
+                    equipment: nil,
+                    customExercise: CustomExerciseEdit(
+                        id: entry.id,
+                        label: entry.label,
+                        pattern: entry.pattern,
+                        implement: entry.implement
+                    ),
+                    accessory: nil,
+                    sessionExercises: nil,
+                    rest: nil
+                )),
+                in: repo,
+                message: "Update custom exercise"
+            )
         }
     }
 }

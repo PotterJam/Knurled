@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RestTimerBar: View {
     let controller: WorkoutLiveController
+    var onAdjust: (() -> Void)? = nil
 
     var body: some View {
         if controller.isResting {
@@ -14,6 +15,7 @@ struct RestTimerBar: View {
                 Text(controller.remainingText)
                     .font(.title3.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
+                    .onTapGesture { onAdjust?() }
                 Spacer()
                 HStack(spacing: 10) {
                     Button("−15") { controller.addRest(-15) }

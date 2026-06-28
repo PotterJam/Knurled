@@ -138,12 +138,17 @@ pub enum RecordAmendment {
         note: Option<String>,
         sets: Vec<ActualSet>,
     },
+    ReplaceLifts {
+        lifts: Vec<LiftRecord>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AmendRecordOutcome {
     pub record: TrainingRecord,
     pub changed_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recomputed_lanes: Vec<String>,
 }
 
 impl TrainingRecord {

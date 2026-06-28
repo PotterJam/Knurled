@@ -13,6 +13,7 @@ struct QuickPlanEditView: View {
     @State private var rounding: RoundingMode
     @State private var warmupExercises: [SessionExercise]
     @State private var warmdownExercises: [SessionExercise]
+    @State private var restSeconds: Int
     @State private var isSaving = false
     @State private var outcome: PlanEditOutcome?
     @State private var errorMessage: String?
@@ -30,6 +31,7 @@ struct QuickPlanEditView: View {
         _rounding = State(initialValue: equipment?.rounding ?? .nearest)
         _warmupExercises = State(initialValue: plan.sessionExercises.warmup)
         _warmdownExercises = State(initialValue: plan.sessionExercises.warmdown)
+        _restSeconds = State(initialValue: plan.rest.defaultSeconds ?? 120)
     }
 
     var body: some View {
@@ -48,6 +50,14 @@ struct QuickPlanEditView: View {
                 dumbbellPreset: $dumbbellPreset,
                 rounding: $rounding
             )
+
+            Section {
+                Stepper("Default: \(restSeconds / 60)m \(restSeconds % 60)s", value: $restSeconds, in: 15...600, step: 15)
+            } header: {
+                Text("Rest")
+            } footer: {
+                Text("Exercise, lane, slot, and tier overrides remain unchanged.")
+            }
 
             SessionExercisesEditor(
                 title: "Warmup",
@@ -93,6 +103,13 @@ struct QuickPlanEditView: View {
                 sessionExercises: SessionExercisePolicy(
                     warmup: warmupExercises.filter { !$0.exercise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
                     warmdown: warmdownExercises.filter { !$0.exercise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                ),
+                rest: RestPolicy(
+                    defaultSeconds: restSeconds,
+                    byTier: plan.rest.byTier,
+                    bySlot: plan.rest.bySlot,
+                    byLane: plan.rest.byLane,
+                    byExercise: plan.rest.byExercise
                 )
             )
         )

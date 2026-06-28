@@ -19,6 +19,7 @@ enum PlanEdit: Encodable, Sendable {
         case customExercise
         case accessory
         case sessionExercises
+        case rest
         case filename
         case name
         case description
@@ -43,6 +44,7 @@ enum PlanEdit: Encodable, Sendable {
             try container.encodeIfPresent(edit.customExercise, forKey: .customExercise)
             try container.encodeIfPresent(edit.accessory, forKey: .accessory)
             try container.encodeIfPresent(edit.sessionExercises, forKey: .sessionExercises)
+            try container.encodeIfPresent(edit.rest, forKey: .rest)
         case .savePatch(let edit):
             try container.encode("save_patch", forKey: .kind)
             try container.encodeIfPresent(edit.filename, forKey: .filename)
@@ -73,6 +75,38 @@ struct QuickPlanEdit: Encodable, Sendable {
     var customExercise: CustomExerciseEdit?
     var accessory: AccessoryEdit?
     var sessionExercises: SessionExercisePolicy?
+    var rest: RestPolicy?
+}
+
+struct RestPolicy: Codable, Sendable, Hashable {
+    var defaultSeconds: Int?
+    var byTier: [String: Int]
+    var bySlot: [String: Int]
+    var byLane: [String: Int]
+    var byExercise: [String: Int]
+
+    init(
+        defaultSeconds: Int? = nil,
+        byTier: [String: Int] = [:],
+        bySlot: [String: Int] = [:],
+        byLane: [String: Int] = [:],
+        byExercise: [String: Int] = [:]
+    ) {
+        self.defaultSeconds = defaultSeconds
+        self.byTier = byTier
+        self.bySlot = bySlot
+        self.byLane = byLane
+        self.byExercise = byExercise
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        defaultSeconds = try container.decodeIfPresent(Int.self, forKey: .defaultSeconds)
+        byTier = try container.decodeIfPresent([String: Int].self, forKey: .byTier) ?? [:]
+        bySlot = try container.decodeIfPresent([String: Int].self, forKey: .bySlot) ?? [:]
+        byLane = try container.decodeIfPresent([String: Int].self, forKey: .byLane) ?? [:]
+        byExercise = try container.decodeIfPresent([String: Int].self, forKey: .byExercise) ?? [:]
+    }
 }
 
 struct SessionExercisePolicy: Codable, Sendable, Hashable {
@@ -201,6 +235,7 @@ enum RoundingMode: String, Codable, Sendable, Hashable {
 enum Implement: String, Codable, Sendable, Hashable {
     case barbell
     case dumbbell
+    case bodyweight
 }
 
 struct PatchPlanEdit: Encodable, Sendable {
@@ -261,6 +296,11 @@ struct SwitchProgramEdit: Encodable, Sendable {
 
 struct InitialNumberSuggestionRequest: Encodable, Sendable {
     var template: String
+    var units: Units
+}
+
+struct LoadSuggestionRequest: Encodable, Sendable {
+    var exercise: String
     var units: Units
 }
 

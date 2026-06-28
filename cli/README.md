@@ -11,6 +11,7 @@ cargo run -p knurled-cli -- simulate my-training --weeks 8 --strategy all-pass
 cargo run -p knurled-cli -- check-generated my-training
 cargo run -p knurled-cli -- submit my-training input.json --date 2026-06-25
 cargo run -p knurled-cli -- backtest-records my-training
+cargo run -p knurled-cli -- template vendor my-training gzcl.gzclp@1.0.0
 cargo run -p knurled-cli -- serve --port 4321
 ```
 

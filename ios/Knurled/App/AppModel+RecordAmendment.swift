@@ -6,8 +6,9 @@ extension AppModel {
         _ record: TrainingRecord,
         amendment: RecordAmendment,
         in repo: ActiveRepo,
-        timestamp: String = LiveWorkout.timestamp()
+        timestamp: String? = nil
     ) async throws -> AmendRecordOutcome {
+        let timestamp = timestamp ?? LiveWorkout.timestamp()
         let outcome = try await engine.amendRecord(
             dir: repo.url,
             request: AmendRecordRequest(

@@ -29,7 +29,7 @@ use crate::core::{advance_cursor, reduce_input, validate_execution_input};
 use crate::error::Result;
 use crate::model::{
     ActualSet, CompiledPlan, Effect, ExecutionInput, ExecutionInputValidation, ItemInput,
-    RenderedItem, RenderedSession, StateProjection, ValidationStatus,
+    LaneCheckpoint, RenderedItem, RenderedSession, StateProjection, ValidationStatus,
 };
 use crate::record::{LiftRecord, TrainingRecord, lift_record_id, workout_record_id};
 
@@ -88,7 +88,7 @@ pub fn submit_session(
     // so an unfinished session simply progresses the lifts that were completed and
     // leaves the rest untouched. The saved partial stays resumable from history by
     // its session id (`render_session` ignores the cursor).
-    let (new_state, effects) = match mode {
+    let (mut new_state, effects) = match mode {
         SubmitMode::Advance => {
             let reduced = reduce_input(compiled, state, rendered_session, input)?;
             (reduced.new_state, reduced.effects)
@@ -107,6 +107,27 @@ pub fn submit_session(
             (new_state, effects)
         }
     };
+
+    for lane in effects
+        .iter()
+        .map(|effect| &effect.lane)
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        if let Some(item) = rendered_session
+            .items
+            .iter()
+            .find(|item| item.progression_lane == *lane)
+        {
+            new_state.previous_lanes.insert(
+                lane.clone(),
+                LaneCheckpoint {
+                    record_id: record.id.clone(),
+                    previous_state: state.lanes.get(lane).cloned().unwrap_or_default(),
+                    item: Box::new(item.clone()),
+                },
+            );
+        }
+    }
 
     Ok(SubmitOutcome {
         validation,
@@ -202,7 +223,7 @@ fn build_training_record(
                 .unwrap_or_else(|| item.exercise.clone());
             lifts.push(LiftRecord {
                 lift_id: lift_record_id(&record_id, &item.item_id),
-                item_id: (input.status == "partial").then(|| item.item_id.clone()),
+                item_id: Some(item.item_id.clone()),
                 exercise,
                 weight: performed_weight(item, item_input),
                 sets: performed_reps(item, item_input),

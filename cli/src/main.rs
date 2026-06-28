@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use knurled_core::{
-    ExecutionInput, SubmitMode, backtest_records_repo, build_repo, check_generated_repo,
-    init_training_repo, pretty_json, preview_repo, simulate_repo, submit_repo, validate_repo,
+    ExecutionInput, SubmitMode, active_program_dir, backtest_records_repo, build_repo,
+    check_generated_repo, init_training_repo, pretty_json, preview_repo, simulate_repo,
+    submit_repo, validate_repo, vendor_template,
 };
 
 #[derive(Debug, Parser)]
@@ -67,9 +68,26 @@ enum Command {
         #[arg(default_value = ".")]
         repo: PathBuf,
     },
+    /// Manage repository-owned template documents.
+    Template {
+        #[command(subcommand)]
+        command: TemplateCommand,
+    },
     Serve {
         #[arg(long, default_value_t = 4321)]
         port: u16,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TemplateCommand {
+    /// Copy a pinned built-in document into the active program's templates directory.
+    Vendor {
+        #[arg(default_value = ".")]
+        repo: PathBuf,
+        template: String,
+        #[arg(long)]
+        output: Option<String>,
     },
 }
 
@@ -161,6 +179,33 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Command::BacktestRecords { repo } => {
             println!("{}", pretty_json(&backtest_records_repo(repo)?)?);
         }
+        Command::Template { command } => match command {
+            TemplateCommand::Vendor {
+                repo,
+                template,
+                output,
+            } => {
+                let program_dir = active_program_dir(&repo)?;
+                let templates = program_dir.join("templates");
+                fs::create_dir_all(&templates)?;
+                let filename = output.unwrap_or_else(|| {
+                    format!(
+                        "{}.fitspec",
+                        template
+                            .split('@')
+                            .next()
+                            .unwrap_or("template")
+                            .replace(['.', '/'], "-")
+                    )
+                });
+                if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+                    return Err("template output must be a filename inside templates/".into());
+                }
+                let path = templates.join(filename);
+                fs::write(&path, vendor_template(&template)?)?;
+                println!("Vendored {}", path.display());
+            }
+        },
         Command::Serve { port } => serve(port)?,
     }
 

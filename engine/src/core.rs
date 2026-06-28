@@ -1,13 +1,14 @@
 use regex::Regex;
 use serde_json::json;
 
+use crate::dsl::parse_template_dsl;
 use crate::error::{KnurledError, Result};
-use crate::json::sha256_json;
+use crate::json::{sha256_json, sha256_text};
 use crate::model::*;
 use crate::parser::{normalize_exercise, parse_lock, parse_patch, parse_plan};
 use crate::templates::{
-    builtin_template, default_exercise_alternatives, lock_entry, parse_template_ref,
-    template_display_name, template_hash,
+    builtin_template, default_exercise_alternatives, exercise_catalog, lock_entry,
+    parse_template_ref, template_display_name, template_hash,
 };
 
 const MAIN_LIFTS: [&str; 4] = ["squat", "bench", "press", "deadlift"];
@@ -23,9 +24,21 @@ pub fn compile_plan(
     lock_text: &str,
     patch_files: &[PatchFile],
 ) -> Result<CompiledPlan> {
+    compile_plan_with_template(plan_text, lock_text, patch_files, None)
+}
+
+pub fn compile_plan_with_template(
+    plan_text: &str,
+    lock_text: &str,
+    patch_files: &[PatchFile],
+    custom_template_text: Option<&str>,
+) -> Result<CompiledPlan> {
     let plan = parse_plan(plan_text)?;
     let reference = parse_template_ref(&plan.template);
-    let template = builtin_template(&plan.template)?;
+    let template = match custom_template_text {
+        Some(text) => parse_template_dsl(text, &reference.id)?,
+        None => builtin_template(&plan.template)?,
+    };
     let lock = parse_lock(lock_text)?;
     let patches = patch_files
         .iter()
@@ -43,7 +56,10 @@ pub fn compile_plan(
         engine_version: ENGINE_VERSION.into(),
         plan_hash,
         lock_hash: sha256_json(&lock)?,
-        template_hash: template_hash(&plan.template)?,
+        template_hash: match custom_template_text {
+            Some(text) => sha256_text(text),
+            None => template_hash(&plan.template)?,
+        },
         patch_hash: sha256_json(&patches)?,
         plan: PlanIdentity {
             name: plan.name,
@@ -72,37 +88,69 @@ pub fn validate_compiled(compiled: &CompiledPlan) -> ValidationReport {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
-    match compiled.lock.templates.get(&compiled.plan.template_id) {
-        Some(entry) => match lock_entry(&compiled.plan.template) {
-            Ok(expected) => {
-                if entry.version != expected.version {
+    if compiled.template.kind == TemplateKind::Custom {
+        match compiled.lock.templates.get(&compiled.plan.template_id) {
+            Some(entry) => {
+                if entry.content_hash != compiled.template_hash {
                     errors.push(message(
-                        "lock_version_mismatch",
+                        "lock_hash_mismatch",
                         format!(
-                            "fitspec.lock pins {}@{}, expected {}",
-                            compiled.plan.template_id, entry.version, expected.version
+                            "fitspec.lock content hash for {} does not match the template file",
+                            compiled.plan.template_id
                         ),
                     ));
                 }
-                if entry.content_hash != expected.content_hash {
+                if entry.engine_version != ENGINE_VERSION {
                     errors.push(message(
+                        "lock_engine_mismatch",
+                        format!(
+                            "fitspec.lock pins engine {}, expected {}",
+                            entry.engine_version, ENGINE_VERSION
+                        ),
+                    ));
+                }
+            }
+            None => warnings.push(message(
+                "missing_lock_entry",
+                format!(
+                    "fitspec.lock has no entry for {}",
+                    compiled.plan.template_id
+                ),
+            )),
+        }
+    } else {
+        match compiled.lock.templates.get(&compiled.plan.template_id) {
+            Some(entry) => match lock_entry(&compiled.plan.template) {
+                Ok(expected) => {
+                    if entry.version != expected.version {
+                        errors.push(message(
+                            "lock_version_mismatch",
+                            format!(
+                                "fitspec.lock pins {}@{}, expected {}",
+                                compiled.plan.template_id, entry.version, expected.version
+                            ),
+                        ));
+                    }
+                    if entry.content_hash != expected.content_hash {
+                        errors.push(message(
                         "lock_hash_mismatch",
                         format!(
                             "fitspec.lock content hash for {} does not match the built-in template",
                             compiled.plan.template_id
                         ),
                     ));
+                    }
                 }
-            }
-            Err(error) => errors.push(message("unknown_template", error.to_string())),
-        },
-        None => warnings.push(message(
-            "missing_lock_entry",
-            format!(
-                "fitspec.lock has no entry for {}",
-                compiled.plan.template_id
-            ),
-        )),
+                Err(error) => errors.push(message("unknown_template", error.to_string())),
+            },
+            None => warnings.push(message(
+                "missing_lock_entry",
+                format!(
+                    "fitspec.lock has no entry for {}",
+                    compiled.plan.template_id
+                ),
+            )),
+        }
     }
 
     match compiled.template.kind {
@@ -133,6 +181,28 @@ pub fn validate_compiled(compiled: &CompiledPlan) -> ValidationReport {
                         "missing_start",
                         format!("Starting Strength requires a starting load for {lift}"),
                     ));
+                }
+            }
+        }
+        TemplateKind::Custom => {
+            if let Some(dsl) = &compiled.template.dsl {
+                for (lane_id, lane) in &dsl.lanes {
+                    let present = match lane.basis {
+                        DslBasis::WorkingWeight => compiled.starts.contains_key(&lane.exercise),
+                        DslBasis::TrainingMax => {
+                            compiled.training_maxes.contains_key(&lane.exercise)
+                        }
+                        DslBasis::Bodyweight => true,
+                    };
+                    if !present {
+                        errors.push(message(
+                            "missing_custom_start",
+                            format!(
+                                "custom lane {lane_id} requires an initial value for {}",
+                                lane.exercise
+                            ),
+                        ));
+                    }
                 }
             }
         }
@@ -263,6 +333,7 @@ pub fn create_initial_state(compiled: &CompiledPlan) -> StateProjection {
         TemplateKind::Gzclp => create_initial_gzclp_state(compiled),
         TemplateKind::FiveThreeOne => create_initial_531_state(compiled),
         TemplateKind::StartingStrength => create_initial_starting_strength_state(compiled),
+        TemplateKind::Custom => create_initial_custom_state(compiled),
     }
 }
 
@@ -271,6 +342,7 @@ pub fn render_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
         TemplateKind::Gzclp => render_gzclp_next(compiled, state),
         TemplateKind::FiveThreeOne => render_531_next(compiled, state),
         TemplateKind::StartingStrength => render_starting_strength_next(compiled, state),
+        TemplateKind::Custom => render_custom_next(compiled, state),
     }
 }
 
@@ -781,6 +853,9 @@ fn compute_warmups(
     slot: &TemplateSlot,
     spec: &RenderedItemSpec<'_>,
 ) -> Vec<PrescribedSet> {
+    if implement_for_compiled(compiled, &spec.exercise) == Implement::Bodyweight {
+        return Vec::new();
+    }
     let Some(scheme) = resolve_warmup(compiled, slot, &spec.lane, &spec.exercise) else {
         return Vec::new();
     };
@@ -818,11 +893,8 @@ fn compute_warmups(
     }
 
     for step in &scheme.ramp {
-        let value = snap_load(
-            compiled,
-            &spec.exercise,
-            parsed.value * (step.percentage as f64) / 100.0,
-        );
+        let target = parsed.value * (step.percentage as f64) / 100.0;
+        let value = snap_warmup_load(compiled, &spec.exercise, &spec.sets, target);
         if sets
             .last()
             .and_then(|set| set.load.as_deref())
@@ -843,6 +915,98 @@ fn compute_warmups(
     sets
 }
 
+/// Warmup barbell loads use prefixes of the working-set plate stack. Each ramp step only adds
+/// plates that stay on for all later steps, avoiding the add/remove-small-plates churn produced
+/// by independently snapping every percentage. Non-barbell or unconfigured plans retain the
+/// normal equipment snapping behaviour.
+fn snap_warmup_load(
+    compiled: &CompiledPlan,
+    exercise: &str,
+    working_sets: &[PrescribedSet],
+    target: f64,
+) -> f64 {
+    let Some(equipment) = compiled.equipment.as_ref() else {
+        return snap_load(compiled, exercise, target);
+    };
+    if implement_for_compiled(compiled, exercise) != Implement::Barbell {
+        return snap_load(compiled, exercise, target);
+    }
+    let Some(work_load) = top_working_load(working_sets) else {
+        return snap_load(compiled, exercise, target);
+    };
+    let work_total = parse_load(&work_load).value;
+    let bar = bar_weight(equipment, &compiled.plan.units, exercise);
+    let Some(stack) = plate_stack_for_total(bar, &equipment.plate_pairs, work_total) else {
+        return snap_load(compiled, exercise, target);
+    };
+    let mut total = bar;
+    let mut prefixes = vec![bar];
+    for plate in stack {
+        total += 2.0 * plate;
+        prefixes.push(total);
+    }
+    match equipment.rounding {
+        RoundingMode::Nearest => nearest(prefixes.into_iter(), target).unwrap_or(bar),
+        RoundingMode::Down => prefixes
+            .into_iter()
+            .filter(|value| *value <= target + SNAP_EPSILON)
+            .fold(bar, f64::max),
+    }
+}
+
+/// Fewest-plate exact decomposition of a work set, preferring larger plates on ties. Returning
+/// the stack largest-first makes its prefixes a monotonic loading sequence.
+fn plate_stack_for_total(bar: f64, plate_pairs: &[f64], total: f64) -> Option<Vec<f64>> {
+    const SCALE: f64 = 100.0;
+    if total < bar - SNAP_EPSILON {
+        return None;
+    }
+    let target = (((total - bar) / 2.0) * SCALE).round() as usize;
+    if target == 0 {
+        return Some(Vec::new());
+    }
+    if target > 200_000 {
+        return None;
+    }
+    let mut plates = plate_pairs
+        .iter()
+        .copied()
+        .filter(|plate| plate.is_finite() && *plate > 0.0)
+        .collect::<Vec<_>>();
+    plates.sort_by(|left, right| right.partial_cmp(left).unwrap_or(std::cmp::Ordering::Equal));
+    let denoms = plates
+        .iter()
+        .map(|plate| (*plate * SCALE).round() as usize)
+        .collect::<Vec<_>>();
+    let mut best: Vec<Option<Vec<usize>>> = vec![None; target + 1];
+    best[0] = Some(Vec::new());
+    for amount in 1..=target {
+        for (index, denom) in denoms.iter().copied().enumerate() {
+            if denom > amount {
+                continue;
+            }
+            let Some(previous) = best[amount - denom].as_ref() else {
+                continue;
+            };
+            let mut candidate = previous.clone();
+            candidate.push(index);
+            if best[amount]
+                .as_ref()
+                .is_none_or(|current| candidate.len() < current.len())
+            {
+                best[amount] = Some(candidate);
+            }
+        }
+    }
+    let mut stack = best[target]
+        .take()?
+        .into_iter()
+        .map(|index| plates[index])
+        .collect::<Vec<_>>();
+    stack.sort_by(|left, right| right.partial_cmp(left).unwrap_or(std::cmp::Ordering::Equal));
+    Some(stack)
+}
+
 /// Heaviest working load of an item — the load a Bay-Strength-style ramp warms
 /// up to. All-equal working sets (GZCLP, Starting Strength) collapse to that
 /// load; ascending sets (5/3/1) pick the top set.
@@ -861,10 +1025,13 @@ fn top_working_load(sets: &[PrescribedSet]) -> Option<String> {
 /// Bar weight to prescribe for empty-bar warmups, or `None` when the lift is
 /// not barbell work (dumbbell lifts have no empty bar).
 fn warmup_bar_weight(compiled: &CompiledPlan, exercise: &str) -> Option<f64> {
+    if implement_for_compiled(compiled, exercise) == Implement::Bodyweight {
+        return None;
+    }
     match compiled.equipment.as_ref() {
         Some(equipment) => match implement_for(equipment, exercise) {
             Implement::Barbell => Some(bar_weight(equipment, &compiled.plan.units, exercise)),
-            Implement::Dumbbell => None,
+            Implement::Dumbbell | Implement::Bodyweight => None,
         },
         None => Some(match compiled.plan.units {
             Units::Kg => 20.0,
@@ -971,6 +1138,7 @@ fn template_warmup_defaults(kind: &TemplateKind) -> WarmupPolicy {
             }),
             ..WarmupPolicy::default()
         },
+        TemplateKind::Custom => WarmupPolicy::default(),
     }
 }
 
@@ -1010,7 +1178,321 @@ fn base_state(compiled: &CompiledPlan, lanes: Map<LaneState>) -> StateProjection
         },
         lanes,
         sessions: Map::new(),
+        previous_lanes: Map::new(),
     }
+}
+
+fn create_initial_custom_state(compiled: &CompiledPlan) -> StateProjection {
+    let mut lanes = Map::new();
+    if let Some(dsl) = &compiled.template.dsl {
+        for (lane_id, lane) in &dsl.lanes {
+            let first_stage = lane.stages.first().map(|stage| stage.id.clone());
+            let state = match lane.basis {
+                DslBasis::WorkingWeight => LaneState {
+                    load: compiled.starts.get(&lane.exercise).cloned(),
+                    stage: first_stage,
+                    ..LaneState::default()
+                },
+                DslBasis::TrainingMax => LaneState {
+                    training_max: compiled.training_maxes.get(&lane.exercise).cloned(),
+                    stage: first_stage,
+                    week: Some(1),
+                    cycle: Some(1),
+                    ..LaneState::default()
+                },
+                DslBasis::Bodyweight => LaneState {
+                    stage: first_stage,
+                    ..LaneState::default()
+                },
+            };
+            lanes.insert(lane_id.clone(), state);
+        }
+    }
+    base_state(compiled, lanes)
+}
+
+fn render_custom_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<RenderedSession> {
+    let dsl = compiled
+        .template
+        .dsl
+        .as_ref()
+        .ok_or_else(|| KnurledError::Parse("custom template has no DSL model".into()))?;
+    let session_id = state.cursor.next_session.to_ascii_lowercase();
+    let session = dsl
+        .sessions
+        .get(&session_id)
+        .or_else(|| dsl.sessions.values().next())
+        .ok_or_else(|| KnurledError::Parse("custom template has no session".into()))?;
+    let mut items = Vec::new();
+    for session_item in session {
+        let lane = dsl.lanes.get(&session_item.lane).ok_or_else(|| {
+            KnurledError::Parse(format!("missing custom lane {}", session_item.lane))
+        })?;
+        let lane_state = state
+            .lanes
+            .get(&session_item.lane)
+            .cloned()
+            .unwrap_or_default();
+        let stage_index = lane_state
+            .stage
+            .as_deref()
+            .and_then(|stage| {
+                lane.stages
+                    .iter()
+                    .position(|candidate| candidate.id == stage)
+            })
+            .unwrap_or(0);
+        let stage = &lane.stages[stage_index];
+        let basis = match lane.basis {
+            DslBasis::WorkingWeight => lane_state.load.clone(),
+            DslBasis::TrainingMax => lane_state.training_max.clone(),
+            DslBasis::Bodyweight => None,
+        };
+        let mut set_number = 1;
+        let mut sets = Vec::new();
+        for group in &stage.groups {
+            for index in 0..group.count {
+                let load = basis.as_ref().map(|basis| {
+                    scale_load(
+                        compiled,
+                        &lane.exercise,
+                        basis,
+                        group.intensity as f64 / 100.0,
+                    )
+                });
+                sets.push(PrescribedSet {
+                    set: set_number,
+                    load,
+                    target_reps: group.rep_min.unwrap_or(group.reps),
+                    amrap: group.amrap && index + 1 == group.count,
+                    percentage: (group.intensity != 100).then_some(group.intensity),
+                });
+                set_number += 1;
+            }
+        }
+        let rendered_rules = lane
+            .rules
+            .iter()
+            .filter_map(|rule| {
+                let trigger = match rule.trigger {
+                    DslTrigger::CycleEnd if stage_index + 1 != lane.stages.len() => return None,
+                    DslTrigger::CycleEnd => DslTrigger::Pass,
+                    DslTrigger::RangeTop => {
+                        let reps = stage
+                            .groups
+                            .iter()
+                            .filter_map(|group| group.rep_max)
+                            .max()?;
+                        DslTrigger::AmrapGte { reps }
+                    }
+                    ref trigger => trigger.clone(),
+                };
+                Some(RenderedDslRule {
+                    trigger,
+                    effects: rule
+                        .effects
+                        .iter()
+                        .filter_map(|effect| {
+                            custom_effect(compiled, &session_item.lane, lane, &lane_state, effect)
+                        })
+                        .collect(),
+                })
+            })
+            .collect::<Vec<_>>();
+        let preview = EffectPreview {
+            pass: rendered_rules
+                .iter()
+                .filter(|rule| matches!(rule.trigger, DslTrigger::Pass))
+                .flat_map(|rule| rule.effects.clone())
+                .collect(),
+            fail: rendered_rules
+                .iter()
+                .filter(|rule| matches!(rule.trigger, DslTrigger::Fail))
+                .flat_map(|rule| rule.effects.clone())
+                .collect(),
+            adjusted_today: Vec::new(),
+        };
+        let slot = TemplateSlot {
+            slot_id: session_item.slot_id.clone(),
+            tier: "dsl".into(),
+            exercise: Some(lane.exercise.clone()),
+            accessory_key: None,
+            default_exercise: None,
+        };
+        let mut item = rendered_item(
+            compiled,
+            &slot,
+            RenderedItemSpec {
+                exercise: lane.exercise.clone(),
+                lane: session_item.lane.clone(),
+                stage: Some(stage.id.clone()),
+                sets,
+                recommended_input: if stage.groups.iter().any(|group| group.amrap) {
+                    "amrap_final_set"
+                } else {
+                    "per_set_reps"
+                },
+                effect_preview: preview,
+                training_max: lane_state.training_max.clone(),
+            },
+        )?;
+        if lane.basis == DslBasis::Bodyweight {
+            item.implement = Implement::Bodyweight;
+            for set in &mut item.prescription.sets {
+                set.load = None;
+            }
+            item.prescription.warmups.clear();
+        }
+        item.dsl_rules = rendered_rules;
+        if !lane.warmup.is_empty() {
+            let warmup_spec = WarmupScheme {
+                empty_bar_sets: 0,
+                empty_bar_reps: 0,
+                ramp: lane.warmup.clone(),
+                basis: match lane.basis {
+                    DslBasis::TrainingMax => WarmupBasis::TrainingMax,
+                    _ => WarmupBasis::TopSet,
+                },
+            };
+            item.prescription.warmups =
+                custom_warmups(compiled, &lane.exercise, basis.as_deref(), &warmup_spec);
+        }
+        items.push(item);
+    }
+    attach_rendered_session_hash(
+        compiled,
+        RenderedSession {
+            kind: "rendered_session".into(),
+            schema_version: SCHEMA_VERSION.into(),
+            engine_version: ENGINE_VERSION.into(),
+            session_id: session_id.clone(),
+            display_name: format!("{} - {}", dsl.name, session_id.to_ascii_uppercase()),
+            suggested_date: None,
+            plan_hash: compiled.plan_hash.clone(),
+            template_hash: compiled.template_hash.clone(),
+            rendered_session_hash: String::new(),
+            items: with_session_exercises(compiled, items),
+        },
+    )
+}
+
+fn custom_warmups(
+    compiled: &CompiledPlan,
+    exercise: &str,
+    basis: Option<&str>,
+    scheme: &WarmupScheme,
+) -> Vec<PrescribedSet> {
+    let Some(basis) = basis else {
+        return Vec::new();
+    };
+    let parsed = parse_load(basis);
+    scheme
+        .ramp
+        .iter()
+        .enumerate()
+        .map(|(index, step)| PrescribedSet {
+            set: index as u32 + 1,
+            load: Some(format_load(
+                snap_load(
+                    compiled,
+                    exercise,
+                    parsed.value * step.percentage as f64 / 100.0,
+                ),
+                parsed.unit,
+            )),
+            target_reps: step.reps,
+            amrap: false,
+            percentage: Some(step.percentage),
+        })
+        .collect()
+}
+
+fn custom_effect(
+    compiled: &CompiledPlan,
+    lane_id: &str,
+    lane: &DslLane,
+    state: &LaneState,
+    effect: &DslEffect,
+) -> Option<Effect> {
+    let current_load = match lane.basis {
+        DslBasis::TrainingMax => state.training_max.as_deref(),
+        _ => state.load.as_deref(),
+    };
+    let result = match effect {
+        DslEffect::IncreaseLoad { amount } => Effect {
+            op: if lane.basis == DslBasis::TrainingMax {
+                "recompute_tm".into()
+            } else {
+                "increase_load".into()
+            },
+            lane: lane_id.into(),
+            from: current_load.map(str::to_owned),
+            to: current_load.map(|load| {
+                if let Some(percent) = amount
+                    .strip_suffix('%')
+                    .and_then(|value| value.parse::<f64>().ok())
+                {
+                    scale_load(compiled, &lane.exercise, load, 1.0 + percent / 100.0)
+                } else {
+                    add_load(compiled, &lane.exercise, load, parse_load(amount).value)
+                }
+            }),
+        },
+        DslEffect::Deload { percent } | DslEffect::ResetLoad { percent } => Effect {
+            op: "reset_load".into(),
+            lane: lane_id.into(),
+            from: current_load.map(str::to_owned),
+            to: current_load
+                .map(|load| scale_load(compiled, &lane.exercise, load, *percent as f64 / 100.0)),
+        },
+        DslEffect::AdvanceStage => {
+            let current = state.stage.as_deref().unwrap_or(&lane.stages[0].id);
+            let index = lane
+                .stages
+                .iter()
+                .position(|stage| stage.id == current)
+                .unwrap_or(0);
+            Effect {
+                op: "advance_stage".into(),
+                lane: lane_id.into(),
+                from: Some(current.into()),
+                to: lane
+                    .stages
+                    .get(index + 1)
+                    .or_else(|| lane.stages.last())
+                    .map(|stage| stage.id.clone()),
+            }
+        }
+        DslEffect::ResetStage => Effect {
+            op: "advance_stage".into(),
+            lane: lane_id.into(),
+            from: state.stage.clone(),
+            to: lane.stages.first().map(|stage| stage.id.clone()),
+        },
+        DslEffect::IncreaseReps { amount } => Effect {
+            op: "increase_reps".into(),
+            lane: lane_id.into(),
+            from: state.reps.map(|value| value.to_string()),
+            to: Some(state.reps.unwrap_or(0).saturating_add(*amount).to_string()),
+        },
+        DslEffect::RecomputeTm { amount } => Effect {
+            op: "recompute_tm".into(),
+            lane: lane_id.into(),
+            from: state.training_max.clone(),
+            to: state
+                .training_max
+                .as_deref()
+                .map(|load| add_load(compiled, &lane.exercise, load, parse_load(amount).value)),
+        },
+        DslEffect::AdvanceCycle => Effect {
+            op: "advance_cycle".into(),
+            lane: lane_id.into(),
+            from: state.cycle.map(|value| value.to_string()),
+            to: Some(state.cycle.unwrap_or(1).saturating_add(1).to_string()),
+        },
+    };
+    result.to.as_ref()?;
+    Some(result)
 }
 
 fn render_gzclp_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<RenderedSession> {
@@ -1397,10 +1879,14 @@ fn session_exercise_item(
         RenderedItemPhase::Main => "main",
     };
     let item_id = format!("{phase_id}.{}.{}", index + 1, exercise.exercise);
+    let implement = implement_for_compiled(compiled, &exercise.exercise);
+    let load = (implement != Implement::Bodyweight)
+        .then(|| exercise.load.clone())
+        .flatten();
     let sets = (1..=exercise.sets.max(1))
         .map(|set| PrescribedSet {
             set,
-            load: exercise.load.clone(),
+            load: load.clone(),
             target_reps: exercise.reps,
             amrap: false,
             percentage: None,
@@ -1423,6 +1909,7 @@ fn session_exercise_item(
         progression_lane: String::new(),
         progression_rule: "tracking_only".into(),
         exercise: exercise.exercise.clone(),
+        implement,
         display: DisplayFields {
             title,
             subtitle: exercise
@@ -1465,6 +1952,7 @@ fn session_exercise_item(
             rendered_session_hash: String::new(),
         },
         exercise_options: None,
+        dsl_rules: Vec::new(),
     }
 }
 
@@ -1485,6 +1973,13 @@ fn rendered_item(
     slot: &TemplateSlot,
     spec: RenderedItemSpec<'_>,
 ) -> Result<RenderedItem> {
+    let implement = implement_for_compiled(compiled, &spec.exercise);
+    let mut sets = spec.sets.clone();
+    if implement == Implement::Bodyweight {
+        for set in &mut sets {
+            set.load = None;
+        }
+    }
     // A plan's own `exercise_options` for a slot win outright; otherwise fall
     // back to the template's built-in swaps for the prescribed main lift, so the
     // headline barbell lifts always carry approved alternatives even when the
@@ -1518,23 +2013,25 @@ fn rendered_item(
                 TemplateKind::Gzclp => "gzcl",
                 TemplateKind::FiveThreeOne => "531",
                 TemplateKind::StartingStrength => "starting_strength",
+                TemplateKind::Custom => "dsl",
             },
             slot.tier
         ),
         exercise: spec.exercise.clone(),
+        implement,
         display: DisplayFields {
             title: format!(
                 "{} {}",
                 title_case(&spec.exercise),
                 slot.tier.to_ascii_uppercase()
             ),
-            subtitle: subtitle_for(&spec.sets, spec.stage.as_deref()),
+            subtitle: subtitle_for(&sets, spec.stage.as_deref()),
         },
         prescription: Prescription {
             warmups: compute_warmups(compiled, slot, &spec),
-            sets: spec.sets.clone(),
+            sets: sets.clone(),
         },
-        execution_contract: execution_contract(spec.recommended_input, &spec.sets),
+        execution_contract: execution_contract(spec.recommended_input, &sets),
         effect_preview: spec.effect_preview,
         rest: resolve_rest(compiled, slot, &spec.lane, &spec.exercise),
         identity: ItemIdentity {
@@ -1546,6 +2043,7 @@ fn rendered_item(
             rendered_session_hash: String::new(),
         },
         exercise_options,
+        dsl_rules: Vec::new(),
     })
 }
 
@@ -1688,7 +2186,7 @@ fn execution_contract(mode: &str, sets: &[PrescribedSet]) -> ExecutionContract {
     }
 }
 
-fn reduce_item(
+pub(crate) fn reduce_item(
     item: &RenderedItem,
     input: &ItemInput,
     compiled: &CompiledPlan,
@@ -1706,7 +2204,8 @@ fn reduce_item(
         let prescribed = item
             .prescription
             .sets
-            .first()
+            .iter()
+            .find(|prescribed| prescribed.set == set.set)
             .and_then(|set| set.load.as_ref());
         set.load
             .as_ref()
@@ -1870,6 +2369,15 @@ fn effects_for_outcome(
     outcome: &str,
     actual: &[ActualSet],
 ) -> Vec<Effect> {
+    if !item.dsl_rules.is_empty() {
+        return item
+            .dsl_rules
+            .iter()
+            .filter(|rule| dsl_trigger_matches(&rule.trigger, outcome, actual))
+            .flat_map(|rule| rule.effects.clone())
+            .filter(|effect| effect.to.is_some())
+            .collect();
+    }
     if item.progression_rule.ends_with(".t3")
         && item
             .prescription
@@ -1894,6 +2402,21 @@ fn effects_for_outcome(
         .collect()
 }
 
+fn dsl_trigger_matches(trigger: &DslTrigger, outcome: &str, actual: &[ActualSet]) -> bool {
+    match trigger {
+        DslTrigger::Pass => outcome == "pass",
+        DslTrigger::Fail => outcome == "fail",
+        DslTrigger::AmrapGte { reps } => {
+            outcome != "incomplete" && actual.last().is_some_and(|set| set.reps >= *reps)
+        }
+        DslTrigger::RangeTop => false,
+        DslTrigger::CycleEnd => outcome == "pass",
+        // Stall counters require consecutive authored attempts. The syntax is accepted now; a
+        // rule stays inert until the state counter is populated by a later schema revision.
+        DslTrigger::Stall { .. } => false,
+    }
+}
+
 fn initial_t3_load_effect(
     compiled: &CompiledPlan,
     item: &RenderedItem,
@@ -1915,7 +2438,7 @@ fn initial_t3_load_effect(
     }
 }
 
-fn apply_effects(state: &mut StateProjection, effects: &[Effect]) {
+pub(crate) fn apply_effects(state: &mut StateProjection, effects: &[Effect]) {
     for effect in effects {
         match effect.op.as_str() {
             "increase_load" => {
@@ -1937,6 +2460,34 @@ fn apply_effects(state: &mut StateProjection, effects: &[Effect]) {
                 if let Some(lane) = state.lanes.get_mut(&effect.lane) {
                     lane.week = effect.to.as_deref().and_then(|to| to.parse().ok());
                 }
+            }
+            "reset_load" | "deload" => {
+                if let Some(lane) = state.lanes.get_mut(&effect.lane) {
+                    lane.load = effect.to.clone();
+                    if lane.training_max.is_some() {
+                        lane.training_max = effect.to.clone();
+                    }
+                }
+            }
+            "increase_reps" => {
+                if let Some(lane) = state.lanes.get_mut(&effect.lane) {
+                    lane.reps = effect.to.as_deref().and_then(|value| value.parse().ok());
+                }
+            }
+            "recompute_tm" => {
+                if let Some(lane) = state.lanes.get_mut(&effect.lane) {
+                    lane.training_max = effect.to.clone();
+                }
+            }
+            "advance_cycle" => {
+                if let Some(lane) = state.lanes.get_mut(&effect.lane) {
+                    lane.cycle = effect.to.as_deref().and_then(|value| value.parse().ok());
+                }
+                state.cursor.cycle = effect
+                    .to
+                    .as_deref()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(state.cursor.cycle);
             }
             _ => {}
         }
@@ -2097,6 +2648,7 @@ fn snap_with_equipment(
     value: f64,
 ) -> f64 {
     match implement_for(equipment, exercise) {
+        Implement::Bodyweight => 0.0,
         Implement::Dumbbell => snap_to_list(&equipment.dumbbells, equipment.rounding, value)
             .unwrap_or_else(|| round_to_increment(value, 2.5)),
         Implement::Barbell => {
@@ -2115,6 +2667,47 @@ fn implement_for(equipment: &EquipmentProfile, exercise: &str) -> Implement {
         Implement::Dumbbell
     } else {
         Implement::Barbell
+    }
+}
+
+/// Resolve exercise metadata without teaching clients exercise-name semantics. Explicit plan
+/// metadata wins, then the equipment override, then the engine-owned built-in catalogue.
+fn implement_for_compiled(compiled: &CompiledPlan, exercise: &str) -> Implement {
+    let normalized = normalize_exercise(exercise);
+    if let Some(value) = compiled
+        .exercises
+        .get(&normalized)
+        .and_then(|exercise| exercise.implement.as_deref())
+    {
+        return implement_from_metadata(value);
+    }
+    if let Some(equipment) = compiled.equipment.as_ref()
+        && let Some(implement) = equipment.implements.get(&normalized)
+    {
+        return *implement;
+    }
+    if let Some(value) = exercise_catalog()
+        .into_iter()
+        .find(|entry| entry.id == normalized)
+        .and_then(|entry| entry.implement)
+    {
+        return implement_from_metadata(&value);
+    }
+    if normalized.contains("dumbbell")
+        || normalized.contains("_db")
+        || normalized.starts_with("db_")
+    {
+        Implement::Dumbbell
+    } else {
+        Implement::Barbell
+    }
+}
+
+fn implement_from_metadata(value: &str) -> Implement {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "bodyweight" => Implement::Bodyweight,
+        "dumbbell" => Implement::Dumbbell,
+        _ => Implement::Barbell,
     }
 }
 

@@ -17,11 +17,13 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    AmendRecordRequest, ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode,
+    AddProgramRequest, AmendRecordRequest, ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode,
     Units, amend_training_record, apply_plan_edit, build_outputs, build_repo, builtin_templates,
     exercise_catalog, init_training_repo, merge_record_repos, preview_plan_edit, read_records,
     read_state, read_training_repo, reduce_input, render_session, submit_rendered_repo,
-    suggest_initial_numbers, validate_execution_input, validate_repo,
+    suggest_initial_numbers, suggest_load, validate_execution_input, validate_repo,
+    add_program, delete_program, list_programs, set_active_program,
+    suggest_program_adjustments,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -403,6 +405,12 @@ struct InitialNumberSuggestionRequest {
     units: Units,
 }
 
+#[derive(serde::Deserialize)]
+struct LoadSuggestionRequest {
+    exercise: String,
+    units: Units,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn knurled_suggest_initial_numbers(
     dir: *const c_char,
@@ -422,6 +430,126 @@ pub extern "C" fn knurled_suggest_initial_numbers(
             Err(error) => return fail(format!("invalid suggestion request: {error}")),
         };
         match suggest_initial_numbers(dir, &request.template, request.units) {
+            Ok(suggestions) => ok(suggestions),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_suggest_load(
+    dir: *const c_char,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_suggest_load", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request: LoadSuggestionRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid load suggestion request: {error}")),
+        };
+        match suggest_load(dir, &request.exercise, request.units) {
+            Ok(suggestion) => ok(suggestion),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_list_programs(dir: *const c_char) -> *mut c_char {
+    guard("knurled_list_programs", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match list_programs(dir) {
+            Ok(programs) => ok(programs),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_add_program(
+    dir: *const c_char,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_add_program", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request: AddProgramRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid add program request: {error}")),
+        };
+        match add_program(dir, request) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_set_active_program(
+    dir: *const c_char,
+    slug: *const c_char,
+) -> *mut c_char {
+    guard("knurled_set_active_program", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let slug = match unsafe { borrow(slug) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match set_active_program(dir, slug) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_delete_program(
+    dir: *const c_char,
+    slug: *const c_char,
+) -> *mut c_char {
+    guard("knurled_delete_program", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let slug = match unsafe { borrow(slug) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match delete_program(dir, slug) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_suggest_program_adjustments(dir: *const c_char) -> *mut c_char {
+    guard("knurled_suggest_program_adjustments", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match suggest_program_adjustments(dir) {
             Ok(suggestions) => ok(suggestions),
             Err(error) => fail(error),
         }

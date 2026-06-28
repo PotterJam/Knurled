@@ -56,6 +56,17 @@ char *knurled_apply_plan_edit(const char *dir, const char *plan_edit_json);
  * Request JSON: { "template": "...@...", "units": "kg"|"lb" }. -> initial number suggestions */
 char *knurled_suggest_initial_numbers(const char *dir, const char *request_json);
 
+/* Suggests the most recent global-history load for one exercise.
+ * Request JSON: { "exercise": "...", "units": "kg"|"lb" }. */
+char *knurled_suggest_load(const char *dir, const char *request_json);
+
+/* Program-bank operations. */
+char *knurled_list_programs(const char *dir);
+char *knurled_add_program(const char *dir, const char *request_json);
+char *knurled_set_active_program(const char *dir, const char *slug);
+char *knurled_delete_program(const char *dir, const char *slug);
+char *knurled_suggest_program_adjustments(const char *dir);
+
 /* -> engine version string */
 char *knurled_engine_version(void);
 

@@ -6,6 +6,7 @@ struct AddExerciseSheet: View {
     var onAdd: (String, String?, Int, Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var app
 
     @State private var search = ""
     @State private var selected: ExerciseCatalogEntry?
@@ -159,7 +160,25 @@ struct AddExerciseSheet: View {
             custom: true
         )
         if exercise.custom || exactMatch == nil {
-            try? ExercisePlanWriter.upsertCustomExercise(exercise, in: repo.url)
+            Task {
+                _ = try? await app.applyPlanEdit(
+                    .quick(QuickPlanEdit(
+                        suggestedDays: nil,
+                        equipment: nil,
+                        customExercise: CustomExerciseEdit(
+                            id: exercise.id,
+                            label: exercise.label,
+                            pattern: exercise.pattern,
+                            implement: exercise.implement
+                        ),
+                        accessory: nil,
+                        sessionExercises: nil,
+                        rest: nil
+                    )),
+                    in: repo,
+                    message: "Add custom exercise"
+                )
+            }
         }
         let trimmedLoad = loadText.trimmingCharacters(in: .whitespacesAndNewlines)
         let load: String?
@@ -175,59 +194,5 @@ struct AddExerciseSheet: View {
 
     private static func titleCase(_ id: String) -> String {
         id.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-}
-
-enum ExercisePlanWriter {
-    static func upsertCustomExercise(_ exercise: ExerciseCatalogEntry, in repoURL: URL) throws {
-        let url = repoURL.appending(path: "plan.fitspec")
-        var text = try String(contentsOf: url, encoding: .utf8)
-        let entry = "    \(exercise.id) { label \"\(escape(exercise.label))\"; pattern \(exercise.pattern); implement \(exercise.implement ?? "custom") }\n"
-
-        if let range = entryRange(for: exercise.id, in: text) {
-            text.replaceSubrange(range, with: entry.trimmingCharacters(in: .newlines))
-            try text.write(to: url, atomically: true, encoding: .utf8)
-            return
-        }
-
-        if let block = text.range(of: "exercises {"),
-           let insertIndex = closingBraceIndex(in: text, from: block.upperBound) {
-            text.insert(contentsOf: entry, at: insertIndex)
-        } else if let insertIndex = text.lastIndex(of: "}") {
-            text.insert(contentsOf: "\n  exercises {\n\(entry)  }\n", at: insertIndex)
-        } else {
-            text.append("\n  exercises {\n\(entry)  }\n")
-        }
-        try text.write(to: url, atomically: true, encoding: .utf8)
-    }
-
-    private static func entryRange(for id: String, in text: String) -> Range<String.Index>? {
-        guard let start = text.range(of: "\n    \(id) ")?.lowerBound
-            ?? text.range(of: "\n  \(id) ")?.lowerBound else { return nil }
-        let contentStart = text.index(after: start)
-        guard let lineEnd = text[contentStart...].firstIndex(of: "\n") else {
-            return contentStart..<text.endIndex
-        }
-        return contentStart..<lineEnd
-    }
-
-    private static func closingBraceIndex(in text: String, from start: String.Index) -> String.Index? {
-        var depth = 1
-        var index = start
-        while index < text.endIndex {
-            let char = text[index]
-            if char == "{" {
-                depth += 1
-            } else if char == "}" {
-                depth -= 1
-                if depth == 0 { return index }
-            }
-            index = text.index(after: index)
-        }
-        return nil
-    }
-
-    private static func escape(_ value: String) -> String {
-        value.replacingOccurrences(of: "\"", with: "\\\"")
     }
 }
