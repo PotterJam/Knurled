@@ -30,7 +30,9 @@ struct NextWorkoutView: View {
     let repo: ActiveRepo
     let session: RenderedSession
     @Environment(AppModel.self) private var app
+    @Environment(DraftStore.self) private var draftStore
     @State private var isSyncing = false
+    @State private var draft: WorkoutDraft?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,26 +50,13 @@ struct NextWorkoutView: View {
                 .padding(.bottom)
             }
 
-            VStack(spacing: KnurledTheme.Spacing.s) {
-                NavigationLink {
-                    ActiveWorkoutView(repo: repo, session: session)
-                } label: {
-                    Label("Start Workout", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-
-                Text("Finish a workout as advance, off-day, or reset when you submit it.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-            }
-            .padding()
-            .background(.bar)
+            startBar
         }
         .refreshable { await app.sync() }
+        .onAppear { draft = draftStore.hasDraft ? draftStore.load() : nil }
+        .onChange(of: draftStore.hasDraft) { _, _ in
+            draft = draftStore.hasDraft ? draftStore.load() : nil
+        }
         .toolbar {
             if let plan = repo.plan {
                 ToolbarItem(placement: .topBarLeading) {
@@ -97,14 +86,80 @@ struct NextWorkoutView: View {
         }
     }
 
+    @ViewBuilder private var startBar: some View {
+        VStack(spacing: KnurledTheme.Spacing.s) {
+            if let draft, draft.renderedSessionHash == session.renderedSessionHash {
+                NavigationLink {
+                    ActiveWorkoutView(repo: repo, session: session, draft: draft)
+                } label: {
+                    Label("Continue Workout", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Text("Resuming where you left off.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            } else if let draft {
+                // An unfinished workout from another session blocks starting a new one: finish or
+                // discard it first, so there's only ever one workout in progress.
+                NavigationLink {
+                    ResumeWorkoutView(repo: repo, draft: draft)
+                } label: {
+                    Label("Continue \(draft.displayName)", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button(role: .destructive) {
+                    draftStore.clear()
+                    self.draft = nil
+                } label: {
+                    Label("Discard & start \(session.displayName)", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .controlSize(.large)
+
+                Text("Finish or discard your in-progress workout before starting a new one.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            } else {
+                NavigationLink {
+                    ActiveWorkoutView(repo: repo, session: session)
+                } label: {
+                    Label("Start Workout", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Text("Finish a workout as advance, off-day, or reset when you submit it.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding()
+        .background(.bar)
+    }
+
     private var previewItems: [RenderedItem] {
         session.items.filter { $0.phase == .main }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .center, spacing: 6) {
             Text(session.displayName)
                 .font(.title2.bold())
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             if let day = WorkoutFormat.relativeDay(fromISO: session.suggestedDate) {
                 Text("Suggested: \(day)")

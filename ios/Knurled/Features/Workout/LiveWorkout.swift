@@ -70,6 +70,18 @@ final class LiveSet: Identifiable {
         guard let value, let parsed = Double(value) else { return nil }
         return min(10, max(1, (parsed * 2).rounded() / 2))
     }
+
+    func apply(_ draft: DraftSet) {
+        reps = draft.reps
+        load = draft.load
+        rpe = draft.rpe
+        logged = draft.logged
+        bypassed = draft.bypassed
+    }
+
+    func draftSet() -> DraftSet {
+        DraftSet(id: id, reps: reps, load: load, rpe: rpe, logged: logged, isExtra: isExtra, bypassed: bypassed)
+    }
 }
 
 @MainActor
@@ -202,6 +214,35 @@ final class LiveItem: Identifiable {
         }
     }
 
+    func apply(draft: DraftItem) {
+        performedExercise = draft.performedExercise
+        swapLabel = draft.swapLabel
+        swapPolicy = draft.swapPolicy
+        todayLoad = draft.todayLoad
+        for ds in draft.warmups {
+            warmups.first { $0.id == ds.id }?.apply(ds)
+        }
+        // User-added working sets are re-created so the overlay can address them by id.
+        while sets.count < draft.sets.count { addSet() }
+        for ds in draft.sets {
+            sets.first { $0.id == ds.id }?.apply(ds)
+        }
+    }
+
+    func draftItem() -> DraftItem {
+        DraftItem(
+            itemId: id,
+            exercise: item.exercise,
+            isExtra: isTrackingOnlyExtra,
+            performedExercise: performedExercise,
+            swapLabel: swapLabel,
+            swapPolicy: swapPolicy,
+            todayLoad: todayLoad,
+            warmups: warmups.map { $0.draftSet() },
+            sets: sets.map { $0.draftSet() }
+        )
+    }
+
     static func titleCase(_ exercise: String) -> String {
         exercise.replacingOccurrences(of: "_", with: " ").capitalized
     }
@@ -233,12 +274,22 @@ final class LiveItem: Identifiable {
         }
     }
 
+    /// Whether the exercise being performed is a pure bodyweight movement, so the weight UI is
+    /// hidden and a missing load never blocks logging. Name-based today; a future engine-side
+    /// `implement: bodyweight` flag will make this fully data-driven.
+    var isBodyweight: Bool { Self.isBodyweightExercise(performedExercise ?? item.exercise) }
+
     static func isBodyweightExercise(_ exercise: String) -> Bool {
         let normalized = normalized(exercise)
         return normalized.contains("pull_up")
             || normalized.contains("pullup")
             || normalized.contains("chin_up")
             || normalized.contains("chinup")
+            || normalized.contains("dip")
+            || normalized.contains("push_up")
+            || normalized.contains("pushup")
+            || normalized.contains("muscle_up")
+            || normalized.contains("muscleup")
     }
 
     /// Optional work that was started but not completed still sends its logged sets, so a user
@@ -298,6 +349,43 @@ final class LiveWorkout: Identifiable {
         let units = repo.plan?.plan.units ?? .kg
         self.items = session.items.map { LiveItem(item: $0, units: units) }
         if let record { restore(record) }
+    }
+
+    init(repo: ActiveRepo, session: RenderedSession, draft: WorkoutDraft) {
+        self.repo = repo
+        self.session = session
+        self.startedAt = draft.startedAt
+        let units = repo.plan?.plan.units ?? .kg
+        self.items = session.items.map { LiveItem(item: $0, units: units) }
+        restore(draft: draft)
+    }
+
+    private func restore(draft: WorkoutDraft) {
+        let units = repo.plan?.plan.units ?? .kg
+        for d in draft.items {
+            if let item = items.first(where: { $0.id == d.itemId }) {
+                item.apply(draft: d)
+            } else if d.isExtra {
+                let item = Self.extraItem(
+                    id: d.itemId,
+                    exercise: d.exercise,
+                    load: d.sets.first?.load,
+                    sets: max(d.sets.count, 1),
+                    reps: d.sets.first?.reps ?? 5,
+                    units: units
+                )
+                if let warmdownIndex = items.firstIndex(where: { $0.isSessionWarmdown }) {
+                    items.insert(item, at: warmdownIndex)
+                } else {
+                    items.append(item)
+                }
+                item.apply(draft: d)
+            }
+        }
+    }
+
+    func draftItems() -> [DraftItem] {
+        items.map { $0.draftItem() }
     }
 
     private func restore(_ record: TrainingRecord) {

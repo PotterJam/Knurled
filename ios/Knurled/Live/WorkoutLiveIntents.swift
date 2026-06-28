@@ -53,3 +53,46 @@ struct AmrapStepIntent: LiveActivityIntent {
         return .result()
     }
 }
+
+struct SkipWarmupIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Skip warm-up"
+
+    func perform() async throws -> some IntentResult {
+        #if KNURLED_APP
+        await WorkoutLiveController.shared.skipWarmup()
+        #endif
+        return .result()
+    }
+}
+
+struct LoadStepIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Adjust weight"
+
+    @Parameter(title: "Steps") var steps: Int
+
+    init() {}
+    init(steps: Int) { self.steps = steps }
+
+    func perform() async throws -> some IntentResult {
+        #if KNURLED_APP
+        await WorkoutLiveController.shared.adjustLoad(steps: steps)
+        #endif
+        return .result()
+    }
+}
+
+struct RpeStepIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Adjust RPE"
+
+    @Parameter(title: "Delta") var delta: Double
+
+    init() {}
+    init(delta: Double) { self.delta = delta }
+
+    func perform() async throws -> some IntentResult {
+        #if KNURLED_APP
+        await WorkoutLiveController.shared.adjustRPE(delta: delta)
+        #endif
+        return .result()
+    }
+}

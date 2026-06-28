@@ -24,6 +24,8 @@ struct RestLiveActivity: Widget {
                         countdown(to: state.restEndDate)
                             .font(.title2.monospacedDigit().weight(.semibold))
                             .frame(width: 70)
+                    } else if state.phase == .ready {
+                        SetProgressDots(total: state.totalSets, current: state.setNumber)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -53,31 +55,35 @@ struct RestLiveActivity: Widget {
         case .ready:
             if state.isAmrap {
                 AmrapControls(reps: state.amrapReps)
-            } else {
-                Button(intent: LogSetIntent()) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.title3)
-                        .frame(maxWidth: .infinity)
+            } else if state.isWarmup {
+                HStack(spacing: 10) {
+                    Button(intent: LogSetIntent()) {
+                        Label("Log", systemImage: "checkmark.circle").frame(maxWidth: .infinity)
+                    }
+                    .tint(.cyan)
+                    Button(intent: SkipWarmupIntent()) {
+                        Label("Skip", systemImage: "forward.fill").frame(maxWidth: .infinity)
+                    }
+                    .tint(.secondary)
                 }
-                .tint(.cyan)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+            } else {
+                WeightLogRow(needsLoad: state.needsLoad)
             }
         case .resting:
             HStack(spacing: 10) {
                 Button(intent: AddRestIntent()) {
-                    Label("30s", systemImage: "plus")
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
+                    Label("30s", systemImage: "plus").lineLimit(1).frame(maxWidth: .infinity)
                 }
                 .tint(.secondary)
                 Button(intent: SkipRestIntent()) {
-                    Label("Skip", systemImage: "forward.fill")
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
+                    Label("Skip", systemImage: "forward.fill").lineLimit(1).frame(maxWidth: .infinity)
                 }
                 .tint(.cyan)
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         case .finished:
             Text("Open Knurled to finish").font(.caption).foregroundStyle(.secondary)
         }
@@ -93,7 +99,7 @@ private struct LockScreenView: View {
     let workoutName: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(workoutName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer()
@@ -113,58 +119,155 @@ private struct LockScreenView: View {
         }
     }
 
+    // MARK: Ready (a set is staged)
+
     private var readyBody: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(state.exerciseTitle).font(.headline).lineLimit(1)
-                Text(state.compactSetLine)
-                    .font(.subheadline).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            if state.isAmrap {
-                AmrapControls(reps: state.amrapReps)
-                    .frame(maxWidth: 176)
-            } else {
-                Button(intent: LogSetIntent()) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.title3)
-                        .frame(width: 40, height: 30)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(state.exerciseTitle).font(.title3.weight(.semibold)).lineLimit(1)
+                if state.isWarmup {
+                    Text("WARM-UP")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.orange)
                 }
-                .tint(.cyan)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                Spacer()
+                SetProgressDots(total: state.totalSets, current: state.setNumber)
             }
+
+            Text(state.loadReps)
+                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                .foregroundStyle(state.needsLoad ? .orange : .primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
+            readyControls
         }
     }
 
-    private var restingBody: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Label("Rest", systemImage: "timer")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text("Next: \(state.exerciseTitle)").font(.subheadline).lineLimit(1)
-                Text(state.compactSetLine)
-                    .font(.caption).foregroundStyle(.secondary)
+    @ViewBuilder private var readyControls: some View {
+        if state.isAmrap {
+            AmrapControls(reps: state.amrapReps)
+        } else if state.isWarmup {
+            HStack(spacing: 10) {
+                Button(intent: LogSetIntent()) {
+                    Label("Log", systemImage: "checkmark.circle").frame(maxWidth: .infinity)
+                }
+                .tint(.cyan)
+                Button(intent: SkipWarmupIntent()) {
+                    Label("Skip warm-up", systemImage: "forward.fill").frame(maxWidth: .infinity)
+                }
+                .tint(.secondary)
             }
-            Spacer()
-            VStack(spacing: 6) {
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        } else {
+            WeightLogRow(needsLoad: state.needsLoad)
+        }
+    }
+
+    // MARK: Resting
+
+    private var restingBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("Rest", systemImage: "timer")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Next: \(state.exerciseTitle)").font(.subheadline.weight(.medium)).lineLimit(1)
+                    Text(state.compactSetLine).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
                 Text(timerInterval: Date.now...max(Date.now.addingTimeInterval(1), state.restEndDate), countsDown: true)
                     .font(.system(.title, design: .rounded).monospacedDigit().weight(.semibold))
                     .frame(width: 96, alignment: .trailing)
-                HStack(spacing: 8) {
-                    Button(intent: AddRestIntent()) {
-                        Image(systemName: "plus")
-                    }
-                    .tint(.secondary)
-                    Button(intent: SkipRestIntent()) {
-                        Image(systemName: "forward.fill")
-                    }
-                    .tint(.cyan)
+            }
+
+            HStack(spacing: 10) {
+                Button(intent: AddRestIntent()) {
+                    Label("30s", systemImage: "plus").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .tint(.secondary)
+                Button(intent: SkipRestIntent()) {
+                    Label("Skip", systemImage: "forward.fill").frame(maxWidth: .infinity)
+                }
+                .tint(.cyan)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            // Annotate the set just completed with an RPE while you rest.
+            HStack(spacing: 10) {
+                Text(state.rpeText ?? "RPE")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(state.rpe == nil ? .secondary : .primary)
+                Spacer()
+                Button(intent: RpeStepIntent(delta: -0.5)) {
+                    Image(systemName: "minus")
+                }
+                .tint(.secondary)
+                Button(intent: RpeStepIntent(delta: 0.5)) {
+                    Image(systemName: "plus")
+                }
+                .tint(.secondary)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+}
+
+/// A row of dots showing position within the exercise — filled for done sets, ringed for current.
+private struct SetProgressDots: View {
+    let total: Int
+    let current: Int
+
+    var body: some View {
+        if total > 0 {
+            HStack(spacing: 4) {
+                ForEach(1...max(total, 1), id: \.self) { index in
+                    Circle()
+                        .strokeBorder(.cyan, lineWidth: 1.5)
+                        .background(Circle().fill(index < current ? Color.cyan : .clear))
+                        .frame(width: 7, height: 7)
+                        .opacity(index <= current ? 1 : 0.4)
+                }
             }
         }
+    }
+}
+
+/// −/＋ weight steppers flanking a log button, so the load can be set or corrected on the lock
+/// screen. When a weight is still required the log is replaced by a clear prompt.
+private struct WeightLogRow: View {
+    let needsLoad: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(intent: LoadStepIntent(steps: -1)) {
+                Image(systemName: "minus")
+            }
+            .tint(.secondary)
+
+            if needsLoad {
+                Text("Set a weight")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Button(intent: LogSetIntent()) {
+                    Label("Log set", systemImage: "checkmark.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .tint(.cyan)
+            }
+
+            Button(intent: LoadStepIntent(steps: 1)) {
+                Image(systemName: "plus")
+            }
+            .tint(.secondary)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 }
 

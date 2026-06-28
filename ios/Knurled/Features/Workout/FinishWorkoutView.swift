@@ -154,6 +154,9 @@ struct FinishWorkoutView: View {
                 phase = .failed(message.isEmpty ? "The workout could not be submitted." : message)
                 return
             }
+            // A completed workout is done — drop its draft. A partial submit keeps the draft so the
+            // user can carry on later from where they left off.
+            if isComplete { DraftStore.shared.clear() }
             onCommitted()
             dismiss()
         } catch {

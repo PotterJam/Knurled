@@ -4,6 +4,7 @@ struct SettingsHomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(ThemeStore.self) private var theme
     @Environment(WorkoutSettings.self) private var workoutSettings
+    @Environment(BodyMetricsStore.self) private var metrics
 
     var body: some View {
         @Bindable var theme = theme
@@ -16,16 +17,15 @@ struct SettingsHomeView: View {
                     }
                 }
 
-                Section("Appearance") {
+                Section("Profile") {
                     NavigationLink {
-                        ColourSchemeSelectionView(selection: $theme.scheme)
+                        BodyMetricsSettingsView()
                     } label: {
-                        HStack {
-                            Label("Colour scheme", systemImage: "paintpalette")
-                            Spacer()
-                            Text(theme.scheme.title)
-                                .foregroundStyle(.secondary)
-                        }
+                        SettingsNavigationRow(
+                            title: "Body metrics",
+                            subtitle: profileSubtitle,
+                            systemImage: "figure"
+                        )
                     }
                 }
 
@@ -77,9 +77,28 @@ struct SettingsHomeView: View {
                         )
                     }
                 }
+
+                Section("Appearance") {
+                    NavigationLink {
+                        ColourSchemeSelectionView(selection: $theme.scheme)
+                    } label: {
+                        HStack {
+                            Label("Colour scheme", systemImage: "paintpalette")
+                            Spacer()
+                            Text(theme.scheme.title)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             .navigationTitle("Settings")
         }
+    }
+
+    private var profileSubtitle: String {
+        guard let weight = metrics.bodyWeight, weight > 0 else { return "Not set" }
+        let formatted = weight.formatted(.number.precision(.fractionLength(0...1)))
+        return "\(formatted) \(metrics.unit.rawValue) · \(metrics.sex.title)"
     }
 
     private var gitSummary: String {
@@ -120,6 +139,61 @@ private struct ActiveRepoSummaryRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+    }
+}
+
+private struct BodyMetricsSettingsView: View {
+    @Environment(BodyMetricsStore.self) private var metrics
+    @State private var weightText = ""
+    @FocusState private var weightFocused: Bool
+
+    var body: some View {
+        @Bindable var metrics = metrics
+        List {
+            Section("Body weight") {
+                HStack(spacing: KnurledTheme.Spacing.s) {
+                    TextField("Weight", text: $weightText)
+                        .keyboardType(.decimalPad)
+                        .focused($weightFocused)
+                        .onChange(of: weightText) { _, new in
+                            metrics.bodyWeight = Double(new.replacingOccurrences(of: ",", with: "."))
+                        }
+
+                    Picker("Unit", selection: $metrics.unit) {
+                        Text("kg").tag(Units.kg)
+                        Text("lb").tag(Units.lb)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 110)
+                }
+            }
+
+            Section {
+                Picker("Sex", selection: $metrics.sex) {
+                    ForEach(Sex.allCases) { sex in
+                        Text(sex.title).tag(sex)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Sex")
+            } footer: {
+                Text("Body weight and sex normalise each lift against strength standards. They stay on this device and are never written to your repo or training log.")
+            }
+        }
+        .navigationTitle("Body metrics")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { weightFocused = false }
+            }
+        }
+        .onAppear {
+            if weightText.isEmpty, let bodyWeight = metrics.bodyWeight {
+                weightText = bodyWeight.formatted(.number.precision(.fractionLength(0...1)))
+            }
+        }
     }
 }
 
