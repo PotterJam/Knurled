@@ -125,6 +125,38 @@ import Foundation
         #expect(AppModel.commitMessage(session: session, mode: .reset, date: "2026-06-24") == "Reset A1 - 2026-06-24")
     }
 
+    // Regression: device-flow polling idles ~5s between requests, so the poll that finally
+    // succeeds — right after GitHub accepts — routinely lands on a stale pooled connection and
+    // fails with NSURLErrorNetworkConnectionLost (-1005). dataWithRetry must recover instead of
+    // aborting sign-in with "The network connection was lost."
+    @Test func dataWithRetryRecoversFromConnectionLost() async throws {
+        ConnectionLostURLProtocol.reset(failuresBeforeSuccess: 1)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ConnectionLostURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+
+        let url = try #require(URL(string: "https://github.com/login/oauth/access_token"))
+        let (_, response) = try await GitHub.dataWithRetry(for: URLRequest(url: url), session: session)
+
+        #expect((response as? HTTPURLResponse)?.statusCode == 200)
+        #expect(ConnectionLostURLProtocol.attempts == 2)
+    }
+
+    @Test func dataWithRetryGivesUpAfterMaxRetries() async throws {
+        ConnectionLostURLProtocol.reset(failuresBeforeSuccess: .max)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ConnectionLostURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+
+        let url = try #require(URL(string: "https://github.com/login/oauth/access_token"))
+        await #expect(throws: URLError.self) {
+            _ = try await GitHub.dataWithRetry(for: URLRequest(url: url), session: session, maxRetries: 2)
+        }
+        #expect(ConnectionLostURLProtocol.attempts == 3)
+    }
+
     @Test func githubCommonHeadersIncludeUserAgent() throws {
         let url = try #require(URL(string: "https://api.github.com/user"))
         var request = URLRequest(url: url)
@@ -280,6 +312,54 @@ private extension RenderedSession {
             renderedSessionHash: "sha256:rendered",
             items: []
         )
+    }
+}
+
+/// Stub transport that fails the first `failuresBeforeSuccess` requests with the same
+/// `NSURLErrorNetworkConnectionLost` URLSession raises against a stale pooled connection,
+/// then answers 200. Lets us exercise `GitHub.dataWithRetry` deterministically.
+private final class ConnectionLostURLProtocol: URLProtocol {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var remainingFailures = 0
+    nonisolated(unsafe) private static var attemptCount = 0
+
+    static func reset(failuresBeforeSuccess: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        remainingFailures = failuresBeforeSuccess
+        attemptCount = 0
+    }
+
+    static var attempts: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return attemptCount
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        Self.lock.lock()
+        Self.attemptCount += 1
+        let shouldFail = Self.remainingFailures > 0
+        if shouldFail { Self.remainingFailures -= 1 }
+        Self.lock.unlock()
+
+        if shouldFail {
+            client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+            return
+        }
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
     }
 }
 

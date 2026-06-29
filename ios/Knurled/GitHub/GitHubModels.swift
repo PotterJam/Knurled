@@ -18,6 +18,42 @@ enum GitHub {
     static func applyCommonHeaders(to request: inout URLRequest) {
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     }
+
+    /// Performs a URLSession data request, retrying the transient connection failures that
+    /// otherwise abort sign-in with "The network connection was lost."
+    ///
+    /// iOS surfaces `NSURLErrorNetworkConnectionLost` (-1005) when URLSession hands a request
+    /// to a pooled keep-alive connection the server has already closed. Device-flow polling
+    /// idles ~5s between requests, so the poll that finally succeeds — right after the user
+    /// authorizes on github.com — routinely lands on a stale connection and fails. A retry
+    /// opens a fresh connection instead of bubbling the error up as a fatal sign-in failure.
+    static func dataWithRetry(
+        for request: URLRequest,
+        session: URLSession = .shared,
+        maxRetries: Int = 2
+    ) async throws -> (Data, URLResponse) {
+        var attempt = 0
+        while true {
+            do {
+                return try await session.data(for: request)
+            } catch let error as URLError where isRetriable(error) && attempt < maxRetries {
+                attempt += 1
+                // A brief pause lets the dead connection drain from the pool before we retry.
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+    }
+
+    /// Transient transport errors worth retrying. Deliberately narrow: real failures like
+    /// `.notConnectedToInternet` or `.cancelled` should surface immediately, not loop.
+    private static func isRetriable(_ error: URLError) -> Bool {
+        switch error.code {
+        case .networkConnectionLost, .cannotConnectToHost, .timedOut:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 enum GitHubError: Error, Sendable, LocalizedError {

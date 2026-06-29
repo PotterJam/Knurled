@@ -223,7 +223,7 @@ struct GitHubClient: GitHubClientProtocol {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await GitHub.dataWithRetry(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw GitHubError.badResponse("Non-HTTP response for \(method) \(path).")
         }

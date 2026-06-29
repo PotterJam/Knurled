@@ -53,7 +53,7 @@ struct GitHubDeviceFlow: Sendable {
         components.queryItems = form.map { URLQueryItem(name: $0.key, value: $0.value) }
         request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await GitHub.dataWithRetry(for: request)
         guard let http = response as? HTTPURLResponse else { throw GitHubError.badResponse("Non-HTTP auth response.") }
         guard (200..<300).contains(http.statusCode) else {
             throw GitHubError.http(http.statusCode, String(decoding: data, as: UTF8.self))
