@@ -63,8 +63,9 @@ final class WorkoutLiveController {
     private(set) var restEndDate: Date?
     /// Staged rep count for the current AMRAP final set (adjusted via the widget stepper).
     private(set) var amrapReps: Int = 0
-    /// The most recent working set logged, so the lock-screen RPE stepper can annotate it during rest.
-    private(set) var lastLoggedSet: LiveSet?
+    /// Raised by the Live Activity's "Log set" action so the in-app workout screen opens the reps
+    /// editor on the current set, ready to type, instead of logging from the lock screen.
+    private(set) var pendingRepsEdit = false
 
     private var now: Date = .now
     private var restTimersEnabled = true
@@ -282,9 +283,6 @@ final class WorkoutLiveController {
     private func restoreCursor(from draft: WorkoutDraft, in workout: LiveWorkout) {
         cursorAtEnd = draft.cursorAtEnd
         focusedItemID = draft.focusedItemID
-        lastLoggedSet = workout.items
-            .flatMap(\.sets)
-            .last(where: \.logged)
         guard let itemID = draft.cursorItemID,
               let setID = draft.cursorSetID,
               let item = workout.items.first(where: { $0.id == itemID }) else { return }
@@ -333,31 +331,17 @@ final class WorkoutLiveController {
         advanceCurrentWarmup()
     }
 
-    /// Nudge the current working set's load by ±one plate step, so the weight can be corrected (or
-    /// set for the first time) from the lock screen. Starts from the prescription/default when empty.
-    func adjustLoad(steps: Int) {
-        guard ensureWorkoutLoaded() else { return }
-        guard let (item, set) = currentTarget, !set.isWarmup, steps != 0 else { return }
-        let units = workout?.units ?? .kg
-        let increment = units == .lb ? 5.0 : 2.5
-        let base = LoadControl.parse(set.load, defaultUnit: units)?.value
-            ?? LoadControl.parse(set.prescribed.load, defaultUnit: units)?.value
-            ?? (units == .lb ? 45.0 : 20.0)
-        let next = max(0, base + Double(steps) * increment)
-        item.adjust(load: LoadControl.format(next, unit: units), scope: .thisSet, from: set.id)
-        syncAmrap()
-        persistDraft()
-        updateActivity()
+    /// Raise the request for the in-app workout screen to open the reps editor on the current set.
+    /// Fired from the Live Activity (which opens the app) so logging happens by typing reps in the
+    /// app rather than stepping values on the lock screen.
+    func requestRepsEdit() {
+        guard ensureWorkoutLoaded(), currentTarget != nil else { return }
+        pendingRepsEdit = true
     }
 
-    /// Adjust the RPE on the set just completed, during rest, in half-point steps.
-    func adjustRPE(delta: Double) {
-        guard ensureWorkoutLoaded() else { return }
-        guard let set = lastLoggedSet else { return }
-        let base = set.rpe ?? 8
-        set.rpe = min(10, max(1, ((base + delta) * 2).rounded() / 2))
-        persistDraft()
-        updateActivity()
+    /// Consume the pending reps-edit request once the in-app screen has acted on it.
+    func clearRepsEditRequest() {
+        pendingRepsEdit = false
     }
 
     private func needsLoad(item: LiveItem, set: LiveSet) -> Bool {
@@ -425,13 +409,6 @@ final class WorkoutLiveController {
         persistDraft()
     }
 
-    func adjustAmrap(delta: Int) {
-        guard ensureWorkoutLoaded() else { return }
-        guard let (item, set) = currentTarget, isAmrapTarget(item, set) else { return }
-        amrapReps = max(0, amrapReps + delta)
-        updateActivity()
-    }
-
     func skipRest() {
         guard ensureWorkoutLoaded() else { return }
         stopRest()
@@ -486,7 +463,6 @@ final class WorkoutLiveController {
     // MARK: - Internals
 
     private func afterLog(item: LiveItem, set: LiveSet) {
-        if !set.isWarmup { lastLoggedSet = set }
         moveCursorAfter(item: item, set: set)
         syncAmrap()
         // Ramp-up sets and whole warm-up exercises are guidance only — no rest countdown between them.
@@ -608,7 +584,7 @@ final class WorkoutLiveController {
                 exerciseIndex: totalExercises, totalExercises: totalExercises,
                 setNumber: 0, totalSets: 0, targetReps: 0, loadText: nil,
                 isWarmup: false, isAmrap: false, amrapReps: 0,
-                needsLoad: false, rpe: nil, restEndDate: now
+                needsLoad: false, restEndDate: now
             )
         }
         let index = (workout.items.firstIndex { $0.id == item.id } ?? 0) + 1
@@ -625,7 +601,6 @@ final class WorkoutLiveController {
             isAmrap: isAmrapTarget(item, set),
             amrapReps: amrapReps,
             needsLoad: needsLoad(item: item, set: set),
-            rpe: isResting ? lastLoggedSet?.rpe : nil,
             restEndDate: restEndDate ?? now
         )
     }

@@ -38,17 +38,15 @@ struct AddRestIntent: LiveActivityIntent {
     }
 }
 
-struct AmrapStepIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Adjust reps"
-
-    @Parameter(title: "Delta") var delta: Int
-
-    init() {}
-    init(delta: Int) { self.delta = delta }
+/// Opens the app and asks the workout screen to bring up the reps editor on the current set, so
+/// the set is logged by typing reps in the app rather than stepping values on the lock screen.
+struct EditRepsIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Log set"
+    static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
         #if KNURLED_APP
-        await WorkoutLiveController.shared.adjustAmrap(delta: delta)
+        await WorkoutLiveController.shared.requestRepsEdit()
         #endif
         return .result()
     }
@@ -65,34 +63,3 @@ struct SkipWarmupIntent: LiveActivityIntent {
     }
 }
 
-struct LoadStepIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Adjust weight"
-
-    @Parameter(title: "Steps") var steps: Int
-
-    init() {}
-    init(steps: Int) { self.steps = steps }
-
-    func perform() async throws -> some IntentResult {
-        #if KNURLED_APP
-        await WorkoutLiveController.shared.adjustLoad(steps: steps)
-        #endif
-        return .result()
-    }
-}
-
-struct RpeStepIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Adjust RPE"
-
-    @Parameter(title: "Delta") var delta: Double
-
-    init() {}
-    init(delta: Double) { self.delta = delta }
-
-    func perform() async throws -> some IntentResult {
-        #if KNURLED_APP
-        await WorkoutLiveController.shared.adjustRPE(delta: delta)
-        #endif
-        return .result()
-    }
-}

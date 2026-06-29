@@ -25,7 +25,6 @@ struct RestActivityAttributes: ActivityAttributes, Sendable {
         var isAmrap: Bool
         var amrapReps: Int       // staged rep count for an AMRAP final set
         var needsLoad: Bool      // weighted working set with no value yet — must set a weight first
-        var rpe: Double?         // RPE of the just-completed set, adjustable during rest
         var restEndDate: Date    // meaningful while `phase == .resting`
 
         var exerciseProgress: String { "Exercise \(exerciseIndex) of \(totalExercises)" }
@@ -37,13 +36,6 @@ struct RestActivityAttributes: ActivityAttributes, Sendable {
         var compactSetLine: String {
             let prefix = isWarmup ? "W " : ""
             return "\(prefix)\(loadReps)"
-        }
-        var rpeText: String? {
-            guard let rpe else { return nil }
-            let rounded = (rpe * 2).rounded() / 2
-            return rounded.truncatingRemainder(dividingBy: 1) == 0
-                ? "RPE \(Int(rounded))"
-                : String(format: "RPE %.1f", rounded)
         }
     }
 

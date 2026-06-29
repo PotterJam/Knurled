@@ -12,6 +12,7 @@ struct ActiveWorkoutView: View {
     @State private var errorMessage: String?
     @State private var pendingScroll: Task<Void, Never>?
     @State private var restTarget: LiveItem?
+    @State private var showRepsEditor = false
 
     private let resumeDraft: WorkoutDraft?
     private let controller = WorkoutLiveController.shared
@@ -79,6 +80,9 @@ struct ActiveWorkoutView: View {
                 if let target = controller.currentScrollTarget {
                     proxy.scrollTo(WorkoutScrollDestination.exercise(target.exerciseID), anchor: .top)
                 }
+                // The Live Activity's "Log set" may have opened the app before this screen
+                // appeared — honour any pending request to edit reps on the current set.
+                if controller.pendingRepsEdit { openRepsEditor() }
                 // Starting the workout commits to it: flush any locally-skipped cursor to GitHub
                 // now, in the background, rather than on every skip tap.
                 Task { await app.syncPendingChanges(in: workout.repo) }
@@ -99,6 +103,9 @@ struct ActiveWorkoutView: View {
                     WorkoutScrollRequest.afterAdvance(from: previous, to: current),
                     proxy: proxy
                 )
+            }
+            .onChange(of: controller.pendingRepsEdit) { _, pending in
+                if pending { openRepsEditor() }
             }
         }
         .navigationTitle(workout.session.displayName)
@@ -146,6 +153,12 @@ struct ActiveWorkoutView: View {
                 let item = workout.addExtraExercise(exercise: exercise, load: load, setCount: sets, reps: reps)
                 controller.focus(item)
                 controller.modelChanged()
+            }
+        }
+        .sheet(isPresented: $showRepsEditor) {
+            if let set = controller.currentTarget?.set {
+                RepsValueEditor(set: set) { controller.modelChanged() }
+                    .presentationDetents([.height(260)])
             }
         }
         .sheet(item: $restTarget) { item in
@@ -243,6 +256,14 @@ struct ActiveWorkoutView: View {
         return .secondary
     }
 
+    /// Present the reps editor on the current set in response to the Live Activity's "Log set"
+    /// action, then clear the request so a later tap can raise it again.
+    private func openRepsEditor() {
+        controller.clearRepsEditRequest()
+        guard controller.currentTarget != nil else { return }
+        showRepsEditor = true
+    }
+
     private func scroll(_ request: WorkoutScrollRequest, proxy: ScrollViewProxy) {
         pendingScroll?.cancel()
         if request.delayForLayout {
@@ -302,14 +323,12 @@ struct ActiveWorkoutView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!workout.canFinish || isSaving)
+            // Finishing is allowed as soon as anything is logged — a half-done session submits as a
+            // partial (finished lifts progress, the rest save as-is). Leaving without finishing is
+            // the separate "pause" path that keeps an un-uploaded draft.
+            .disabled(!workout.canSubmit || isSaving)
 
             Menu {
-                if workout.canSaveProgress {
-                    Button("Submit partial to history", systemImage: "tray.and.arrow.down") {
-                        showFinish = true
-                    }
-                }
                 Button("Discard workout", systemImage: "trash", role: .destructive) {
                     showDiscardConfirm = true
                 }
