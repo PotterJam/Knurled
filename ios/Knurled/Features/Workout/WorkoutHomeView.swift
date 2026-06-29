@@ -55,9 +55,9 @@ struct NextWorkoutView: View {
             startBar
         }
         .refreshable { await app.sync() }
-        .onAppear { draft = draftStore.hasDraft ? draftStore.load() : nil }
+        .onAppear { reloadDraft() }
         .onChange(of: draftStore.hasDraft) { _, _ in
-            draft = draftStore.hasDraft ? draftStore.load() : nil
+            reloadDraft()
         }
         .toolbar {
             if let plan = repo.plan {
@@ -227,11 +227,15 @@ struct NextWorkoutView: View {
                 try await app.skipWorkout(forward: forward, in: repo)
                 // The cursor moved, so any in-progress draft no longer matches the workout on
                 // screen; reload so the start bar reflects the freshly selected session.
-                draft = draftStore.hasDraft ? draftStore.load() : nil
+                reloadDraft()
             } catch {
                 skipError = error.localizedDescription
             }
         }
+    }
+
+    private func reloadDraft() {
+        draft = draftStore.hasDraft ? draftStore.loadUncommitted(records: repo.records) : nil
     }
 }
 

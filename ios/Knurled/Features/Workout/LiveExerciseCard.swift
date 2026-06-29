@@ -119,7 +119,7 @@ struct LiveExerciseCard: View {
             }
             .presentationDetents([.height(330)])
         }
-        .setEditingSheets(editingValue: $editingValue, units: live.units) {
+        .setEditingSheets(editingValue: $editingValue, units: live.units, controller: controller) {
             controller.modelChanged()
         }
         .confirmationDialog(
@@ -143,7 +143,7 @@ struct LiveExerciseCard: View {
                     isLastSet: set.id == live.warmups.last?.id,
                     isCurrent: controller.isCurrent(set),
                     onEditLoad: { editingValue = .load(set, live) },
-                    onEditReps: { editingValue = .reps(set) },
+                    onEditReps: { editingValue = .reps(set, live) },
                     onEditRPE: { editingValue = .rpe(set) },
                     onToggled: { controller.toggle(set: set, in: live) },
                     onChanged: { controller.modelChanged() },
@@ -214,7 +214,7 @@ struct LiveExerciseCard: View {
         if isPendingAmrap(set) {
             completingAmrapSet = set
         } else {
-            editingValue = .reps(set)
+            editingValue = .reps(set, live)
         }
     }
 
@@ -243,13 +243,13 @@ private struct RowHeightKey: PreferenceKey {
 
 enum SetValueEdit: Identifiable {
     case load(LiveSet, LiveItem)
-    case reps(LiveSet)
+    case reps(LiveSet, LiveItem)
     case rpe(LiveSet)
 
     var id: String {
         switch self {
         case .load(let set, _): "load-\(ObjectIdentifier(set).hashValue)"
-        case .reps(let set): "reps-\(ObjectIdentifier(set).hashValue)"
+        case .reps(let set, _): "reps-\(ObjectIdentifier(set).hashValue)"
         case .rpe(let set): "rpe-\(ObjectIdentifier(set).hashValue)"
         }
     }
@@ -260,6 +260,7 @@ enum SetValueEdit: Identifiable {
 private struct SetEditingSheets: ViewModifier {
     @Binding var editingValue: SetValueEdit?
     let units: Units
+    let controller: WorkoutLiveController
     let onChanged: () -> Void
 
     func body(content: Content) -> some View {
@@ -269,9 +270,12 @@ private struct SetEditingSheets: ViewModifier {
                 case .load(let set, let item):
                     LoadValueEditor(set: set, item: item, units: units, onChanged: onChanged)
                         .presentationDetents([.height(250)])
-                case .reps(let set):
-                    RepsValueEditor(set: set, onChanged: onChanged)
-                        .presentationDetents([.height(300)])
+                case .reps(let set, let item):
+                    RepsWheelEditor(set: set, onDone: { reps in
+                        controller.editReps(set: set, in: item, reps: reps)
+                        onChanged()
+                    })
+                    .presentationDetents([.height(260)])
                 case .rpe(let set):
                     RPEValueEditor(set: set, onChanged: onChanged)
                         .presentationDetents([.height(300)])
@@ -284,11 +288,13 @@ extension View {
     func setEditingSheets(
         editingValue: Binding<SetValueEdit?>,
         units: Units,
+        controller: WorkoutLiveController,
         onChanged: @escaping () -> Void
     ) -> some View {
         modifier(SetEditingSheets(
             editingValue: editingValue,
             units: units,
+            controller: controller,
             onChanged: onChanged
         ))
     }
@@ -662,7 +668,7 @@ private struct LoadValueEditor: View {
     /// True when the set arrived with no weight at all — entering the first weight seeds every
     /// working set of the exercise, and we show a plain weight field rather than a "bodyweight →"
     /// transition (there was never a bodyweight value to move away from).
-    private let isFirstWeight: Bool
+    private var isFirstWeight: Bool { draft.seedsWholeExercise }
 
     init(set: LiveSet, item: LiveItem, units: Units, onChanged: @escaping () -> Void) {
         self.set = set
@@ -670,8 +676,10 @@ private struct LoadValueEditor: View {
         self.units = units
         self.onChanged = onChanged
         let hadLoad = set.load != nil
-        self.isFirstWeight = !hadLoad && !set.isWarmup
-        _draft = State(initialValue: LoadEditDraft(baselineText: hadLoad ? (set.load ?? "") : ""))
+        _draft = State(initialValue: LoadEditDraft(
+            baselineText: hadLoad ? (set.load ?? "") : "",
+            seedsWholeExercise: !hadLoad && !set.isWarmup
+        ))
     }
 
     var body: some View {
@@ -717,83 +725,64 @@ private struct LoadValueEditor: View {
     }
 
     private func reset() {
-        set.load = set.prescribed.load
-        draft = LoadEditDraft(baselineText: set.load ?? "bodyweight")
+        if draft.seedsWholeExercise {
+            item.adjust(load: set.prescribed.load, scope: .wholeExercise, from: set.id)
+        } else {
+            set.load = set.prescribed.load
+        }
+        draft = LoadEditDraft(
+            baselineText: set.load ?? (set.isWarmup ? "bodyweight" : ""),
+            seedsWholeExercise: draft.seedsWholeExercise
+        )
         onChanged()
     }
 
     private func applyText() {
-        guard let value = Double(draft.destinationText.trimmingCharacters(in: .whitespaces)) else { return }
-        apply(max(0, value))
-    }
-
-    private func apply(_ value: Double) {
-        let formatted = LoadControl.format(value, unit: units)
-        if isFirstWeight {
-            // Seed the whole exercise so all of its sets carry the first weight entered.
-            item.adjust(load: formatted, scope: .wholeExercise, from: set.id)
-        } else {
-            set.load = formatted
-        }
+        draft.applyDestination(to: set, in: item, units: units)
         onChanged()
     }
 }
 
-/// Reps entry as a focused number field, so the keyboard is up and ready to type the moment it
-/// opens — including when reached straight from the Live Activity's "Log set" action.
-struct RepsValueEditor: View {
+/// Reps entry as a wheel picker, starting from the set's current reps. Tapping Done commits
+/// the value and auto-logs the set when load is present, so the user doesn't need an extra tap.
+struct RepsWheelEditor: View {
     let set: LiveSet
-    var onChanged: () -> Void
+    var onDone: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var text: String
-    @FocusState private var isFocused: Bool
+    @State private var reps: Int
 
-    init(set: LiveSet, onChanged: @escaping () -> Void) {
+    init(set: LiveSet, onDone: @escaping (Int) -> Void) {
         self.set = set
-        self.onChanged = onChanged
-        _text = State(initialValue: "\(set.reps)")
+        self.onDone = onDone
+        _reps = State(initialValue: set.reps)
     }
 
     var body: some View {
         NavigationStack {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                TextField("0", text: $text)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 56, weight: .semibold, design: .rounded))
-                    .frame(width: 140)
-                    .focused($isFocused)
-                    .onChange(of: text) { _, _ in apply() }
-                Text("reps")
-                    .font(.title3.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .padding()
-            .navigationTitle("Reps")
-            .navigationBarTitleDisplayMode(.inline)
-            .task { isFocused = true }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Reset") {
-                        set.reps = set.prescribed.targetReps
-                        text = "\(set.reps)"
-                        onChanged()
+            VStack(spacing: 8) {
+                Picker("Reps", selection: $reps) {
+                    ForEach(0...99, id: \.self) { value in
+                        Text("\(value)").tag(value)
                     }
                 }
+                .pickerStyle(.wheel)
+            }
+            .padding(.horizontal)
+            .navigationTitle("Reps")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        onDone(reps)
+                        dismiss()
+                    }
                 }
             }
         }
-    }
-
-    private func apply() {
-        let digits = String(text.filter(\.isNumber).prefix(2))
-        if digits != text { text = digits }
-        guard let value = Int(digits) else { return }
-        set.reps = min(99, max(0, value))
-        onChanged()
     }
 }
 
@@ -954,7 +943,7 @@ struct WarmupBlockCard: View {
             }
         }
         .knurledCard()
-        .setEditingSheets(editingValue: $editingValue, units: units) {
+        .setEditingSheets(editingValue: $editingValue, units: units, controller: controller) {
             controller.modelChanged()
         }
     }
@@ -998,7 +987,7 @@ struct WarmupBlockCard: View {
                         isLastSet: set.id == item.sets.last?.id,
                         isCurrent: controller.isCurrent(set),
                         onEditLoad: { editingValue = .load(set, item) },
-                        onEditReps: { editingValue = .reps(set) },
+                        onEditReps: { editingValue = .reps(set, item) },
                         onEditRPE: { editingValue = .rpe(set) },
                         onToggled: { controller.toggle(set: set, in: item) },
                         onChanged: { controller.modelChanged() },

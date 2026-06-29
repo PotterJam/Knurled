@@ -138,8 +138,9 @@ struct FinishWorkoutView: View {
                 phase = .failed(message.isEmpty ? "The workout could not be submitted." : message)
                 return
             }
-            // Finishing commits an ordinary history record, so the local draft is no longer needed.
-            DraftStore.shared.clear()
+            // End the live controller before the workout view disappears. Otherwise its teardown
+            // save can recreate the draft that finishing just removed.
+            WorkoutLiveController.shared.finish()
             onCommitted()
             dismiss()
         } catch {

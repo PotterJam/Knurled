@@ -189,7 +189,24 @@ struct ChangeExerciseSheet: View {
 
 struct LoadEditDraft {
     let baselineText: String
+    let seedsWholeExercise: Bool
     var destinationText = ""
+
+    init(baselineText: String, seedsWholeExercise: Bool = false) {
+        self.baselineText = baselineText
+        self.seedsWholeExercise = seedsWholeExercise
+    }
+
+    @MainActor
+    func applyDestination(to set: LiveSet, in item: LiveItem, units: Units) {
+        guard let value = Double(destinationText.trimmingCharacters(in: .whitespaces)) else { return }
+        let formatted = LoadControl.format(max(0, value), unit: units)
+        if seedsWholeExercise {
+            item.adjust(load: formatted, scope: .wholeExercise, from: set.id)
+        } else {
+            set.load = formatted
+        }
+    }
 }
 
 @MainActor

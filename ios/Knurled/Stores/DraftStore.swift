@@ -79,6 +79,22 @@ final class DraftStore {
         return try? JSONDecoder().decode(WorkoutDraft.self, from: data)
     }
 
+    /// Returns only a genuinely in-progress draft. A matching history record means Finish
+    /// succeeded and an older app build recreated the local file during view teardown.
+    func loadUncommitted(records: [TrainingRecord]) -> WorkoutDraft? {
+        guard let draft = load() else { return nil }
+        let wasFinished = records.contains {
+            $0.kind == .workout
+                && $0.sessionId == draft.sessionId
+                && $0.startedAt == draft.startedAt
+        }
+        if wasFinished {
+            clear()
+            return nil
+        }
+        return draft
+    }
+
     func save(_ draft: WorkoutDraft) {
         guard let data = try? JSONEncoder().encode(draft) else { return }
         do {

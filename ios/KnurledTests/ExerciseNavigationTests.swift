@@ -12,6 +12,61 @@ import Foundation
         return (dir, LiveWorkout(repo: repo, session: session))
     }
 
+    @Test func finishingPreventsViewTeardownFromRecreatingTheDraft() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let controller = WorkoutLiveController.shared
+        controller.discard()
+        controller.begin(workout)
+        defer { controller.discard() }
+        controller.persistDraftNow()
+        #expect(DraftStore.shared.hasDraft)
+
+        controller.finish()
+        controller.persistDraftNow() // Mirrors ActiveWorkoutView.onDisappear.
+
+        #expect(!DraftStore.shared.hasDraft)
+    }
+
+    @Test func committedWorkoutRemovesAResurrectedLocalDraft() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let controller = WorkoutLiveController.shared
+        controller.discard()
+        controller.begin(workout)
+        defer { controller.discard() }
+        controller.persistDraftNow()
+        let record = TrainingRecord(
+            id: "finished-workout",
+            date: "2026-06-29",
+            sessionId: workout.session.sessionId,
+            startedAt: workout.startedAt,
+            completedAt: "2026-06-29T11:00:00Z",
+            lifts: []
+        )
+
+        let draft = DraftStore.shared.loadUncommitted(records: [record])
+
+        #expect(draft == nil)
+        #expect(!DraftStore.shared.hasDraft)
+    }
+
+    @Test func firstWeightEntryPropagatesTheCompleteValueToEverySet() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(workout.items.first)
+        let editedSet = try #require(item.sets.first)
+        for set in item.sets { set.load = nil }
+
+        var draft = LoadEditDraft(baselineText: "", seedsWholeExercise: true)
+        draft.destinationText = "5"
+        draft.applyDestination(to: editedSet, in: item, units: .kg)
+        draft.destinationText = "55"
+        draft.applyDestination(to: editedSet, in: item, units: .kg)
+
+        #expect(item.sets.allSatisfy { $0.load == "55kg" })
+    }
+
     // Tapping an exercise focuses it, moving the single cursor (shared by the app and the Live
     // Activity) onto its first unlogged set so sets can be done out of order.
     @Test func focusingExerciseMovesCursorOntoIt() async throws {

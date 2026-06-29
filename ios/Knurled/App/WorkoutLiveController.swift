@@ -241,8 +241,17 @@ final class WorkoutLiveController {
         DraftStore.shared.save(draft)
     }
 
-    /// Drops the saved draft and ends the session (explicit discard, or after a finished workout).
+    /// Ends a successfully committed workout and removes its now-obsolete local draft.
+    func finish() {
+        clearDraftAndEnd()
+    }
+
+    /// Drops the saved draft and ends the in-progress session without committing it.
     func discard() {
+        clearDraftAndEnd()
+    }
+
+    private func clearDraftAndEnd() {
         persistTask?.cancel()
         persistTask = nil
         DraftStore.shared.clear()
@@ -370,6 +379,26 @@ final class WorkoutLiveController {
     func completeAmrap(set: LiveSet, in item: LiveItem, reps: Int) {
         guard !set.logged, isAmrapTarget(item, set) else { return }
         set.reps = max(0, reps)
+        set.bypassed = false
+        set.logged = true
+        afterLog(item: item, set: set)
+    }
+
+    /// Update reps from the wheel picker. If the set was unlogged and load is present,
+    /// mark it done automatically so the user doesn't need an extra tap.
+    func editReps(set: LiveSet, in item: LiveItem, reps: Int) {
+        set.reps = max(0, reps)
+        guard !set.logged else {
+            syncAmrap()
+            updateActivity()
+            persistDraft()
+            return
+        }
+        if needsLoad(item: item, set: set) {
+            updateActivity()
+            persistDraft()
+            return
+        }
         set.bypassed = false
         set.logged = true
         afterLog(item: item, set: set)

@@ -156,9 +156,11 @@ struct ActiveWorkoutView: View {
             }
         }
         .sheet(isPresented: $showRepsEditor) {
-            if let set = controller.currentTarget?.set {
-                RepsValueEditor(set: set) { controller.modelChanged() }
-                    .presentationDetents([.height(260)])
+            if let (item, set) = controller.currentTarget {
+                RepsWheelEditor(set: set, onDone: { reps in
+                    controller.editReps(set: set, in: item, reps: reps)
+                })
+                .presentationDetents([.height(260)])
             }
         }
         .sheet(item: $restTarget) { item in
