@@ -42,7 +42,7 @@ struct AddRestIntent: LiveActivityIntent {
 /// the set is logged by typing reps in the app rather than stepping values on the lock screen.
 struct EditRepsIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Log set"
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun = true
 
     func perform() async throws -> some IntentResult {
         #if KNURLED_APP
@@ -62,4 +62,3 @@ struct SkipWarmupIntent: LiveActivityIntent {
         return .result()
     }
 }
-
