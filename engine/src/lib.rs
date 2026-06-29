@@ -16,10 +16,10 @@ pub mod templates;
 pub use backtest::{BacktestProjection, BacktestStep, backtest};
 pub use core::{
     PatchFile, build_outputs, compile_plan, compile_plan_with_template, create_initial_state,
-    reduce_input, render_next, render_session, simulate, synthetic_execution_input,
-    validate_compiled, validate_execution_input,
+    preview_template, reduce_input, render_next, render_session, simulate,
+    synthetic_execution_input, validate_compiled, validate_execution_input,
 };
-pub use dsl::{parse_template_dsl, vendor_template};
+pub use dsl::{parse_template_dsl, render_template_dsl, vendor_template};
 pub use error::{KnurledError, Result};
 pub use json::{pretty_json, sha256_json, sha256_text, stable_json};
 pub use model::*;

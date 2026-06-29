@@ -29,6 +29,9 @@ protocol WorkoutEngine: Sendable {
     func setActiveProgram(dir: URL, slug: String) async throws -> ProgramMutationOutcome
     func deleteProgram(dir: URL, slug: String) async throws -> ProgramMutationOutcome
     func suggestProgramAdjustments(dir: URL) async throws -> [ProgramAdjustmentSuggestion]
+    func renderTemplate(dsl: DslTemplate) async throws -> String
+    func parseTemplate(text: String) async throws -> DslTemplate
+    func previewTemplate(request: PreviewTemplateRequest) async throws -> TemplatePreview
 }
 
 enum EngineError: Error, Sendable, LocalizedError {

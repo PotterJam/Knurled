@@ -904,3 +904,30 @@ pub struct PreviewReport {
     pub sessions: serde_json::Value,
     pub final_state: Option<StateProjection>,
 }
+
+/// Input to [`crate::preview_template`]: a candidate template (structured `dsl`
+/// or raw `text`) plus the plan-level numbers needed to render a first workout.
+/// The app posts this on every edit to drive live validation + preview without
+/// writing anything to disk.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct PreviewTemplateRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dsl: Option<DslTemplate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub units: Units,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub initial_numbers: Map<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_days: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest: Option<RestPolicy>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PreviewTemplateResult {
+    pub validation: ValidationReport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<RenderedSession>,
+}

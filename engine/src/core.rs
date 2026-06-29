@@ -1,11 +1,12 @@
 use regex::Regex;
 use serde_json::json;
 
-use crate::dsl::parse_template_dsl;
+use crate::dsl::{parse_template_dsl, render_template_dsl};
 use crate::error::{KnurledError, Result};
 use crate::json::{sha256_json, sha256_text};
 use crate::model::*;
 use crate::parser::{normalize_exercise, parse_lock, parse_patch, parse_plan};
+use crate::plan_edit::render_plan;
 use crate::templates::{
     builtin_template, default_exercise_alternatives, exercise_catalog, lock_entry,
     parse_template_ref, template_hash,
@@ -294,6 +295,124 @@ fn validate_equipment(
             "equipment has neither plates nor dumbbells; loads fall back to 2.5-unit rounding"
                 .to_owned(),
         ));
+    }
+}
+
+/// Validates a candidate custom template and renders its first workout without
+/// touching disk. This is the engine half of in-app authoring (Phase 6): the
+/// app posts a structured [`DslTemplate`] (or raw text) plus the plan-level
+/// numbers, and gets back a [`ValidationReport`] and the first
+/// [`RenderedSession`] for a live preview. Template/compile errors are returned
+/// as an invalid report rather than a hard `Err`, so the editor can show them
+/// inline.
+pub fn preview_template(request: PreviewTemplateRequest) -> Result<PreviewTemplateResult> {
+    let document = match (&request.dsl, &request.text) {
+        (Some(dsl), _) => render_template_dsl(dsl),
+        (None, Some(text)) => text.clone(),
+        (None, None) => {
+            return Ok(invalid_preview(
+                "missing_template",
+                "preview requires a structured `dsl` or raw `text` template",
+            ));
+        }
+    };
+
+    let template = match parse_template_dsl(&document, "./templates/custom.fitspec") {
+        Ok(template) => template,
+        Err(error) => return Ok(invalid_preview("template_parse_error", error.to_string())),
+    };
+    let dsl = &template.dsl;
+
+    let mut starts = Map::new();
+    let mut training_maxes = Map::new();
+    for lane in dsl.lanes.values() {
+        if let Some(value) = request.initial_numbers.get(&lane.exercise) {
+            match lane.basis {
+                DslBasis::WorkingWeight => {
+                    starts.insert(lane.exercise.clone(), value.clone());
+                }
+                DslBasis::TrainingMax => {
+                    training_maxes.insert(lane.exercise.clone(), value.clone());
+                }
+                DslBasis::Bodyweight => {}
+            }
+        }
+    }
+
+    let plan = Plan {
+        kind: "fitspec_plan".into(),
+        schema_version: SCHEMA_VERSION.into(),
+        name: dsl.name.clone(),
+        template: "./templates/custom.fitspec".into(),
+        units: request.units,
+        schedule: Schedule {
+            mode: "next_workout".into(),
+            rotation: dsl.rotation.clone(),
+            suggested_days: if request.suggested_days.is_empty() {
+                vec!["mon".into(), "wed".into(), "fri".into()]
+            } else {
+                request.suggested_days.clone()
+            },
+        },
+        starts,
+        training_maxes,
+        accessories: Map::new(),
+        exercises: Map::new(),
+        exercise_options: Map::new(),
+        rest: request.rest.clone().unwrap_or(RestPolicy {
+            default_seconds: Some(dsl.rest_seconds),
+            ..RestPolicy::default()
+        }),
+        warmup: WarmupPolicy::default(),
+        session_exercises: SessionExercisePolicy::default(),
+        equipment: None,
+    };
+
+    let plan_text = render_plan(&plan);
+    let lock = format!(
+        "[templates.\"./templates/custom.fitspec\"]\nversion = \"{}\"\nsource = \"./templates/custom.fitspec\"\ncontent_hash = \"{}\"\nengine_version = \"{}\"\n",
+        dsl.version,
+        sha256_text(&document),
+        ENGINE_VERSION,
+    );
+
+    let compiled = match compile_plan_with_template(&plan_text, &lock, &[], Some(&document)) {
+        Ok(compiled) => compiled,
+        Err(error) => return Ok(invalid_preview("template_compile_error", error.to_string())),
+    };
+    let validation = validate_compiled(&compiled);
+    let preview = if validation.status == ValidationStatus::Valid {
+        let state = create_initial_state(&compiled);
+        render_next(&compiled, &state).ok()
+    } else {
+        None
+    };
+    Ok(PreviewTemplateResult { validation, preview })
+}
+
+fn invalid_preview(code: &str, message: impl Into<String>) -> PreviewTemplateResult {
+    PreviewTemplateResult {
+        validation: ValidationReport {
+            kind: "validation_report".into(),
+            schema_version: SCHEMA_VERSION.into(),
+            engine_version: ENGINE_VERSION.into(),
+            status: ValidationStatus::Invalid,
+            errors: vec![ValidationMessage {
+                code: code.into(),
+                message: message.into(),
+            }],
+            warnings: Vec::new(),
+            checked: ValidationChecks {
+                plan_syntax: false,
+                template_lock: false,
+                patch_validity: false,
+                renderability: false,
+                execution_contracts: false,
+                state_log_consistency: false,
+                generated_file_freshness: false,
+            },
+        },
+        preview: None,
     }
 }
 

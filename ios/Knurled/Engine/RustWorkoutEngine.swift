@@ -111,6 +111,23 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode([ProgramAdjustmentSuggestion].self, from: raw)
     }
 
+    func renderTemplate(dsl: DslTemplate) throws -> String {
+        let json = try encode(dsl)
+        let raw = try call(json: json) { knurled_render_template($0) }
+        return try decode(RenderedTemplateText.self, from: raw).text
+    }
+
+    func parseTemplate(text: String) throws -> DslTemplate {
+        let raw = try call(json: text) { knurled_parse_template($0) }
+        return try decode(ParsedTemplate.self, from: raw).dsl
+    }
+
+    func previewTemplate(request: PreviewTemplateRequest) throws -> TemplatePreview {
+        let json = try encode(request)
+        let raw = try call(json: json) { knurled_preview_template($0) }
+        return try decode(TemplatePreview.self, from: raw)
+    }
+
     func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionResult {
         let sessionJSON = try encode(session)
         let inputJSON = try encode(input)
@@ -151,6 +168,17 @@ actor RustWorkoutEngine: WorkoutEngine {
     ) throws -> String {
         try dir.path(percentEncoded: false).withCString { cdir in
             guard let pointer = body(cdir) else { throw EngineError.emptyResponse }
+            defer { knurled_string_free(pointer) }
+            return String(cString: pointer)
+        }
+    }
+
+    private func call(
+        json: String,
+        _ body: (UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    ) throws -> String {
+        try json.withCString { cjson in
+            guard let pointer = body(cjson) else { throw EngineError.emptyResponse }
             defer { knurled_string_free(pointer) }
             return String(cString: pointer)
         }

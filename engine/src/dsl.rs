@@ -364,6 +364,245 @@ fn lane_tier(lane: &str) -> String {
     lane.rsplit('.').next().unwrap_or("main").to_owned()
 }
 
+/// Canonical `.fitspec` serializer — the inverse of [`parse_template_dsl`].
+///
+/// The round-trip invariant `parse_template_dsl(render_template_dsl(d)).dsl == d`
+/// holds for every valid [`DslTemplate`]: the app edits a structured model and
+/// renders it here so the engine remains the sole producer of DSL text. The
+/// output is *canonical*, not byte-identical to a hand-authored source file —
+/// maps are emitted in key order and incidental whitespace is normalized — so
+/// `render ∘ parse` is a fixed point but is not guaranteed to reproduce
+/// arbitrary source formatting.
+pub fn render_template_dsl(dsl: &DslTemplate) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "template {} version={} {{\n",
+        kdl_string(&dsl.name),
+        kdl_string(&dsl.version)
+    ));
+
+    out.push_str("  rotation");
+    for session in &dsl.rotation {
+        out.push(' ');
+        out.push_str(&ident_or_quoted(session));
+    }
+    out.push('\n');
+    out.push_str(&format!("  rest {}\n", dsl.rest_seconds));
+    if let Some(warmup) = &dsl.warmup {
+        render_warmup(&mut out, "  ", warmup);
+    }
+
+    for (id, items) in &dsl.sessions {
+        out.push_str("  session ");
+        out.push_str(&ident_or_quoted(id));
+        if let Some(display) = dsl.session_display_names.get(id) {
+            out.push_str(&format!(" display={}", kdl_string(display)));
+        }
+        out.push_str(" {\n");
+        for item in items {
+            out.push_str(&format!(
+                "    item {} slot={}",
+                kdl_string(&item.lane),
+                kdl_string(&item.slot_id)
+            ));
+            if let Some(accessory) = &item.accessory_key {
+                out.push_str(&format!(" accessory={}", kdl_string(accessory)));
+            }
+            if let Some(default_exercise) = &item.default_exercise {
+                out.push_str(&format!(" default_exercise={}", kdl_string(default_exercise)));
+            }
+            out.push('\n');
+        }
+        out.push_str("  }\n");
+    }
+
+    for (id, lane) in &dsl.lanes {
+        render_lane(&mut out, id, lane);
+    }
+
+    out.push_str("}\n");
+    out
+}
+
+fn render_lane(out: &mut String, id: &str, lane: &DslLane) {
+    out.push_str(&format!(
+        "  lane {} exercise={}",
+        kdl_string(id),
+        kdl_string(&lane.exercise)
+    ));
+    if let Some(tier) = &lane.tier {
+        out.push_str(&format!(" tier={}", kdl_string(tier)));
+    }
+    out.push_str(&format!(" basis={}", kdl_string(basis_word(lane.basis))));
+    match lane.initial {
+        DslInitial::Basis => {}
+        DslInitial::Performed => out.push_str(" initial=\"performed\""),
+        DslInitial::Percent { percentage } => {
+            out.push_str(&format!(" initial=\"{percentage}%\""))
+        }
+    }
+    if lane.sequence != DslSequence::None {
+        out.push_str(&format!(
+            " sequence={}",
+            kdl_string(sequence_word(lane.sequence))
+        ));
+    }
+    if let Some(rest) = lane.rest_seconds {
+        out.push_str(&format!(" rest={rest}"));
+    }
+    out.push_str(" {\n");
+
+    if let Some(warmup) = &lane.warmup {
+        render_warmup(out, "    ", warmup);
+    }
+    for stage in &lane.stages {
+        render_stage(out, stage);
+    }
+    for rule in &lane.rules {
+        render_rule(out, rule);
+    }
+    out.push_str("  }\n");
+}
+
+fn render_stage(out: &mut String, stage: &DslStage) {
+    if stage.groups.len() == 1 {
+        out.push_str(&format!("    stage {} {{ ", kdl_string(&stage.id)));
+        render_set_group(out, &stage.groups[0]);
+        out.push_str(" }\n");
+        return;
+    }
+    out.push_str(&format!("    stage {} {{\n", kdl_string(&stage.id)));
+    for group in &stage.groups {
+        out.push_str("      ");
+        render_set_group(out, group);
+        out.push('\n');
+    }
+    out.push_str("    }\n");
+}
+
+fn render_set_group(out: &mut String, group: &DslSetGroup) {
+    out.push_str(&format!("set count={} reps={}", group.count, group.reps));
+    if group.intensity != 100 {
+        out.push_str(&format!(" intensity={}", group.intensity));
+    }
+    if let Some(rep_min) = group.rep_min {
+        out.push_str(&format!(" rep_min={rep_min}"));
+    }
+    if let Some(rep_max) = group.rep_max {
+        out.push_str(&format!(" rep_max={rep_max}"));
+    }
+    if group.amrap {
+        out.push_str(" amrap=#true");
+    }
+    if let Some(rpe) = group.rpe {
+        out.push_str(&format!(" rpe={rpe}"));
+    }
+}
+
+fn render_rule(out: &mut String, rule: &DslRule) {
+    out.push_str("    on ");
+    match &rule.trigger {
+        DslTrigger::Pass => out.push_str("pass"),
+        DslTrigger::Fail => out.push_str("fail"),
+        DslTrigger::AmrapGte { reps } => out.push_str(&format!("amrap_gte reps={reps}")),
+        DslTrigger::Stall { count } => out.push_str(&format!("stall count={count}")),
+        DslTrigger::CycleEnd => out.push_str("cycle_end"),
+        DslTrigger::RangeTop => out.push_str("range_top"),
+    }
+    if let Some(stage) = &rule.stage {
+        out.push_str(&format!(" stage={}", kdl_string(stage)));
+    }
+    out.push_str(" { ");
+    let effects: Vec<String> = rule.effects.iter().map(render_effect).collect();
+    out.push_str(&effects.join("; "));
+    out.push_str(" }\n");
+}
+
+fn render_effect(effect: &DslEffect) -> String {
+    match effect {
+        DslEffect::IncreaseLoad { amount } => format!("increase_load by={}", kdl_string(amount)),
+        DslEffect::Deload { percent } => format!("deload percent={percent}"),
+        DslEffect::ResetLoad { percent } => format!("reset_load percent={percent}"),
+        DslEffect::AdvanceStage => "advance_stage".into(),
+        DslEffect::ResetStage => "reset_stage".into(),
+        DslEffect::IncreaseReps { amount } => format!("increase_reps by={amount}"),
+        DslEffect::ResetReps => "reset_reps".into(),
+        DslEffect::RecomputeTm { amount } => format!("recompute_tm by={}", kdl_string(amount)),
+        DslEffect::AdvanceCycle => "advance_cycle".into(),
+    }
+}
+
+fn render_warmup(out: &mut String, indent: &str, warmup: &WarmupScheme) {
+    out.push_str(&format!(
+        "{indent}warmup basis={}",
+        kdl_string(warmup_basis_word(&warmup.basis))
+    ));
+    if warmup.empty_bar_sets > 0 {
+        out.push_str(&format!(
+            " empty_bar_sets={} empty_bar_reps={}",
+            warmup.empty_bar_sets, warmup.empty_bar_reps
+        ));
+    }
+    if warmup.ramp.is_empty() {
+        out.push('\n');
+        return;
+    }
+    out.push_str(" {\n");
+    for step in &warmup.ramp {
+        out.push_str(&format!(
+            "{indent}  step intensity={} reps={}\n",
+            step.percentage, step.reps
+        ));
+    }
+    out.push_str(&format!("{indent}}}\n"));
+}
+
+fn basis_word(basis: DslBasis) -> &'static str {
+    match basis {
+        DslBasis::WorkingWeight => "working_weight",
+        DslBasis::TrainingMax => "training_max",
+        DslBasis::Bodyweight => "bodyweight",
+    }
+}
+
+fn sequence_word(sequence: DslSequence) -> &'static str {
+    match sequence {
+        DslSequence::None => "none",
+        DslSequence::Stages => "stages",
+        DslSequence::Cycle => "cycle",
+        DslSequence::Waves => "waves",
+        DslSequence::Rotation => "rotation",
+    }
+}
+
+fn warmup_basis_word(basis: &WarmupBasis) -> &'static str {
+    match basis {
+        WarmupBasis::TopSet => "top_set",
+        WarmupBasis::WorkingWeight => "working_weight",
+        WarmupBasis::TrainingMax => "training_max",
+    }
+}
+
+/// Emits a bare KDL word when `value` is a simple identifier, else a quoted
+/// string. Session ids are lower-cased and usually bare in source; lane/slot
+/// references carry dots and are always quoted via [`kdl_string`].
+fn ident_or_quoted(value: &str) -> String {
+    if !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    {
+        value.to_owned()
+    } else {
+        kdl_string(value)
+    }
+}
+
+fn kdl_string(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
+
 /// Vendor the real embedded DSL document for a built-in template.
 pub fn vendor_template(input: &str) -> Result<String> {
     let reference = parse_template_ref(input);

@@ -2,9 +2,10 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use knurled_core::{
-    SubmitMode, builtin_template, builtin_templates, compile_plan, create_initial_state,
-    parse_template_dsl, read_state, read_training_repo, reduce_input, render_lockfile, render_next,
-    submit_repo, synthetic_execution_input, vendor_template,
+    PreviewTemplateRequest, SubmitMode, Units, ValidationStatus, builtin_template,
+    builtin_templates, compile_plan, create_initial_state, parse_template_dsl, preview_template,
+    read_state, read_training_repo, reduce_input, render_lockfile, render_next,
+    render_template_dsl, submit_repo, synthetic_execution_input, vendor_template,
 };
 
 fn temp_repo(name: &str) -> std::path::PathBuf {
@@ -215,4 +216,92 @@ fn custom_wave_amrap_and_deload_run_through_the_generic_evaluator() {
     );
     assert_eq!(after_deload.cursor.cycle, 2);
     let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn render_round_trips_every_builtin_template() {
+    for info in builtin_templates() {
+        let reference = format!("{}@{}", info.id, info.version);
+        let document = vendor_template(&reference).unwrap();
+        let parsed = parse_template_dsl(&document, "vendored").unwrap();
+
+        let rendered = render_template_dsl(&parsed.dsl);
+        let reparsed = parse_template_dsl(&rendered, "vendored").unwrap();
+        assert_eq!(
+            reparsed.dsl, parsed.dsl,
+            "render∘parse is not a fixed point for {reference}\n--- rendered ---\n{rendered}"
+        );
+
+        // Idempotent: rendering the already-canonical form changes nothing.
+        assert_eq!(
+            render_template_dsl(&reparsed.dsl),
+            rendered,
+            "render is not idempotent for {reference}"
+        );
+    }
+}
+
+#[test]
+fn preview_template_renders_first_workout_for_a_forked_builtin() {
+    let document = vendor_template("gzcl.gzclp@1.0.0").unwrap();
+    let dsl = parse_template_dsl(&document, "preview").unwrap().dsl;
+    let request = PreviewTemplateRequest {
+        dsl: Some(dsl),
+        units: Units::Kg,
+        initial_numbers: [
+            ("squat".to_string(), "100kg".to_string()),
+            ("bench".to_string(), "60kg".to_string()),
+            ("press".to_string(), "40kg".to_string()),
+            ("deadlift".to_string(), "140kg".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+        ..PreviewTemplateRequest::default()
+    };
+    let result = preview_template(request).unwrap();
+    assert_eq!(result.validation.status, ValidationStatus::Valid);
+    let preview = result.preview.expect("a valid template previews a session");
+    assert!(!preview.items.is_empty());
+    assert_eq!(preview.session_id, "a1");
+}
+
+#[test]
+fn preview_template_surfaces_missing_initial_numbers_as_errors() {
+    let document = vendor_template("gzcl.gzclp@1.0.0").unwrap();
+    let dsl = parse_template_dsl(&document, "preview").unwrap().dsl;
+    let result = preview_template(PreviewTemplateRequest {
+        dsl: Some(dsl),
+        ..PreviewTemplateRequest::default()
+    })
+    .unwrap();
+    assert_eq!(result.validation.status, ValidationStatus::Invalid);
+    assert!(result.preview.is_none());
+    assert!(
+        result
+            .validation
+            .errors
+            .iter()
+            .any(|error| error.code == "missing_custom_start")
+    );
+}
+
+#[test]
+fn preview_template_reports_a_parse_error_for_an_empty_lane() {
+    let result = preview_template(PreviewTemplateRequest {
+        text: Some(
+            r#"template "Broken" version="1.0.0" {
+  rotation day
+  rest 120
+  session day { item "squat.main" slot="day.squat" }
+  lane "squat.main" exercise="squat" basis="working_weight" {
+  }
+}
+"#
+            .to_string(),
+        ),
+        ..PreviewTemplateRequest::default()
+    })
+    .unwrap();
+    assert_eq!(result.validation.status, ValidationStatus::Invalid);
+    assert_eq!(result.validation.errors[0].code, "template_parse_error");
 }
