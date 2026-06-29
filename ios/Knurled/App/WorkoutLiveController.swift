@@ -1,6 +1,7 @@
 import ActivityKit
 import Foundation
 import Observation
+import UIKit
 
 struct WorkoutScrollTarget: Hashable {
     let exerciseID: String
@@ -181,6 +182,7 @@ final class WorkoutLiveController {
         self.restTimersEnabled = restTimersEnabled
         if let draft { restoreCursor(from: draft, in: workout) }
         syncAmrap()
+        RestNotifier.requestAuthorization()
         startActivity()
         startDraftAutosave()
     }
@@ -416,6 +418,7 @@ final class WorkoutLiveController {
         guard let restEndDate else { return }
         now = .now
         self.restEndDate = max(now.addingTimeInterval(1), restEndDate.addingTimeInterval(TimeInterval(seconds)))
+        scheduleRestNotification()
         updateActivity()
     }
 
@@ -528,6 +531,7 @@ final class WorkoutLiveController {
         }
         now = .now
         restEndDate = now.addingTimeInterval(TimeInterval(max(1, seconds)))
+        scheduleRestNotification()
         startTicker()
         updateActivity()
     }
@@ -536,6 +540,16 @@ final class WorkoutLiveController {
         tickTask?.cancel()
         tickTask = nil
         restEndDate = nil
+        RestNotifier.cancel()
+    }
+
+    /// Mirror the rest countdown to a local notification so the timer ending still buzzes when
+    /// Knurled is backgrounded and only the Live Activity is visible. The notification is keyed to
+    /// the live `restEndDate`, so it tracks "+30s" / "−15s" adjustments and any restart.
+    private func scheduleRestNotification() {
+        guard let restEndDate else { return }
+        let nextUp = currentTarget?.item.item.display.title ?? ""
+        RestNotifier.schedule(at: restEndDate, nextUp: nextUp)
     }
 
     private func startTicker() {
@@ -547,6 +561,9 @@ final class WorkoutLiveController {
                 self.now = .now
                 if self.remaining <= 0 {
                     self.stopRest()
+                    // The scheduled notification covers the backgrounded case; this buzzes the
+                    // device when the app is foregrounded and the screen is on.
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     self.updateActivity()
                 }
             }
@@ -595,6 +612,9 @@ final class WorkoutLiveController {
             attributes: attributes,
             content: .init(state: state, staleDate: staleDate())
         ))
+        // Keep the screen awake while a workout's Live Activity is live so the cockpit stays
+        // visible mid-set without the display dimming. iOS ignores this while backgrounded.
+        UIApplication.shared.isIdleTimerDisabled = (activity != nil)
     }
 
     private func updateActivity() {
@@ -604,6 +624,7 @@ final class WorkoutLiveController {
     }
 
     private func endActivity() {
+        UIApplication.shared.isIdleTimerDisabled = false
         guard let current = activity else { return }
         activity = nil
         Task { await current.end(dismissalPolicy: .immediate) }

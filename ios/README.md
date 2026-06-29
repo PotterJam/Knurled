@@ -103,7 +103,7 @@ The FFI and Swift app are ported:
 | Adjust-today | ✅ | per set / remaining / whole exercise; `adjusted_today`, no auto-progress |
 | Finish → effect preview → submit | ✅ | engine `reduce` then commit |
 | Exercise swaps | ✅ | approved alternatives from rendered `exercise_options`, tracking-only by default |
-| Rest timer + Live Activity | ✅ | engine-prescribed rest auto-starts after each **non-final** set; ActivityKit lock-screen + Dynamic Island via `KnurledRestActivity` |
+| Rest timer + Live Activity | ✅ | engine-prescribed rest auto-starts after each **non-final** set; ActivityKit lock-screen + Dynamic Island via `KnurledRestActivity`; local notification + haptic when rest ends, and the screen is kept awake while the activity is live |
 | Off-day + reset submit modes | ✅ | record-only off-day; reset performed loads as baselines |
 | Offline push | ✅ | pending-push flag when a commit can't reach GitHub |
 | GitHub sync | ✅* | device-flow sign-in, repo picker, pull, one-commit push, sync |
