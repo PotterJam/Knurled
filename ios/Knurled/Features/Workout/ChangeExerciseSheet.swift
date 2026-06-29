@@ -85,11 +85,16 @@ struct ChangeExerciseSheet: View {
             }
             .coordinateSpace(name: "changeExerciseSheet")
             .scrollDismissesKeyboard(.interactively)
+            // Only listen for an outside tap while the load field is up. Left always-on, this
+            // form-wide tap recogniser swallowed taps on the exercise Picker rows, so you couldn't
+            // actually select the exercise to change to. `including: .subviews` disables it
+            // otherwise, letting the Picker (and other controls) receive their taps normally.
             .simultaneousGesture(
                 SpatialTapGesture(coordinateSpace: .named("changeExerciseSheet")).onEnded { value in
                     guard isLoadFieldFocused, !loadFieldFrame.contains(value.location) else { return }
                     endLoadEditing()
-                }
+                },
+                including: isLoadFieldFocused ? .all : .subviews
             )
             .navigationTitle("Change \(live.item.display.title)")
             .navigationBarTitleDisplayMode(.inline)

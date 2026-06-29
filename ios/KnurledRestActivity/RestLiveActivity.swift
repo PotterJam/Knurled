@@ -53,9 +53,7 @@ struct RestLiveActivity: Widget {
     @ViewBuilder private func controls(_ state: RestActivityAttributes.ContentState) -> some View {
         switch state.phase {
         case .ready:
-            if state.isAmrap {
-                AmrapControls(reps: state.amrapReps)
-            } else if state.isWarmup {
+            if state.isWarmup {
                 HStack(spacing: 10) {
                     Button(intent: LogSetIntent()) {
                         Label("Log", systemImage: "checkmark.circle").frame(maxWidth: .infinity)
@@ -69,7 +67,7 @@ struct RestLiveActivity: Widget {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             } else {
-                WeightLogRow(needsLoad: state.needsLoad)
+                LogInAppButton()
             }
         case .resting:
             HStack(spacing: 10) {
@@ -147,9 +145,7 @@ private struct LockScreenView: View {
     }
 
     @ViewBuilder private var readyControls: some View {
-        if state.isAmrap {
-            AmrapControls(reps: state.amrapReps)
-        } else if state.isWarmup {
+        if state.isWarmup {
             HStack(spacing: 10) {
                 Button(intent: LogSetIntent()) {
                     Label("Log", systemImage: "checkmark.circle").frame(maxWidth: .infinity)
@@ -163,7 +159,7 @@ private struct LockScreenView: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
         } else {
-            WeightLogRow(needsLoad: state.needsLoad)
+            LogInAppButton(controlSize: .large)
         }
     }
 
@@ -171,17 +167,32 @@ private struct LockScreenView: View {
 
     private var restingBody: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 14) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Label("Rest", systemImage: "timer")
-                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text("Next: \(state.exerciseTitle)").font(.subheadline.weight(.medium)).lineLimit(1)
-                    Text(state.compactSetLine).font(.caption).foregroundStyle(.secondary)
+            // Mirror the ready/log layout — same exercise, set dots and load×reps — so resting
+            // shows what's coming up next rather than a different-looking panel.
+            HStack(alignment: .firstTextBaseline) {
+                Text(state.exerciseTitle).font(.title3.weight(.semibold)).lineLimit(1)
+                if state.isWarmup {
+                    Text("WARM-UP")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.orange)
                 }
                 Spacer()
-                Text(timerInterval: Date.now...max(Date.now.addingTimeInterval(1), state.restEndDate), countsDown: true)
-                    .font(.system(.title, design: .rounded).monospacedDigit().weight(.semibold))
-                    .frame(width: 96, alignment: .trailing)
+                SetProgressDots(total: state.totalSets, current: state.setNumber)
+            }
+
+            HStack(alignment: .center) {
+                Text(state.loadReps)
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundStyle(state.needsLoad ? .orange : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("REST").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                    Text(timerInterval: Date.now...max(Date.now.addingTimeInterval(1), state.restEndDate), countsDown: true)
+                        .font(.system(.title, design: .rounded).monospacedDigit().weight(.semibold))
+                        .frame(width: 96, alignment: .trailing)
+                }
             }
 
             HStack(spacing: 10) {
@@ -193,25 +204,6 @@ private struct LockScreenView: View {
                     Label("Skip", systemImage: "forward.fill").frame(maxWidth: .infinity)
                 }
                 .tint(.cyan)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-
-            // Annotate the set just completed with an RPE while you rest.
-            HStack(spacing: 10) {
-                Text(state.rpeText ?? "RPE")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(state.rpe == nil ? .secondary : .primary)
-                    .contentTransition(.identity)
-                Spacer()
-                Button(intent: RpeStepIntent(delta: -0.5)) {
-                    Image(systemName: "minus")
-                }
-                .tint(.secondary)
-                Button(intent: RpeStepIntent(delta: 0.5)) {
-                    Image(systemName: "plus")
-                }
-                .tint(.secondary)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -239,68 +231,18 @@ private struct SetProgressDots: View {
     }
 }
 
-/// −/＋ weight steppers flanking a log button, so the load can be set or corrected on the lock
-/// screen. When a weight is still required the log is replaced by a clear prompt.
-private struct WeightLogRow: View {
-    let needsLoad: Bool
+/// A single button that opens the app on the current set with the reps editor ready to type,
+/// rather than logging from the lock screen. Replaces the old on-activity weight/AMRAP steppers.
+private struct LogInAppButton: View {
+    var controlSize: ControlSize = .small
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button(intent: LoadStepIntent(steps: -1)) {
-                Image(systemName: "minus")
-            }
-            .tint(.secondary)
-
-            if needsLoad {
-                Text("Set a weight")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity)
-            } else {
-                Button(intent: LogSetIntent()) {
-                    Label("Log set", systemImage: "checkmark.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .tint(.cyan)
-            }
-
-            Button(intent: LoadStepIntent(steps: 1)) {
-                Image(systemName: "plus")
-            }
-            .tint(.secondary)
+        Button(intent: EditRepsIntent()) {
+            Label("Log set", systemImage: "square.and.pencil")
+                .frame(maxWidth: .infinity)
         }
+        .tint(.cyan)
         .buttonStyle(.bordered)
-        .controlSize(.large)
-    }
-}
-
-/// −/+ stepper plus a tick button for an AMRAP final set, all driven by App Intents so it
-/// works directly on the lock screen.
-private struct AmrapControls: View {
-    let reps: Int
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Button(intent: AmrapStepIntent(delta: -1)) {
-                Image(systemName: "minus")
-            }
-            .tint(.secondary)
-            Text("\(reps)")
-                .font(.title3.monospacedDigit().weight(.semibold))
-                .frame(minWidth: 34)
-                .contentTransition(.identity)
-            Button(intent: AmrapStepIntent(delta: 1)) {
-                Image(systemName: "plus")
-            }
-            .tint(.secondary)
-            Button(intent: LogSetIntent()) {
-                Image(systemName: "checkmark.circle")
-                    .font(.title3)
-                    .frame(maxWidth: .infinity)
-            }
-            .tint(.cyan)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .controlSize(controlSize)
     }
 }

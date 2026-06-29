@@ -52,11 +52,11 @@ struct FinishWorkoutView: View {
     }
 
     private var navigationTitle: String {
-        isComplete ? "\(workout.session.displayName) Complete" : "Save \(workout.session.displayName)"
+        isComplete ? "\(workout.session.displayName) Complete" : "Finish \(workout.session.displayName)"
     }
 
     private var submitTitle: String {
-        isComplete ? "Submit Workout" : "Save Progress"
+        isComplete ? "Submit Workout" : "Finish Workout"
     }
 
     private func previewContent(_ outcome: ReductionResult) -> some View {
@@ -154,9 +154,10 @@ struct FinishWorkoutView: View {
                 phase = .failed(message.isEmpty ? "The workout could not be submitted." : message)
                 return
             }
-            // A completed workout is done — drop its draft. A partial submit keeps the draft so the
-            // user can carry on later from where they left off.
-            if isComplete { DraftStore.shared.clear() }
+            // Finishing is terminal whether the session was complete or partial: the record has
+            // been uploaded, so drop the draft. (Carrying on later is the separate pause/leave
+            // path, which never submits.)
+            DraftStore.shared.clear()
             onCommitted()
             dismiss()
         } catch {

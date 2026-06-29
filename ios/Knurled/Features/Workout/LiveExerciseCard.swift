@@ -65,13 +65,14 @@ struct LiveExerciseCard: View {
                             isAmrap: live.isAmrap,
                             isLastSet: set.id == live.lastRequiredSetID,
                             isCurrent: controller.isCurrent(set),
-                            onEditLoad: { editingValue = .load(set) },
+                            onEditLoad: { editingValue = .load(set, live) },
                             onEditReps: { editReps(for: set) },
                             onEditRPE: { editingValue = .rpe(set) },
                             onToggled: { toggle(set) },
                             onChanged: { controller.modelChanged() },
-                            showsLoad: !live.isBodyweight,
+                            showsLoad: true,
                             loadMissing: !live.isBodyweight && set.load == nil,
+                            isBodyweight: live.isBodyweight,
                             onDelete: set.isExtra ? {
                                 withAnimation(.snappy) {
                                     live.removeSet(set)
@@ -141,11 +142,12 @@ struct LiveExerciseCard: View {
                     isAmrap: false,
                     isLastSet: set.id == live.warmups.last?.id,
                     isCurrent: controller.isCurrent(set),
-                    onEditLoad: { editingValue = .load(set) },
+                    onEditLoad: { editingValue = .load(set, live) },
                     onEditReps: { editingValue = .reps(set) },
                     onEditRPE: { editingValue = .rpe(set) },
                     onToggled: { controller.toggle(set: set, in: live) },
-                    onChanged: { controller.modelChanged() }
+                    onChanged: { controller.modelChanged() },
+                    isBodyweight: live.isBodyweight
                 )
                 .id(
                     WorkoutScrollDestination.set(
@@ -224,7 +226,7 @@ struct LiveExerciseCard: View {
         // A weighted set with no value yet can't be ticked — guide the user straight to the weight
         // editor instead of silently logging an empty load.
         if !set.logged, !live.isBodyweight, set.load == nil {
-            editingValue = .load(set)
+            editingValue = .load(set, live)
             return
         }
         controller.toggle(set: set, in: live)
@@ -240,13 +242,13 @@ private struct RowHeightKey: PreferenceKey {
 }
 
 enum SetValueEdit: Identifiable {
-    case load(LiveSet)
+    case load(LiveSet, LiveItem)
     case reps(LiveSet)
     case rpe(LiveSet)
 
     var id: String {
         switch self {
-        case .load(let set): "load-\(ObjectIdentifier(set).hashValue)"
+        case .load(let set, _): "load-\(ObjectIdentifier(set).hashValue)"
         case .reps(let set): "reps-\(ObjectIdentifier(set).hashValue)"
         case .rpe(let set): "rpe-\(ObjectIdentifier(set).hashValue)"
         }
@@ -264,8 +266,8 @@ private struct SetEditingSheets: ViewModifier {
         content
             .sheet(item: $editingValue) { edit in
                 switch edit {
-                case .load(let set):
-                    LoadValueEditor(set: set, units: units, onChanged: onChanged)
+                case .load(let set, let item):
+                    LoadValueEditor(set: set, item: item, units: units, onChanged: onChanged)
                         .presentationDetents([.height(250)])
                 case .reps(let set):
                     RepsValueEditor(set: set, onChanged: onChanged)
@@ -347,10 +349,13 @@ struct SetRowView: View {
     var onEditRPE: () -> Void
     var onToggled: () -> Void
     var onChanged: () -> Void
-    /// False for bodyweight exercises, which carry no load — the weight chip is hidden entirely.
+    /// Whether to show the weight chip at all. On for everything now — bodyweight sets show a
+    /// tappable "bw" chip so added weight (e.g. a dip belt) can be entered.
     var showsLoad: Bool = true
     /// True when a weighted set has no value yet and must be filled in before it can be ticked.
     var loadMissing: Bool = false
+    /// Bodyweight exercises carry no base load; the chip reads "bw" until extra weight is added.
+    var isBodyweight: Bool = false
     /// Non-nil only for user-added sets, which can be swiped away.
     var onDelete: (() -> Void)? = nil
     /// The completed "logged" band. Off when a parent (e.g. the warm-up block) paints completion at
@@ -462,7 +467,7 @@ struct SetRowView: View {
             }
             if showsLoad {
                 ValueChip(
-                    text: loadMissing ? "Add weight" : (set.load ?? "—"),
+                    text: loadChipText,
                     isChanged: loadMissing || loadChanged,
                     truncates: true,
                     action: onEditLoad
@@ -490,6 +495,12 @@ struct SetRowView: View {
     private var prescribedText: String {
         let load = set.prescribed.load ?? "bw"
         return "\(load)×\(set.prescribed.targetReps)\(set.prescribed.amrap ? "+" : "")"
+    }
+
+    private var loadChipText: String {
+        if let load = set.load { return load }
+        if isBodyweight { return "bw" }
+        return loadMissing ? "Add weight" : "—"
     }
 
     private var loadChanged: Bool {
@@ -640,6 +651,7 @@ private struct ValueChip: View {
 
 private struct LoadValueEditor: View {
     let set: LiveSet
+    let item: LiveItem
     let units: Units
     var onChanged: () -> Void
 
@@ -647,26 +659,36 @@ private struct LoadValueEditor: View {
     @State private var draft: LoadEditDraft
     @FocusState private var isFocused: Bool
 
-    init(set: LiveSet, units: Units, onChanged: @escaping () -> Void) {
+    /// True when the set arrived with no weight at all — entering the first weight seeds every
+    /// working set of the exercise, and we show a plain weight field rather than a "bodyweight →"
+    /// transition (there was never a bodyweight value to move away from).
+    private let isFirstWeight: Bool
+
+    init(set: LiveSet, item: LiveItem, units: Units, onChanged: @escaping () -> Void) {
         self.set = set
+        self.item = item
         self.units = units
         self.onChanged = onChanged
-        _draft = State(initialValue: LoadEditDraft(baselineText: set.load ?? "bodyweight"))
+        let hadLoad = set.load != nil
+        self.isFirstWeight = !hadLoad && !set.isWarmup
+        _draft = State(initialValue: LoadEditDraft(baselineText: hadLoad ? (set.load ?? "") : ""))
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(draft.baselineText)
-                        .font(.title3.monospacedDigit().weight(.medium))
-                        .foregroundStyle(.secondary)
+                    if !isFirstWeight, !draft.baselineText.isEmpty {
+                        Text(draft.baselineText)
+                            .font(.title3.monospacedDigit().weight(.medium))
+                            .foregroundStyle(.secondary)
 
-                    Image(systemName: "arrow.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        Image(systemName: "arrow.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
 
-                    TextField("New", text: $draft.destinationText)
+                    TextField(isFirstWeight ? "Weight" : "New", text: $draft.destinationText)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.center)
                         .font(.largeTitle.monospacedDigit().weight(.semibold))
@@ -680,7 +702,7 @@ private struct LoadValueEditor: View {
                 }
             }
             .padding()
-            .navigationTitle("Load")
+            .navigationTitle(isFirstWeight ? "Add weight" : "Load")
             .navigationBarTitleDisplayMode(.inline)
             .task { isFocused = true }
             .toolbar {
@@ -706,38 +728,56 @@ private struct LoadValueEditor: View {
     }
 
     private func apply(_ value: Double) {
-        set.load = LoadControl.format(value, unit: units)
+        let formatted = LoadControl.format(value, unit: units)
+        if isFirstWeight {
+            // Seed the whole exercise so all of its sets carry the first weight entered.
+            item.adjust(load: formatted, scope: .wholeExercise, from: set.id)
+        } else {
+            set.load = formatted
+        }
         onChanged()
     }
 }
 
-private struct RepsValueEditor: View {
+/// Reps entry as a focused number field, so the keyboard is up and ready to type the moment it
+/// opens — including when reached straight from the Live Activity's "Log set" action.
+struct RepsValueEditor: View {
     let set: LiveSet
     var onChanged: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    @FocusState private var isFocused: Bool
+
+    init(set: LiveSet, onChanged: @escaping () -> Void) {
+        self.set = set
+        self.onChanged = onChanged
+        _text = State(initialValue: "\(set.reps)")
+    }
 
     var body: some View {
-        @Bindable var set = set
         NavigationStack {
-            Picker("Reps", selection: Binding(
-                get: { set.reps },
-                set: {
-                    set.reps = $0
-                    onChanged()
-                }
-            )) {
-                ForEach(0...99, id: \.self) { reps in
-                    Text("\(reps)").tag(reps)
-                }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                TextField("0", text: $text)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 56, weight: .semibold, design: .rounded))
+                    .frame(width: 140)
+                    .focused($isFocused)
+                    .onChange(of: text) { _, _ in apply() }
+                Text("reps")
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(.secondary)
             }
-            .pickerStyle(.wheel)
+            .padding()
             .navigationTitle("Reps")
             .navigationBarTitleDisplayMode(.inline)
+            .task { isFocused = true }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Reset") {
                         set.reps = set.prescribed.targetReps
+                        text = "\(set.reps)"
                         onChanged()
                     }
                 }
@@ -746,6 +786,14 @@ private struct RepsValueEditor: View {
                 }
             }
         }
+    }
+
+    private func apply() {
+        let digits = String(text.filter(\.isNumber).prefix(2))
+        if digits != text { text = digits }
+        guard let value = Int(digits) else { return }
+        set.reps = min(99, max(0, value))
+        onChanged()
     }
 }
 
@@ -949,11 +997,12 @@ struct WarmupBlockCard: View {
                         isAmrap: false,
                         isLastSet: set.id == item.sets.last?.id,
                         isCurrent: controller.isCurrent(set),
-                        onEditLoad: { editingValue = .load(set) },
+                        onEditLoad: { editingValue = .load(set, item) },
                         onEditReps: { editingValue = .reps(set) },
                         onEditRPE: { editingValue = .rpe(set) },
                         onToggled: { controller.toggle(set: set, in: item) },
                         onChanged: { controller.modelChanged() },
+                        isBodyweight: item.isBodyweight,
                         showsCompletedBand: false
                     )
                     .id(
