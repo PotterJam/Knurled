@@ -456,6 +456,7 @@ final class WorkoutLiveController {
     // MARK: - Internals
 
     private func afterLog(item: LiveItem, set: LiveSet) {
+        bypassEarlierWarmups(before: set, in: item)
         if !set.isWarmup { lastLoggedSet = set }
         moveCursorAfter(item: item, set: set)
         syncAmrap()
@@ -467,6 +468,17 @@ final class WorkoutLiveController {
             updateActivity()
         }
         persistDraft()
+    }
+
+    /// A warmup ramp only moves forward. If a later warmup is performed directly, earlier
+    /// unlogged warmups were intentionally passed over and must not become cursor candidates
+    /// again after the precise cursor is lost or restored from a draft.
+    private func bypassEarlierWarmups(before loggedSet: LiveSet, in item: LiveItem) {
+        guard loggedSet.isWarmup,
+              let loggedIndex = item.warmups.firstIndex(where: { $0 === loggedSet }) else { return }
+        for warmup in item.warmups.prefix(upTo: loggedIndex) where !warmup.logged {
+            warmup.bypassed = true
+        }
     }
 
     /// After logging out of order, keep moving forward from the set the user just performed

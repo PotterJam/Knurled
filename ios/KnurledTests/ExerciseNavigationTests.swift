@@ -75,6 +75,47 @@ import Foundation
         #expect(controller.currentTarget?.set === expectedNext)
     }
 
+    @Test func reloadFallbackDoesNotReturnEarlierSkippedWarmup() async throws {
+        let (dir, workout) = try await makeWorkout()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let controller = WorkoutLiveController.shared
+        controller.begin(workout)
+        defer { controller.end() }
+
+        let item = try #require(workout.items.first { $0.warmups.count > 2 })
+        let first = item.warmups[0]
+        let later = item.warmups[2]
+
+        controller.toggle(set: first, in: item)
+        controller.toggle(set: later, in: item)
+
+        let draft = WorkoutDraft(
+            renderedSessionHash: workout.session.renderedSessionHash,
+            sessionId: workout.session.sessionId,
+            displayName: workout.session.displayName,
+            session: workout.session,
+            unitsRaw: workout.units.rawValue,
+            startedAt: workout.startedAt,
+            savedAt: "2026-06-29T10:00:00Z",
+            items: workout.draftItems(),
+            focusedItemID: nil,
+            cursorItemID: nil,
+            cursorSetID: nil,
+            cursorSetIsWarmup: nil,
+            cursorAtEnd: false
+        )
+        let restored = LiveWorkout(repo: workout.repo, session: workout.session, draft: draft)
+        controller.begin(restored, resumingFrom: draft)
+
+        let restoredItem = try #require(restored.items.first { $0.id == item.id })
+        let restoredExpectedNext = restoredItem.warmups.dropFirst(3).first ?? restoredItem.sets.first
+        #expect(restoredItem.warmups[0].logged)
+        #expect(restoredItem.warmups[1].bypassed)
+        #expect(restoredItem.warmups[2].logged)
+        #expect(controller.currentTarget?.item.id == restoredItem.id)
+        #expect(controller.currentTarget?.set === restoredExpectedNext)
+    }
+
     @Test func advancingWithinExerciseScrollsToNextSet() {
         let previous = WorkoutScrollTarget(exerciseID: "squat", setID: 2, isWarmup: false)
         let current = WorkoutScrollTarget(exerciseID: "squat", setID: 3, isWarmup: false)
