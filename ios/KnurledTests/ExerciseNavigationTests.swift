@@ -136,8 +136,9 @@ import Foundation
         #expect(presentation.showsAmrapMarker)
     }
 
-    // Focusing an already-finished exercise does nothing — there's nothing left to do there.
-    @Test func focusingCompletedExerciseIsNoOp() async throws {
+    // Switching back to a finished exercise re-focuses it (e.g. to fix a log or add another set),
+    // landing the cursor on its last set so the card and Live Activity follow.
+    @Test func focusingCompletedExerciseSwitchesBackToIt() async throws {
         let (dir, workout) = try await makeWorkout()
         defer { try? FileManager.default.removeItem(at: dir) }
         let controller = WorkoutLiveController.shared
@@ -145,14 +146,19 @@ import Foundation
         defer { controller.end() }
 
         let first = try #require(workout.items.first)
+        let second = try #require(workout.items.dropFirst().first)
         for set in first.warmups { set.logged = true }
         for set in first.sets { set.logged = true }
         #expect(first.isComplete)
 
-        let before = controller.currentTarget?.item.id
+        // Move the cursor off the finished exercise, then switch back to it.
+        controller.focus(second)
+        #expect(controller.currentTarget?.item.id == second.id)
+
         controller.focus(first)
-        #expect(controller.focusedItemID == nil)
-        #expect(controller.currentTarget?.item.id == before)
+        #expect(controller.focusedItemID == first.id)
+        #expect(controller.isCurrentExercise(first))
+        #expect(controller.currentTarget?.set === first.sets.last)
     }
 
     @Test func movingExerciseChangesCursorOrder() async throws {

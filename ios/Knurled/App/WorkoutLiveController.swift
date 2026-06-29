@@ -1,6 +1,7 @@
 import ActivityKit
 import Foundation
 import Observation
+import UIKit
 
 struct WorkoutScrollTarget: Hashable {
     let exerciseID: String
@@ -69,6 +70,7 @@ final class WorkoutLiveController {
     private var restTimersEnabled = true
     private var tickTask: Task<Void, Never>?
     private var draftSaveTask: Task<Void, Never>?
+    private var persistTask: Task<Void, Never>?
     private var activity: ActivityHandle?
 
     private init() {}
@@ -144,10 +146,14 @@ final class WorkoutLiveController {
         return nil
     }
 
+    /// Resolve the cursor's preferred set. The target may already be logged when the user has
+    /// switched *back* to a finished exercise, so completion isn't a barrier here — the cursor is
+    /// always repointed at an unlogged set the moment any set is logged, so a logged target only
+    /// ever survives a deliberate revisit. Bypassed warm-ups are never a valid target.
     private func resolve(_ target: TargetRef) -> (item: LiveItem, set: LiveSet)? {
         guard let item = workout?.items.first(where: { $0.id == target.itemID }) else { return nil }
         for set in item.warmups + item.sets
-            where ObjectIdentifier(set) == target.setID && !set.logged && !set.bypassed {
+            where ObjectIdentifier(set) == target.setID && !set.bypassed {
             return (item, set)
         }
         return nil
@@ -181,6 +187,7 @@ final class WorkoutLiveController {
         self.restTimersEnabled = restTimersEnabled
         if let draft { restoreCursor(from: draft, in: workout) }
         syncAmrap()
+        RestNotifier.requestAuthorization()
         startActivity()
         startDraftAutosave()
     }
@@ -199,6 +206,8 @@ final class WorkoutLiveController {
         stopRest()
         draftSaveTask?.cancel()
         draftSaveTask = nil
+        persistTask?.cancel()
+        persistTask = nil
         workout = nil
         focusedItemID = nil
         preferredTarget = nil
@@ -208,15 +217,33 @@ final class WorkoutLiveController {
 
     // MARK: - Draft persistence
 
-    /// Snapshots the live workout (including the cursor) and writes it to the crash-safe draft
-    /// file. Cheap enough to call on every meaningful mutation; the 30s ticker covers idle gaps.
+    /// Coalesce frequent mutations — stepper taps, reps-wheel scrubs, RPE nudges — into a single
+    /// save shortly after the user stops. The write encodes the whole rendered session and lands
+    /// atomically on disk; doing that synchronously on every change stalled the main actor and
+    /// made the Live Activity and in-app numbers feel laggy. Durability backstops: the 30s
+    /// autosave, the scene-background flush, and the flush when the workout screen is dismissed.
     func persistDraft() {
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            self?.persistDraftNow()
+        }
+    }
+
+    /// Snapshot and write the draft immediately, skipping the debounce — used when the app is
+    /// backgrounded or the workout screen is dismissed and the latest state must hit disk now.
+    func persistDraftNow() {
+        persistTask?.cancel()
+        persistTask = nil
         guard let draft = snapshot() else { return }
         DraftStore.shared.save(draft)
     }
 
     /// Drops the saved draft and ends the session (explicit discard, or after a finished workout).
     func discard() {
+        persistTask?.cancel()
+        persistTask = nil
         DraftStore.shared.clear()
         end()
     }
@@ -416,6 +443,7 @@ final class WorkoutLiveController {
         guard let restEndDate else { return }
         now = .now
         self.restEndDate = max(now.addingTimeInterval(1), restEndDate.addingTimeInterval(TimeInterval(seconds)))
+        scheduleRestNotification()
         updateActivity()
     }
 
@@ -440,10 +468,12 @@ final class WorkoutLiveController {
         persistDraft()
     }
 
-    /// Move the cursor onto `item` because the user tapped it (e.g. its equipment is free now).
-    /// The current set becomes its first unlogged set; if it's already done this is a no-op.
+    /// Move the cursor onto `item` because the user tapped it (e.g. its equipment is free now, or
+    /// they're switching back to an earlier exercise). The current set becomes its first unlogged
+    /// set; for an already-finished exercise it lands on the last set so the exercise becomes
+    /// current again — ready to undo, tweak, or add another set.
     func focus(_ item: LiveItem) {
-        guard let set = resumeSet(in: item) else { return }
+        guard let set = resumeSet(in: item) ?? item.sets.last ?? item.warmups.last else { return }
         focusedItemID = item.id
         preferredTarget = ref(for: item, set: set)
         cursorAtEnd = false
@@ -528,6 +558,7 @@ final class WorkoutLiveController {
         }
         now = .now
         restEndDate = now.addingTimeInterval(TimeInterval(max(1, seconds)))
+        scheduleRestNotification()
         startTicker()
         updateActivity()
     }
@@ -536,6 +567,16 @@ final class WorkoutLiveController {
         tickTask?.cancel()
         tickTask = nil
         restEndDate = nil
+        RestNotifier.cancel()
+    }
+
+    /// Mirror the rest countdown to a local notification so the timer ending still buzzes when
+    /// Knurled is backgrounded and only the Live Activity is visible. The notification is keyed to
+    /// the live `restEndDate`, so it tracks "+30s" / "−15s" adjustments and any restart.
+    private func scheduleRestNotification() {
+        guard let restEndDate else { return }
+        let nextUp = currentTarget?.item.item.display.title ?? ""
+        RestNotifier.schedule(at: restEndDate, nextUp: nextUp)
     }
 
     private func startTicker() {
@@ -547,6 +588,9 @@ final class WorkoutLiveController {
                 self.now = .now
                 if self.remaining <= 0 {
                     self.stopRest()
+                    // The scheduled notification covers the backgrounded case; this buzzes the
+                    // device when the app is foregrounded and the screen is on.
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     self.updateActivity()
                 }
             }
@@ -595,6 +639,9 @@ final class WorkoutLiveController {
             attributes: attributes,
             content: .init(state: state, staleDate: staleDate())
         ))
+        // Keep the screen awake while a workout's Live Activity is live so the cockpit stays
+        // visible mid-set without the display dimming. iOS ignores this while backgrounded.
+        UIApplication.shared.isIdleTimerDisabled = (activity != nil)
     }
 
     private func updateActivity() {
@@ -604,6 +651,7 @@ final class WorkoutLiveController {
     }
 
     private func endActivity() {
+        UIApplication.shared.isIdleTimerDisabled = false
         guard let current = activity else { return }
         activity = nil
         Task { await current.end(dismissalPolicy: .immediate) }

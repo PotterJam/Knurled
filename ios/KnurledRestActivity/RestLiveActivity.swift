@@ -139,6 +139,8 @@ private struct LockScreenView: View {
                 .foregroundStyle(state.needsLoad ? .orange : .primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                // Snap to the new value on a stepper tap instead of the default slow cross-fade.
+                .contentTransition(.identity)
 
             readyControls
         }
@@ -200,6 +202,7 @@ private struct LockScreenView: View {
                 Text(state.rpeText ?? "RPE")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(state.rpe == nil ? .secondary : .primary)
+                    .contentTransition(.identity)
                 Spacer()
                 Button(intent: RpeStepIntent(delta: -0.5)) {
                     Image(systemName: "minus")
@@ -285,6 +288,7 @@ private struct AmrapControls: View {
             Text("\(reps)")
                 .font(.title3.monospacedDigit().weight(.semibold))
                 .frame(minWidth: 34)
+                .contentTransition(.identity)
             Button(intent: AmrapStepIntent(delta: 1)) {
                 Image(systemName: "plus")
             }

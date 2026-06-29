@@ -14,7 +14,6 @@ struct RestTimerBar: View {
                     .foregroundStyle(.secondary)
                 Text(controller.remainingText)
                     .font(.title3.monospacedDigit().weight(.semibold))
-                    .contentTransition(.numericText())
                     .onTapGesture { onAdjust?() }
                 Spacer()
                 HStack(spacing: 10) {
