@@ -101,11 +101,11 @@ struct LiveExerciseCard: View {
                     .allowsHitTesting(false)
             }
         }
-        // Tapping an unfocused, unfinished card jumps the cursor onto it — the way to do exercises
-        // out of order (e.g. when the equipment you wanted is busy) now that there's no skip.
+        // Tapping an unfocused card jumps the cursor onto it — the way to do exercises out of
+        // order (e.g. busy equipment) or to switch back to a finished one to fix or add a set.
         .contentShape(Rectangle())
         .onTapGesture {
-            if !isCurrentExercise && !live.isComplete { controller.focus(live) }
+            if !isCurrentExercise { controller.focus(live) }
         }
         .sheet(isPresented: $showChange) {
             ChangeExerciseSheet(live: live) {

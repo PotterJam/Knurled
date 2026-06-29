@@ -205,7 +205,8 @@ struct ActiveWorkoutView: View {
             withAnimation(.snappy) {
                 proxy.scrollTo(WorkoutScrollDestination.exercise(item.id), anchor: .top)
             }
-            if !done { controller.focus(item) }
+            // Focus whatever the user taps — including a finished exercise they're going back to.
+            controller.focus(item)
         } label: {
             HStack(spacing: 4) {
                 if done {

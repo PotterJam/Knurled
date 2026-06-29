@@ -145,10 +145,14 @@ final class WorkoutLiveController {
         return nil
     }
 
+    /// Resolve the cursor's preferred set. The target may already be logged when the user has
+    /// switched *back* to a finished exercise, so completion isn't a barrier here — the cursor is
+    /// always repointed at an unlogged set the moment any set is logged, so a logged target only
+    /// ever survives a deliberate revisit. Bypassed warm-ups are never a valid target.
     private func resolve(_ target: TargetRef) -> (item: LiveItem, set: LiveSet)? {
         guard let item = workout?.items.first(where: { $0.id == target.itemID }) else { return nil }
         for set in item.warmups + item.sets
-            where ObjectIdentifier(set) == target.setID && !set.logged && !set.bypassed {
+            where ObjectIdentifier(set) == target.setID && !set.bypassed {
             return (item, set)
         }
         return nil
@@ -443,10 +447,12 @@ final class WorkoutLiveController {
         persistDraft()
     }
 
-    /// Move the cursor onto `item` because the user tapped it (e.g. its equipment is free now).
-    /// The current set becomes its first unlogged set; if it's already done this is a no-op.
+    /// Move the cursor onto `item` because the user tapped it (e.g. its equipment is free now, or
+    /// they're switching back to an earlier exercise). The current set becomes its first unlogged
+    /// set; for an already-finished exercise it lands on the last set so the exercise becomes
+    /// current again — ready to undo, tweak, or add another set.
     func focus(_ item: LiveItem) {
-        guard let set = resumeSet(in: item) else { return }
+        guard let set = resumeSet(in: item) ?? item.sets.last ?? item.warmups.last else { return }
         focusedItemID = item.id
         preferredTarget = ref(for: item, set: set)
         cursorAtEnd = false
