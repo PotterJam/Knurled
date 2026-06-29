@@ -51,10 +51,8 @@ function passingInput(session, date) {
     type: "execution_input",
     schema_version: session.schema_version,
     rendered_session_hash: session.rendered_session_hash,
-    status: "complete",
     started_at: timestamp(date, 10),
     completed_at: timestamp(date, 11),
-    saved_at: null,
     inputs: session.items.map(inputForItem),
   };
 }

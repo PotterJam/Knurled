@@ -49,7 +49,6 @@ import Foundation
 
         let input = ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T10:00:00Z",
             completedAt: "2026-06-24T11:00:00Z",
             inputs: session.items.map { item in
@@ -78,16 +77,15 @@ import Foundation
         #expect(outcome.effects.contains { $0.op == "reset_load" && $0.to == "70kg" })
     }
 
-    @Test func partialSubmitWritesResumeMetadataWithoutProgressingState() async throws {
+    @Test func shorterWorkoutIsFinalizedWithoutProgressingIncompleteExercise() async throws {
         let (dir, repo, app, session, _) = try await Self.fixture()
         defer { try? FileManager.default.removeItem(at: dir) }
         let first = try #require(session.items.first)
         let beforeLoad = repo.state?.lanes["squat.t1"]?.load
         let input = ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
-            status: ExecutionStatus.partial,
             startedAt: "2026-06-24T10:00:00Z",
-            savedAt: "2026-06-24T10:45:00Z",
+            completedAt: "2026-06-24T10:45:00Z",
             inputs: [
                 ItemInput(
                     itemId: first.itemId,
@@ -108,7 +106,7 @@ import Foundation
         )
 
         #expect(outcome.validation.isValid)
-        #expect(outcome.record.status == ExecutionStatus.partial)
+        #expect(outcome.record.completedAt == "2026-06-24T10:45:00Z")
         #expect(outcome.record.sessionId == session.sessionId)
         #expect(outcome.record.lifts.first?.itemId == first.itemId)
         #expect(repo.state?.lanes["squat.t1"]?.load == beforeLoad)
@@ -129,7 +127,6 @@ import Foundation
         let next = try #require(repo.nextWorkout)
         let second = ExecutionInput(
             renderedSessionHash: next.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T14:00:00Z",
             completedAt: "2026-06-24T15:00:00Z",
             inputs: next.items.map(Self.passingInput)
@@ -202,7 +199,6 @@ import Foundation
         let session = try #require(repo.nextWorkout)
         let input = ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T10:00:00Z",
             completedAt: "2026-06-24T11:00:00Z",
             inputs: session.items.map(passingInput)

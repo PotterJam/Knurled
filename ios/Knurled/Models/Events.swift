@@ -56,10 +56,8 @@ struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
     var revision: Int
     var kind: RecordKind
     var date: String
-    var status: String?
     var sessionId: String?
     var startedAt: String?
-    var savedAt: String?
     var completedAt: String?
     var updatedAt: String?
     var program: String?
@@ -67,7 +65,7 @@ struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
     var lifts: [LiftRecord]
 
     enum CodingKeys: String, CodingKey {
-        case id, revision, kind, date, status, sessionId, startedAt, savedAt, completedAt
+        case id, revision, kind, date, sessionId, startedAt, completedAt
         case updatedAt, program, note, lifts
     }
 
@@ -76,10 +74,8 @@ struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
         revision: Int = 1,
         kind: RecordKind = .workout,
         date: String,
-        status: String? = nil,
         sessionId: String? = nil,
         startedAt: String? = nil,
-        savedAt: String? = nil,
         completedAt: String? = nil,
         updatedAt: String? = nil,
         program: String? = nil,
@@ -90,10 +86,8 @@ struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
         self.revision = revision
         self.kind = kind
         self.date = date
-        self.status = status
         self.sessionId = sessionId
         self.startedAt = startedAt
-        self.savedAt = savedAt
         self.completedAt = completedAt
         self.updatedAt = updatedAt
         self.program = program
@@ -107,10 +101,8 @@ struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
         revision = try container.decode(Int.self, forKey: .revision)
         kind = try container.decode(RecordKind.self, forKey: .kind)
         date = try container.decode(String.self, forKey: .date)
-        status = try container.decodeIfPresent(String.self, forKey: .status)
         sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
         startedAt = try container.decodeIfPresent(String.self, forKey: .startedAt)
-        savedAt = try container.decodeIfPresent(String.self, forKey: .savedAt)
         completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
         updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
         program = try container.decodeIfPresent(String.self, forKey: .program)
@@ -124,10 +116,8 @@ struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
         try container.encode(revision, forKey: .revision)
         try container.encode(kind, forKey: .kind)
         try container.encode(date, forKey: .date)
-        try container.encodeIfPresent(status, forKey: .status)
         try container.encodeIfPresent(sessionId, forKey: .sessionId)
         try container.encodeIfPresent(startedAt, forKey: .startedAt)
-        try container.encodeIfPresent(savedAt, forKey: .savedAt)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
         try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(program, forKey: .program)

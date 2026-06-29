@@ -461,9 +461,7 @@ Append-only canonical training events.
 Includes:
 
 ```text
-completed sessions
-partial sessions
-continued sessions
+finished workouts (containing exactly the work performed)
 corrections
 skips
 explicit state adjustments
@@ -1146,58 +1144,8 @@ Completed session event:
 }
 ```
 
-Partial session event:
-
-```json
-{
-  "id": "evt_20260624_1045_partial",
-  "type": "session_saved",
-  "status": "partial",
-  "program": "gzcl",
-  "session_id": "a1",
-  "plan_hash": "sha256:abc",
-  "rendered_session_hash": "sha256:def",
-  "started_at": "2026-06-24T10:10:00+01:00",
-  "saved_at": "2026-06-24T10:45:00+01:00",
-  "results": [
-    {
-      "slot_id": "a1.t1",
-      "progression_lane": "squat.t1",
-      "exercise": "squat",
-      "actual": [
-        { "set": 1, "load": "82.5kg", "reps": 5 },
-        { "set": 2, "load": "82.5kg", "reps": 5 },
-        { "set": 3, "load": "82.5kg", "reps": 7 }
-      ],
-      "outcome": "pass"
-    }
-  ]
-}
-```
-
-Continuation event:
-
-```json
-{
-  "id": "evt_20260624_1320_continue",
-  "type": "session_continued",
-  "continues_event_id": "evt_20260624_1045_partial",
-  "session_id": "a1",
-  "results_added": [
-    {
-      "slot_id": "a1.t2",
-      "progression_lane": "bench.t2",
-      "exercise": "bench",
-      "actual": [
-        { "set": 1, "load": "45kg", "reps": 10 },
-        { "set": 2, "load": "45kg", "reps": 10 },
-        { "set": 3, "load": "45kg", "reps": 8 }
-      ],
-      "outcome": "fail"
-    }
-  ]
-}
-```
+Finishing early produces the same workout record shape. It contains only the sets performed;
+there is no committed in-progress status or continuation record.
 
 Correction event:
 
@@ -1274,10 +1222,7 @@ Example:
   "sessions": {
     "a1_20260624": {
       "status": "complete",
-      "source_events": [
-        "evt_20260624_1045_partial",
-        "evt_20260624_1320_continue"
-      ]
+      "source_events": ["evt_20260624_1102_complete"]
     }
   }
 }
@@ -1286,9 +1231,9 @@ Example:
 Rules:
 
 ```text
-Partial sessions advance the cursor to the next workout but stay resumable from history.
-Completed sessions advance the cursor.
-Continuing a saved partial does not advance the cursor again (the save already did).
+Finished workouts advance the cursor, even when only some prescribed work was performed.
+Only fully completed exercises apply progression effects.
+In-progress workouts exist only as local drafts until Finish is pressed.
 Correction events rebuild the projected session result.
 State adjustment events update lanes/cursor explicitly.
 Generated state must match replayed logs.
@@ -1432,8 +1377,6 @@ The same reducer path must be used for:
 
 ```text
 real workout submissions
-partial saves
-continuations
 corrections
 skips
 manual state adjustments
@@ -1548,7 +1491,7 @@ Meaning:
 ```text
 Start from initial state.
 Apply logs in order.
-Merge partial/continued/corrected sessions.
+Treat every finished workout as one record.
 Rebuild state projection.
 Optionally write state/current.json.
 ```
@@ -1689,8 +1632,6 @@ Example commit messages:
 
 ```text
 Complete GZCLP A1 - 2026-06-24
-Save partial GZCLP A1 - 2026-06-24
-Continue GZCLP A1 - 2026-06-24
 Correct GZCLP A1 - 2026-06-24
 Skip GZCLP A2 - push forward
 Enable running-focus patch
@@ -2293,15 +2234,13 @@ When reducer processes final week
 Then training maxes increase according to template
 ```
 
-### 37.7 Partial + continued session
+### 37.7 Shorter finished workout
 
 ```text
-Given A1 saved partial with squat only
+Given A1 is finished with squat only
 Then cursor advances to the next workout (B1)
-And A1 stays resumable from history
-When continued later with bench and row
-Then projected session is complete
-And cursor does not advance again
+And A1 appears as an ordinary editable workout in history
+And only fully completed exercises apply progression
 ```
 
 ### 37.8 Correction event

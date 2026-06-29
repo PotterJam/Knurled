@@ -23,7 +23,7 @@ extension AppModel {
         if !outcome.changedFiles.isEmpty {
             await pushIfConnected(
                 repo: repo,
-                message: Self.commitMessage(session: session, mode: mode, status: input.status, date: date),
+                message: Self.commitMessage(session: session, mode: mode, date: date),
                 files: outcome.changedFiles
             )
         }
@@ -34,10 +34,8 @@ extension AppModel {
     static func commitMessage(
         session: RenderedSession,
         mode: SubmitMode,
-        status: String = ExecutionStatus.complete,
         date: String
     ) -> String {
-        let verb = status == ExecutionStatus.partial ? "Save progress" : mode.commitVerb
-        return "\(verb) \(session.sessionId.uppercased()) - \(date)"
+        "\(mode.commitVerb) \(session.sessionId.uppercased()) - \(date)"
     }
 }

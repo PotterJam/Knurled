@@ -16,12 +16,10 @@
 //! The record is always built from what was performed, regardless of mode. The
 //! engine never reads it back.
 //!
-//! Finishing is not all-or-nothing. Every submit — full or `partial` ("save
-//! progress") — advances the cursor to the next workout, and progression is
-//! decided per exercise: a lift only moves when all of its working sets (warmups
-//! excluded) were done. So an unfinished session still progresses the lifts you
-//! completed and leaves the rest where they were. A saved partial stays resumable
-//! from history by its session id ([`crate::render_session`] ignores the cursor).
+//! Finishing is not all-or-nothing. Every submit advances the cursor to the next
+//! workout, and progression is decided per exercise: a lift only moves when all
+//! of its working sets (warmups excluded) were done. A shorter workout still
+//! progresses the lifts completed and leaves the rest where they were.
 
 use serde::{Deserialize, Serialize};
 
@@ -82,12 +80,9 @@ pub fn submit_session(
         });
     }
 
-    // A `partial` submit is not special-cased here: it advances the cursor and
-    // runs progression like any submit. Progression is gated per exercise (an
-    // exercise only moves when all its working sets are done — see `reduce_item`),
-    // so an unfinished session simply progresses the lifts that were completed and
-    // leaves the rest untouched. The saved partial stays resumable from history by
-    // its session id (`render_session` ignores the cursor).
+    // Progression is gated per exercise (an exercise only moves when all its
+    // working sets are done — see `reduce_item`), so a shorter workout progresses
+    // completed lifts and leaves the rest untouched.
     let (mut new_state, effects) = match mode {
         SubmitMode::Advance => {
             let reduced = reduce_input(compiled, state, rendered_session, input)?;
@@ -235,9 +230,7 @@ fn build_training_record(
                 metrics: Default::default(),
                 note: None,
             });
-        } else if let Some(lift) =
-            extra_lift_record(&record_id, item_input, input.status == "partial")
-        {
+        } else if let Some(lift) = extra_lift_record(&record_id, item_input) {
             lifts.push(lift);
         }
     }
@@ -248,21 +241,11 @@ fn build_training_record(
         started_at,
         lifts,
     );
-    if input.status == "partial" {
-        record.status = Some(input.status.clone());
-        record.completed_at = None;
-        record.saved_at = input.saved_at.clone();
-    } else {
-        record.completed_at = input.completed_at.clone();
-    }
+    record.completed_at = input.completed_at.clone();
     record
 }
 
-fn extra_lift_record(
-    record_id: &str,
-    item_input: &ItemInput,
-    include_item_id: bool,
-) -> Option<LiftRecord> {
+fn extra_lift_record(record_id: &str, item_input: &ItemInput) -> Option<LiftRecord> {
     if item_input.sets.is_empty() && item_input.final_set_reps.is_none() {
         return None;
     }
@@ -284,7 +267,7 @@ fn extra_lift_record(
         .collect();
     Some(LiftRecord {
         lift_id: lift_record_id(record_id, &item_input.item_id),
-        item_id: include_item_id.then(|| item_input.item_id.clone()),
+        item_id: Some(item_input.item_id.clone()),
         exercise,
         weight: item_input
             .load
@@ -693,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_save_advances_cursor_without_moving_lanes() {
+    fn shorter_workout_advances_cursor_without_moving_incomplete_lanes() {
         let compiled = gzclp();
         let state = create_initial_state(&compiled);
         let rendered = render_next(&compiled, &state).unwrap();
@@ -702,10 +685,8 @@ mod tests {
             kind: "execution_input".into(),
             schema_version: crate::model::SCHEMA_VERSION.into(),
             rendered_session_hash: rendered.rendered_session_hash.clone(),
-            status: "partial".into(),
             started_at: Some("2026-06-24T10:00:00Z".into()),
-            completed_at: None,
-            saved_at: Some("2026-06-24T10:45:00Z".into()),
+            completed_at: Some("2026-06-24T10:45:00Z".into()),
             inputs: vec![ItemInput {
                 item_id: first_item.item_id.clone(),
                 mode: "per_set_reps".into(),
@@ -741,7 +722,10 @@ mod tests {
         assert_eq!(outcome.new_state.cursor.next_session, "b1");
         assert_eq!(outcome.new_state.lanes, state.lanes);
         assert!(outcome.effects.is_empty());
-        assert_eq!(outcome.record.status.as_deref(), Some("partial"));
+        assert_eq!(
+            outcome.record.completed_at.as_deref(),
+            Some("2026-06-24T10:45:00Z")
+        );
         assert_eq!(outcome.record.session_id.as_deref(), Some("a1"));
         assert_eq!(
             outcome.record.lifts[0].item_id.as_deref(),
@@ -750,7 +734,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_submit_progresses_finished_lifts_and_skips_unfinished_ones() {
+    fn shorter_workout_progresses_finished_lifts_and_skips_unfinished_ones() {
         let compiled = gzclp();
         let state = create_initial_state(&compiled);
         let rendered = render_next(&compiled, &state).unwrap();
@@ -770,11 +754,8 @@ mod tests {
         let t1_load_before = state.lanes[&t1_lane].load.clone();
         let t2_load_before = state.lanes[&t2_lane].load.clone();
 
-        // A "save progress": T1 finished (every set passing), T2 only one set logged.
+        // Finish the workout with T1 complete and only one T2 set logged.
         let mut input = passing_input(&rendered);
-        input.status = "partial".into();
-        input.completed_at = None;
-        input.saved_at = Some("2026-06-24T10:45:00Z".into());
         let t2_input = input
             .inputs
             .iter_mut()
@@ -800,7 +781,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(outcome.validation.status, ValidationStatus::Valid);
-        // Cursor moves on even though the session was not finished.
+        // The finalized workout moves the cursor on.
         assert_ne!(
             outcome.new_state.cursor.next_session,
             state.cursor.next_session

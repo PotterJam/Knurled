@@ -15,19 +15,15 @@ enum HistoryFilter: CaseIterable, Hashable {
 }
 
 struct HistoryItem: Identifiable, Hashable {
-    enum Kind { case workout, program }
+    enum Kind: Hashable { case workout, program }
 
     let id: String
     let title: String
     let detail: String
-    let status: String
-    let statusStyle: StatusChip.Style
+    let context: String?
+    let summary: String
     let kind: Kind
     let record: TrainingRecord
-
-    var canContinue: Bool {
-        record.status == ExecutionStatus.partial && record.sessionId != nil
-    }
 }
 
 enum HistoryBuilder {
@@ -46,13 +42,12 @@ enum HistoryBuilder {
     private static func item(from record: TrainingRecord, activeProgram: String?) -> HistoryItem? {
         let date = WorkoutFormat.relativeDay(fromISO: record.date) ?? record.date
         if !record.lifts.isEmpty {
-            let isPartial = record.status == ExecutionStatus.partial
             return HistoryItem(
                 id: record.id,
-                title: title(for: record, activeProgram: activeProgram),
+                title: workoutTitle(for: record),
                 detail: date,
-                status: isPartial ? "Partial" : "Recorded",
-                statusStyle: isPartial ? .warn : .ok,
+                context: activeProgram.map(programShorthand),
+                summary: workoutSummary(for: record),
                 kind: .workout,
                 record: record
             )
@@ -62,8 +57,8 @@ enum HistoryBuilder {
                 id: record.id,
                 title: programShorthand(program),
                 detail: date,
-                status: "Program",
-                statusStyle: .neutral,
+                context: nil,
+                summary: "Program started",
                 kind: .program,
                 record: record
             )
@@ -71,18 +66,20 @@ enum HistoryBuilder {
         return nil
     }
 
-    private static func title(for record: TrainingRecord, activeProgram: String?) -> String {
-        // Prefer the program shorthand plus the cycle/session (e.g. "GZCLP · A1") over a raw lift
-        // count, which warm-ups and accessories inflate misleadingly.
-        let program = activeProgram.map(programShorthand)
-        let cycle = record.sessionId?.uppercased()
-        let label = [program, cycle].compactMap { $0 }.joined(separator: " · ")
-        if !label.isEmpty { return label }
-
+    private static func workoutTitle(for record: TrainingRecord) -> String {
+        if let session = record.sessionId?.uppercased() { return "\(session) Workout" }
         if record.lifts.count == 1, let lift = record.lifts.first {
             return lift.exercise.replacingOccurrences(of: "_", with: " ").capitalized
         }
-        return "\(record.lifts.count) lifts"
+        return "Workout"
+    }
+
+    private static func workoutSummary(for record: TrainingRecord) -> String {
+        let exerciseCount = record.lifts.count
+        let setCount = record.lifts.reduce(0) { $0 + $1.sets.count }
+        let exercises = "\(exerciseCount) \(exerciseCount == 1 ? "exercise" : "exercises")"
+        let sets = "\(setCount) \(setCount == 1 ? "set" : "sets")"
+        return "\(exercises) · \(sets)"
     }
 
     /// "gzcl.gzclp" → "GZCLP": the last dotted component, upper-cased, as a compact label.
@@ -93,17 +90,58 @@ enum HistoryBuilder {
 
 struct HistoryRow: View {
     let item: HistoryItem
+    let isFirst: Bool
+    let isLast: Bool
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title).font(.headline)
-                Text(item.detail).font(.caption).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: KnurledTheme.Spacing.s) {
+            HistoryTimelineRail(kind: item.kind, isFirst: isFirst, isLast: isLast)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.title).font(.headline)
+                    Spacer()
+                    if let context = item.context {
+                        Text(context)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    }
+                }
+                Text("\(item.detail) · \(item.summary)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            Spacer()
-            StatusChip(text: item.status, style: item.statusStyle)
+            .padding(.vertical, 9)
         }
-        .padding(.vertical, 2)
+        .frame(minHeight: 62)
+    }
+}
+
+private struct HistoryTimelineRail: View {
+    let kind: HistoryItem.Kind
+    let isFirst: Bool
+    let isLast: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            Path { path in
+                let x = proxy.size.width / 2
+                path.move(to: CGPoint(x: x, y: isFirst ? 18 : 0))
+                path.addLine(to: CGPoint(x: x, y: isLast ? 18 : proxy.size.height))
+            }
+            .stroke(.tertiary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+
+            Image(systemName: kind == .workout ? "dumbbell.fill" : "flag.fill")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(kind == .workout ? Color.accentColor : Color.secondary)
+                .frame(width: 24, height: 24)
+                .background(Color(uiColor: .systemBackground), in: Circle())
+                .overlay(Circle().stroke(.tertiary, lineWidth: 1))
+                .position(x: proxy.size.width / 2, y: 18)
+        }
+        .frame(width: 26)
     }
 }
 
@@ -121,7 +159,7 @@ struct HistoryDetailView: View {
     }
 
     private var canAmend: Bool {
-        item.kind == .workout && record.status != ExecutionStatus.partial && record.completedAt != nil
+        item.kind == .workout && record.completedAt != nil
     }
 
     var body: some View {
@@ -134,23 +172,13 @@ struct HistoryDetailView: View {
 
     private var readOnlyBody: some View {
         List {
-            if item.canContinue {
-                Section {
-                    NavigationLink {
-                        ContinueWorkoutView(record: item.record)
-                    } label: {
-                        Label("Continue Workout", systemImage: "play.fill")
-                    }
-                }
-            }
-
             Section {
                 LabeledContent("Date", value: WorkoutFormat.relativeDay(fromISO: record.date) ?? record.date)
                 LabeledContent("Type", value: item.kind == .workout ? "Workout" : "Program")
                 if let sessionId = record.sessionId {
                     LabeledContent("Session", value: sessionId.uppercased())
                 }
-                if let program = record.program {
+                if let program = item.context ?? record.program {
                     LabeledContent("Program", value: program)
                 }
                 if let note = record.note {
@@ -373,59 +401,6 @@ private struct AddMissedSetSheet: View {
                     }
                 }
             }
-        }
-    }
-}
-
-private struct ContinueWorkoutView: View {
-    let record: TrainingRecord
-
-    @Environment(AppModel.self) private var app
-    @State private var phase: Phase = .loading
-
-    private enum Phase {
-        case loading
-        case loaded(RenderedSession)
-        case failed(String)
-    }
-
-    var body: some View {
-        Group {
-            switch phase {
-            case .loading:
-                ProgressView("Loading workout…")
-            case .loaded(let session):
-                if let repo = app.activeRepo {
-                    ActiveWorkoutView(repo: repo, session: session, restoring: record)
-                } else {
-                    ContentUnavailableView("No Repository", systemImage: "folder.badge.questionmark")
-                }
-            case .failed(let message):
-                ContentUnavailableView {
-                    Label("Couldn't continue", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                }
-            }
-        }
-        .task { await load() }
-    }
-
-    private func load() async {
-        guard case .loading = phase else { return }
-        guard let repo = app.activeRepo else {
-            phase = .failed("Connect a repository before continuing a workout.")
-            return
-        }
-        guard let sessionId = record.sessionId else {
-            phase = .failed("This record does not include a session id.")
-            return
-        }
-
-        do {
-            phase = .loaded(try await app.engine.renderSession(dir: repo.url, sessionId: sessionId))
-        } catch {
-            phase = .failed(error.localizedDescription)
         }
     }
 }

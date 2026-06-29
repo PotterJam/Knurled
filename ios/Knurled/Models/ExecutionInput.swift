@@ -4,10 +4,8 @@ struct ExecutionInput: Codable, Sendable, Hashable {
     var type: String = "execution_input"
     var schemaVersion: String = "0.1"
     var renderedSessionHash: String
-    var status: String
     var startedAt: String?
     var completedAt: String?
-    var savedAt: String?
     var inputs: [ItemInput]
 }
 
@@ -76,11 +74,6 @@ struct ActualSet: Codable, Sendable, Hashable, Identifiable {
         try container.encode(reps, forKey: .reps)
         if !metrics.isEmpty { try container.encode(metrics, forKey: .metrics) }
     }
-}
-
-enum ExecutionStatus {
-    static let complete = "complete"
-    static let partial = "partial"
 }
 
 enum InputMode {

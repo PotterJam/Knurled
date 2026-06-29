@@ -236,7 +236,6 @@ private extension GitHubTests {
         let session = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
         let input = ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: startedAt,
             completedAt: completedAt,
             inputs: session.items.map { item in

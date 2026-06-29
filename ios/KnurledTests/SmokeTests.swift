@@ -25,17 +25,16 @@ import Foundation
         #expect(item?.id == "workout-1")
         #expect(item?.kind == .workout)
         #expect(item?.record == record)
-        #expect(item?.title == "A1")
+        #expect(item?.title == "A1 Workout")
     }
 
-    @Test func historyBuilderLabelsContinuablePartial() {
+    @Test func historyBuilderTreatsShortWorkoutAsOrdinaryWorkout() {
         let record = TrainingRecord(
-            id: "partial-1",
+            id: "workout-1",
             date: "2026-06-24",
-            status: ExecutionStatus.partial,
             sessionId: "a1",
             startedAt: "2026-06-24T10:00:00Z",
-            savedAt: "2026-06-24T10:30:00Z",
+            completedAt: "2026-06-24T10:30:00Z",
             lifts: [
                 LiftRecord(liftId: "squat-1", itemId: "a1.t1", exercise: "squat", weight: "80kg", sets: [5]),
             ]
@@ -43,8 +42,9 @@ import Foundation
 
         let item = HistoryBuilder.items(from: [record]).first
 
-        #expect(item?.status == "Partial")
-        #expect(item?.canContinue == true)
+        #expect(item?.title == "A1 Workout")
+        #expect(item?.summary == "1 exercise · 1 set")
+        #expect(item?.kind == .workout)
     }
 
     @Test func programMarkerDecodesWithoutLifts() throws {
@@ -53,6 +53,28 @@ import Foundation
 
         #expect(record.kind == .programMarker)
         #expect(record.lifts.isEmpty)
+    }
+
+    @Test func historyBuilderCarriesProgramContextIntoWorkoutTimeline() {
+        let marker = TrainingRecord(
+            id: "program-1",
+            kind: .programMarker,
+            date: "2026-06-23",
+            program: "gzcl.gzclp"
+        )
+        let workout = TrainingRecord(
+            id: "workout-1",
+            date: "2026-06-24",
+            sessionId: "a1",
+            startedAt: "2026-06-24T10:00:00Z",
+            completedAt: "2026-06-24T11:00:00Z",
+            lifts: [LiftRecord(liftId: "squat-1", exercise: "squat", weight: "80kg", sets: [5])]
+        )
+
+        let workoutItem = HistoryBuilder.items(from: [marker, workout]).first
+
+        #expect(workoutItem?.context == "GZCLP")
+        #expect(workoutItem?.title == "A1 Workout")
     }
 }
 

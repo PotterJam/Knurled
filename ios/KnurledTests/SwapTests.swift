@@ -42,7 +42,6 @@ import Foundation
         }
         let input = ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T10:00:00Z",
             completedAt: "2026-06-24T11:00:00Z",
             inputs: inputs

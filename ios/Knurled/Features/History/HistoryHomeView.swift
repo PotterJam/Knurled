@@ -31,11 +31,18 @@ struct HistoryHomeView: View {
                 description: Text("Recorded workout days will appear here.")
             )
         } else {
-            List(items) { item in
-                NavigationLink {
-                    HistoryDetailView(item: item)
-                } label: {
-                    HistoryRow(item: item)
+            List {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    NavigationLink {
+                        HistoryDetailView(item: item)
+                    } label: {
+                        HistoryRow(
+                            item: item,
+                            isFirst: index == items.startIndex,
+                            isLast: index == items.index(before: items.endIndex)
+                        )
+                    }
+                    .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)

@@ -758,10 +758,8 @@ pub struct ExecutionInput {
     pub kind: String,
     pub schema_version: String,
     pub rendered_session_hash: String,
-    pub status: String,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
-    pub saved_at: Option<String>,
     pub inputs: Vec<ItemInput>,
 }
 

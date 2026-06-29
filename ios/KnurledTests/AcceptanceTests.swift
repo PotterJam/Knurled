@@ -38,7 +38,6 @@ import Foundation
     ) async throws -> ReductionResult {
         let input = ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T10:10:00Z",
             completedAt: "2026-06-24T11:00:00Z",
             inputs: passingInputs(session, override: override)

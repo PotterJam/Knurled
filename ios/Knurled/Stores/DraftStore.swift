@@ -5,7 +5,7 @@ import Observation
 /// a draft captures the *full* live state — including unlogged loads/reps, bypassed warmups,
 /// RPE, and the cursor — so a workout interrupted by a force-quit or a dead battery resumes
 /// exactly where it left off. Drafts are local-only and never written to the repo or log;
-/// "Save Progress" updates the draft, and only Submit/Finish writes a record.
+/// Autosave updates the draft, and only Finish writes a training record.
 struct WorkoutDraft: Codable, Sendable {
     /// Identifies which rendered session this draft belongs to, so it can be matched against
     /// the current `nextWorkout` on launch and discarded as orphaned if the plan has changed.

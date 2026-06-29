@@ -323,9 +323,8 @@ struct ActiveWorkoutView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            // Finishing is allowed as soon as anything is logged — a half-done session submits as a
-            // partial (finished lifts progress, the rest save as-is). Leaving without finishing is
-            // the separate "pause" path that keeps an un-uploaded draft.
+            // Finishing is allowed as soon as anything is logged. The record contains exactly the
+            // work performed; only fully completed exercises progress.
             .disabled(!workout.canSubmit || isSaving)
 
             Menu {

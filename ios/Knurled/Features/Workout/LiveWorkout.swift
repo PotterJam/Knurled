@@ -301,7 +301,7 @@ final class LiveItem: Identifiable {
 
     /// Optional work that was started but not completed still sends its logged sets, so a user
     /// can record extra work without making it part of completion gating.
-    func partialInput() -> ItemInput {
+    func performedInput() -> ItemInput {
         ItemInput(
             itemId: id,
             mode: InputMode.perSetReps,
@@ -359,7 +359,7 @@ final class LiveWorkout: Identifiable {
     init(repo: ActiveRepo, session: RenderedSession, restoring record: TrainingRecord? = nil) {
         self.repoReference = repo
         self.session = session
-        self.startedAt = record?.startedAt ?? record?.savedAt ?? Self.timestamp()
+        self.startedAt = record?.startedAt ?? Self.timestamp()
         let resolvedUnits = repo.plan?.plan.units ?? .kg
         self.units = resolvedUnits
         self.items = session.items.map {
@@ -495,33 +495,21 @@ final class LiveWorkout: Identifiable {
     var completedRequiredCount: Int { requiredItems.filter(\.isComplete).count }
     var allRequiredComplete: Bool { requiredItems.allSatisfy(\.isComplete) }
     var anyLogged: Bool { items.contains(where: \.anyLogged) }
-    var canFinish: Bool { allRequiredComplete }
-    var canSaveProgress: Bool { anyLogged && !allRequiredComplete }
     var canSubmit: Bool { anyLogged }
-    var finishStatus: String {
-        allRequiredComplete ? ExecutionStatus.complete : ExecutionStatus.partial
-    }
 
     func finishInput(timestamp: String) -> ExecutionInput {
-        executionInput(status: finishStatus, timestamp: timestamp)
-    }
-
-    func executionInput(status: String, timestamp: String) -> ExecutionInput {
         // An exercise the user never started is simply omitted (its equipment may have been busy,
-        // or they chose to leave it out) — the same effect skipping used to have. A fully logged
-        // exercise sends its real input; one only partially logged sends just the sets recorded.
-        let isComplete = status == ExecutionStatus.complete
+        // or they chose to leave it out). A fully logged exercise sends its real input; one with
+        // only some sets logged sends exactly the work performed.
         let inputs: [ItemInput] = items.compactMap { item in
-            if isComplete, item.isComplete { return item.itemInput() }
-            if item.anyLogged { return item.partialInput() }
+            if item.isComplete { return item.itemInput() }
+            if item.anyLogged { return item.performedInput() }
             return nil
         }
         return ExecutionInput(
             renderedSessionHash: session.renderedSessionHash,
-            status: status,
             startedAt: startedAt,
-            completedAt: isComplete ? timestamp : nil,
-            savedAt: isComplete ? nil : timestamp,
+            completedAt: timestamp,
             inputs: inputs
         )
     }

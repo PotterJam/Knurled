@@ -44,7 +44,6 @@ import Foundation
     @Test func executionInputRoundTripsThroughSnakeCase() throws {
         let input = ExecutionInput(
             renderedSessionHash: "sha256:abc",
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T10:10:00+01:00",
             inputs: [ItemInput(itemId: "a1.t1", mode: InputMode.amrapFinalSet, finalSetReps: 7)]
         )

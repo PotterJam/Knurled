@@ -9,9 +9,7 @@
 //!
 //! This module is the single owner of the log format. Clients (CLI, workbench,
 //! iOS) serialize and parse through here instead of hand-rolling JSON so the
-//! shape cannot drift between platforms. A saved partial carries minimal resume
-//! metadata (`status`, `session_id`, and per-lift `item_id`) so clients can
-//! reopen it without reintroducing replay-ledger fields.
+//! shape cannot drift between platforms.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -30,8 +28,8 @@ pub const RECORD_FORMAT_VERSION: u32 = 1;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LiftRecord {
     pub lift_id: String,
-    /// Rendered workout item id. Present for saved partials so clients can put
-    /// recorded sets back onto the exact card when continuing later.
+    /// Rendered workout item id. Used to put recorded sets back onto the exact
+    /// card when editing history.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub item_id: Option<String>,
     pub exercise: String,
@@ -94,13 +92,9 @@ pub struct TrainingRecord {
     pub kind: RecordKind,
     pub date: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub saved_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,10 +159,8 @@ impl TrainingRecord {
             revision: 1,
             kind: RecordKind::Workout,
             date: date.into(),
-            status: None,
             session_id: Some(session_id.into()),
             started_at: Some(started_at.clone()),
-            saved_at: None,
             completed_at: Some(started_at),
             updated_at: None,
             program: None,
@@ -185,10 +177,8 @@ impl TrainingRecord {
             revision: 1,
             kind: RecordKind::ProgramMarker,
             date,
-            status: None,
             session_id: None,
             started_at: None,
-            saved_at: None,
             completed_at: None,
             updated_at: None,
             program: Some(program),
@@ -287,18 +277,9 @@ impl LogMonth {
                             record.id
                         )));
                     }
-                    if record.status.as_deref() == Some("partial") {
-                        if record.saved_at.as_deref().is_none_or(str::is_empty) {
-                            return Err(KnurledError::Parse(format!(
-                                "partial workout record {:?} requires saved_at",
-                                record.id
-                            )));
-                        }
-                    } else if record.status.is_some()
-                        || record.completed_at.as_deref().is_none_or(str::is_empty)
-                    {
+                    if record.completed_at.as_deref().is_none_or(str::is_empty) {
                         return Err(KnurledError::Parse(format!(
-                            "completed workout record {:?} requires completed_at and no status",
+                            "workout record {:?} requires completed_at",
                             record.id
                         )));
                     }
@@ -333,13 +314,11 @@ pub fn record_order(left: &TrainingRecord, right: &TrainingRecord) -> std::cmp::
         .started_at
         .as_deref()
         .or(left.completed_at.as_deref())
-        .or(left.saved_at.as_deref())
         .unwrap_or_default();
     let right_time = right
         .started_at
         .as_deref()
         .or(right.completed_at.as_deref())
-        .or(right.saved_at.as_deref())
         .unwrap_or_default();
     left.date
         .cmp(&right.date)
@@ -465,4 +444,5 @@ mod tests {
         let old = r#"{"month":"2026-06","days":[]}"#;
         assert!(LogMonth::parse(old).is_err());
     }
+
 }

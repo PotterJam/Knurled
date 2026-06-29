@@ -425,8 +425,7 @@ pub fn render_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
 }
 
 /// Renders a specific session by id against the current state, independent of where the cursor
-/// currently points. Saved partials store their session id in the record, so the app can
-/// re-render that specific session when the user continues from history.
+/// currently points. History editing uses this to reconstruct the recorded session.
 pub fn render_session(
     compiled: &CompiledPlan,
     state: &StateProjection,
@@ -457,12 +456,6 @@ pub fn validate_execution_input(
         ));
     }
 
-    if input.status != "complete" && input.status != "partial" {
-        errors.push(message(
-            "invalid_execution_status",
-            "ExecutionInput status must be complete or partial",
-        ));
-    }
     if input.started_at.as_deref().is_none_or(str::is_empty) {
         errors.push(message(
             "missing_started_at",
@@ -479,10 +472,10 @@ pub fn validate_execution_input(
             "ExecutionInput started_at must be an ISO-8601 timestamp",
         ));
     }
-    if input.status == "complete" && input.completed_at.as_deref().is_none_or(str::is_empty) {
+    if input.completed_at.as_deref().is_none_or(str::is_empty) {
         errors.push(message(
             "missing_completed_at",
-            "A complete ExecutionInput requires completed_at",
+            "ExecutionInput requires completed_at",
         ));
     }
     if input
@@ -495,38 +488,6 @@ pub fn validate_execution_input(
             "ExecutionInput completed_at must be an ISO-8601 timestamp",
         ));
     }
-    if input.status == "partial" && input.saved_at.as_deref().is_none_or(str::is_empty) {
-        errors.push(message(
-            "missing_saved_at",
-            "A partial ExecutionInput requires saved_at",
-        ));
-    }
-    if input
-        .saved_at
-        .as_deref()
-        .is_some_and(|value| !is_iso_timestamp(value))
-    {
-        errors.push(message(
-            "invalid_saved_at",
-            "ExecutionInput saved_at must be an ISO-8601 timestamp",
-        ));
-    }
-
-    for item in rendered_session.items.iter().filter(|item| {
-        item.execution_contract.required_for_completion && input.status == "complete"
-    }) {
-        if !input
-            .inputs
-            .iter()
-            .any(|candidate| candidate.item_id == item.item_id)
-        {
-            errors.push(message(
-                "missing_required_input",
-                format!("Missing required input for {}", item.item_id),
-            ));
-        }
-    }
-
     ExecutionInputValidation {
         kind: "execution_input_validation".into(),
         schema_version: SCHEMA_VERSION.into(),
@@ -593,8 +554,7 @@ pub fn reduce_input(
 
     apply_effects(&mut new_state, &effects);
     // Advance to the next workout whenever the cursor is still sitting on the session being
-    // submitted. This runs for partial submits too — only the per-exercise effects above are
-    // gated on completion; moving on to the next workout is not.
+    // submitted. Per-exercise progression is gated on completed work; moving on is not.
     if new_state
         .cursor
         .next_session
@@ -797,10 +757,8 @@ pub fn synthetic_execution_input(
         kind: "execution_input".into(),
         schema_version: SCHEMA_VERSION.into(),
         rendered_session_hash: rendered_session.rendered_session_hash.clone(),
-        status: "complete".into(),
         started_at: Some(format!("2026-06-{day:02}T10:00:00+01:00")),
         completed_at: Some(format!("2026-06-{day:02}T11:00:00+01:00")),
-        saved_at: None,
         inputs,
     }
 }
@@ -1886,7 +1844,7 @@ pub(crate) fn reduce_item(
     let actual = actual_sets_for(item, input)?;
     // A lift only progresses when all of its prescribed working sets (warmups are
     // separate) were performed. An exercise left unfinished is recorded but moves
-    // nothing — so a partial session still progresses the lifts that were done.
+    // nothing — so a shorter finished workout still progresses the lifts that were done.
     let all_working_sets_done = item
         .prescription
         .sets

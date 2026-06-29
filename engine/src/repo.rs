@@ -321,10 +321,7 @@ pub fn amend_training_record(
                 request.record_id
             ))
         })?;
-    if record.kind != RecordKind::Workout
-        || record.status.as_deref() == Some("partial")
-        || record.completed_at.is_none()
-    {
+    if record.kind != RecordKind::Workout || record.completed_at.is_none() {
         return Err(KnurledError::InvalidExecutionInput(
             "only completed workouts can be amended".into(),
         ));
@@ -513,15 +510,6 @@ pub fn merge_training_records(
                 merged.insert(record.id.clone(), record);
             }
             Some(existing) if existing == &record => {}
-            Some(existing)
-                if existing.status.as_deref() == Some("partial")
-                    && record.status.as_deref() != Some("partial") =>
-            {
-                merged.insert(record.id.clone(), record);
-            }
-            Some(existing)
-                if existing.status.as_deref() != Some("partial")
-                    && record.status.as_deref() == Some("partial") => {}
             Some(existing) if existing.revision != record.revision => {
                 if record.revision > existing.revision {
                     merged.insert(record.id.clone(), record);
@@ -579,52 +567,6 @@ pub fn merge_record_repos(
     Ok(files.into_keys().collect())
 }
 
-/// Remove any saved partial records for `session_id`, regardless of date.
-/// A partial only ever represents the current in-progress attempt at a session,
-/// so completing that session obsoletes it. Without this, finishing a session
-/// fresh rather than resuming the same attempt leaves
-/// the old partial behind as a resumable "Continue" entry forever. Returns the
-/// repo-relative paths changed by cleanup.
-fn clear_partials_for_session(
-    repo_path: impl AsRef<Path>,
-    session_id: &str,
-) -> Result<Vec<String>> {
-    let root = repo_path.as_ref();
-    let logs_dir = root.join("logs");
-    if !logs_dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut files = Vec::new();
-    collect_files(&logs_dir, &mut files)?;
-
-    let mut changed = Vec::new();
-    for path in files.into_iter().filter(|path| {
-        path.extension()
-            .is_some_and(|extension| extension == "json")
-    }) {
-        let text = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
-        let mut month = LogMonth::parse(&text)?;
-        let before = month.records.len();
-        month.records.retain(|record| {
-            !(record.status.as_deref() == Some("partial")
-                && record
-                    .session_id
-                    .as_deref()
-                    .is_some_and(|id| id.eq_ignore_ascii_case(session_id)))
-        });
-        let dropped = before - month.records.len();
-        if dropped > 0 {
-            fs::write(&path, month.to_pretty_json()?).map_err(|source| io_error(&path, source))?;
-            let relative = path.strip_prefix(root).map_err(|_| {
-                KnurledError::Parse(format!("record path {} escaped repository", path.display()))
-            })?;
-            changed.push(relative.to_string_lossy().replace('\\', "/"));
-        }
-    }
-    changed.sort();
-    Ok(changed)
-}
-
 /// Submit a finished session against the next workout: advance `state` per
 /// `mode` and persist its training record. On invalid input nothing is
 /// written; the returned outcome carries the validation errors.
@@ -663,14 +605,12 @@ fn persist_rendered_submit(
     mode: SubmitMode,
     date: &str,
 ) -> Result<SubmitOutcome> {
-    if input.status == "complete"
-        && let Some(started_at) = input.started_at.as_deref()
-    {
+    if let Some(started_at) = input.started_at.as_deref() {
         let record_id =
             crate::record::workout_record_id(&rendered.rendered_session_hash, started_at);
         if let Some(existing) = read_records(root)?
             .into_iter()
-            .find(|record| record.id == record_id && record.status.as_deref() != Some("partial"))
+            .find(|record| record.id == record_id)
         {
             return Ok(SubmitOutcome {
                 validation: validate_execution_input(rendered, input),
@@ -689,13 +629,6 @@ fn persist_rendered_submit(
             active_program_relative_path(root, "state/current.json")?,
             record_path,
         ];
-        if input.status != "partial" {
-            for path in clear_partials_for_session(root, &rendered.session_id)? {
-                if !outcome.changed_files.contains(&path) {
-                    outcome.changed_files.push(path);
-                }
-            }
-        }
     }
     Ok(outcome)
 }

@@ -29,7 +29,6 @@ import Foundation
 
         let input = ExecutionInput(
             renderedSessionHash: rendered.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T10:10:00+01:00",
             completedAt: "2026-06-24T11:00:00+01:00",
             inputs: rendered.items.map(Self.passingInput)
@@ -52,7 +51,6 @@ import Foundation
         let rendered = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
         let input = ExecutionInput(
             renderedSessionHash: rendered.renderedSessionHash,
-            status: ExecutionStatus.complete,
             startedAt: "2026-06-24T10:10:00+01:00",
             completedAt: "2026-06-24T11:00:00+01:00",
             inputs: rendered.items.map(Self.passingInput)

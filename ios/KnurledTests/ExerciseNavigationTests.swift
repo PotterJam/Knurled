@@ -252,12 +252,12 @@ import Foundation
 
         #expect(extraInput.performedExercise == "landmine_press")
         #expect(extraInput.sets.map(\.reps) == [12])
-        #expect(input.status == ExecutionStatus.partial)
+        #expect(input.completedAt == "2026-06-24T11:00:00Z")
     }
 
-    // An exercise the user never started (its equipment was busy, say) is omitted from the inputs
-    // and, if it's required, keeps the finish a partial — what skipping used to guarantee.
-    @Test func untouchedRequiredExerciseIsOmittedAndStaysPartial() async throws {
+    // An exercise the user never started (its equipment was busy, say) is omitted from the
+    // finalized workout — what skipping used to guarantee.
+    @Test func untouchedRequiredExerciseIsOmittedFromFinalizedWorkout() async throws {
         let (dir, workout) = try await makeWorkout()
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -269,16 +269,13 @@ import Foundation
         #expect(!untouched.isComplete)
         #expect(!workout.allRequiredComplete)
         #expect(workout.canSubmit)
-        #expect(workout.canSaveProgress)
-        #expect(workout.finishStatus == ExecutionStatus.partial)
 
         let input = workout.finishInput(timestamp: "2026-06-24T11:00:00Z")
-        #expect(input.status == ExecutionStatus.partial)
+        #expect(input.completedAt == "2026-06-24T11:00:00Z")
         #expect(!input.inputs.contains { $0.itemId == untouched.id })
     }
 
-    // A partially logged exercise sends only the sets actually recorded, so an in-progress
-    // exercise isn't dropped when the equipment frees up later or the workout is finished early.
+    // A partly logged exercise sends only the sets actually recorded.
     @Test func partiallyLoggedExercisePreservesLoggedSets() async throws {
         let (dir, workout) = try await makeWorkout()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -289,8 +286,7 @@ import Foundation
         let input = workout.finishInput(timestamp: "2026-06-24T11:00:00Z")
         let itemInput = try #require(input.inputs.first { $0.itemId == item.id })
         #expect(workout.canSubmit)
-        #expect(workout.canSaveProgress)
-        #expect(input.status == ExecutionStatus.partial)
+        #expect(input.completedAt == "2026-06-24T11:00:00Z")
         #expect(itemInput.sets.map(\.set) == [item.sets[0].id])
     }
 
@@ -314,17 +310,16 @@ import Foundation
         #expect(actual.metrics["rpe"] == "8.5")
     }
 
-    @Test func savedPartialRecordRestoresLoggedSets() async throws {
+    @Test func workoutRecordRestoresLoggedSetsForEditing() async throws {
         let (dir, workout) = try await makeWorkout()
         defer { try? FileManager.default.removeItem(at: dir) }
         let source = try #require(workout.requiredItems.first)
         let record = TrainingRecord(
-            id: "partial-1",
+            id: "workout-1",
             date: "2026-06-24",
-            status: ExecutionStatus.partial,
             sessionId: workout.session.sessionId,
             startedAt: "2026-06-24T10:00:00Z",
-            savedAt: "2026-06-24T10:45:00Z",
+            completedAt: "2026-06-24T10:45:00Z",
             lifts: [
                 LiftRecord(
                     liftId: "source-1",
@@ -347,7 +342,6 @@ import Foundation
         #expect(restoredItem.sets[1].reps == 4)
         #expect(!restoredItem.sets[2].logged)
         #expect(restored.canSubmit)
-        #expect(restored.canSaveProgress)
     }
 
     @Test func bypassedWarmupsDisappearAfterLaterWarmupIsDone() async throws {

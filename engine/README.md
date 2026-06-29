@@ -20,7 +20,7 @@ Implemented in this first pass:
 - GZCLP T1/T2/T3 rendering and reducer coverage.
 - 5/3/1 week rendering and week advancement.
 - Starting Strength phases 1-3 as versioned built-in program presets.
-- Runtime swap metadata, adjusted-today semantics, patch exercise replacement, state adjustment events, partial/continuation replay, and generated-file backtest checks.
+- Runtime swap metadata, adjusted-today semantics, patch exercise replacement, state adjustment events, finalized shorter workouts, and generated-file backtest checks.
 
 The core rule is that generated `state/` and `build/` files are reproducible from canonical files.
 

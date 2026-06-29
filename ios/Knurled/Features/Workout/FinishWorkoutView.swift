@@ -18,10 +18,6 @@ struct FinishWorkoutView: View {
     @State private var timestamp = LiveWorkout.timestamp()
     @State private var mode: SubmitMode = .advance
 
-    private var isComplete: Bool {
-        workout.finishStatus == ExecutionStatus.complete
-    }
-
     var body: some View {
         NavigationStack {
             Group {
@@ -46,43 +42,31 @@ struct FinishWorkoutView: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .navigationTitle(navigationTitle)
+            .navigationTitle("Finish \(workout.session.displayName)")
             .task { await compute() }
         }
-    }
-
-    private var navigationTitle: String {
-        isComplete ? "\(workout.session.displayName) Complete" : "Finish \(workout.session.displayName)"
-    }
-
-    private var submitTitle: String {
-        isComplete ? "Submit Workout" : "Finish Workout"
     }
 
     private func previewContent(_ outcome: ReductionResult) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: KnurledTheme.Spacing.l) {
-                if isComplete {
-                    Picker("Submit mode", selection: $mode) {
-                        ForEach(SubmitMode.allCases, id: \.self) { option in
-                            Text(option.title).tag(option)
-                        }
+                Picker("Submit mode", selection: $mode) {
+                    ForEach(SubmitMode.allCases, id: \.self) { option in
+                        Text(option.title).tag(option)
                     }
-                    .pickerStyle(.segmented)
-
-                    Text(mode.subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Finished lifts still progress — unfinished ones are saved as-is.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
+                .pickerStyle(.segmented)
+
+                Text(mode.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text("Everything logged becomes this workout. With Advance, only exercises whose required sets are complete progress.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
                     Text("Effects").font(.headline)
-                    // For a partial save `mode` stays `.advance` (the picker is complete-only), so
-                    // progression is shown per exercise: finished lifts move, unfinished ones don't.
                     if mode == .advance {
                         ForEach(Array(outcome.results.enumerated()), id: \.offset) { _, result in
                             EffectResultRow(result: result, title: title(forSlot: result.slotId))
@@ -107,7 +91,7 @@ struct FinishWorkoutView: View {
                 Button {
                     Task { await submit(outcome) }
                 } label: {
-                    Label(submitTitle, systemImage: "arrow.up.circle.fill")
+                    Label("Finish Workout", systemImage: "flag.checkered")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -154,9 +138,7 @@ struct FinishWorkoutView: View {
                 phase = .failed(message.isEmpty ? "The workout could not be submitted." : message)
                 return
             }
-            // Finishing is terminal whether the session was complete or partial: the record has
-            // been uploaded, so drop the draft. (Carrying on later is the separate pause/leave
-            // path, which never submits.)
+            // Finishing commits an ordinary history record, so the local draft is no longer needed.
             DraftStore.shared.clear()
             onCommitted()
             dismiss()

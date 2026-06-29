@@ -123,9 +123,8 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
 11. **Tracking-only extra work is record data, not progression input.** A workout player may log
     optional sets beyond the rendered prescription, or entirely added exercises for the day. These
     inputs are recorded in `TrainingRecord.lifts` in the order submitted, but the reducer only applies
- progression to rendered program items and their prescribed working-set numbers. Extra work can
- be saved in partial workouts with minimal `item_id` metadata for resume, then becomes ordinary
- human-facing record data on completion.
+ progression to rendered program items and their prescribed working-set numbers. `item_id` metadata
+ allows the app to reconstruct the matching card when a finished record is edited.
 
 12. **Completed records are amendable without replaying progression.** Typed engine amendments
     add missed sets or exercises by record ID and expected revision. Amendments update only the
@@ -152,7 +151,7 @@ Four problems pushed us to reconsider the whole posture, not just the syntax:
 - **Greenfield reset.** No real logs exist in the repo (only `.gitkeep`), so there is nothing to
   migrate. Any developer fixtures are regenerated in the new shape.
 - **Delivered:** engine-owned submit progression (`advance`/`off day`/`reset`), monthly lean log
-  parser/serializer, record-based backtest, WASM/FFI submit endpoints, partial-save resume
-  metadata, optional `actual[]` metrics, and tracking-only extra work recording.
+  parser/serializer, record-based backtest, WASM/FFI submit endpoints, optional `actual[]` metrics,
+  and tracking-only extra work recording. ADR 0010 later removed committed in-progress records.
 - **Still to update outside this ADR:** any remaining product/spec prose that still describes
   replay events or correction/continuation plumbing.
