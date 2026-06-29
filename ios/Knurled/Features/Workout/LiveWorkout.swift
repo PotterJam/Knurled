@@ -70,6 +70,18 @@ final class LiveSet: Identifiable {
         guard let value, let parsed = Double(value) else { return nil }
         return min(10, max(1, (parsed * 2).rounded() / 2))
     }
+
+    func apply(_ draft: DraftSet) {
+        reps = draft.reps
+        load = draft.load
+        rpe = draft.rpe
+        logged = draft.logged
+        bypassed = draft.bypassed
+    }
+
+    func draftSet() -> DraftSet {
+        DraftSet(id: id, reps: reps, load: load, rpe: rpe, logged: logged, isExtra: isExtra, bypassed: bypassed)
+    }
 }
 
 @MainActor
@@ -85,14 +97,16 @@ final class LiveItem: Identifiable {
     var performedExercise: String?
     var swapLabel: String?
     var swapPolicy: SwapPolicy?
+    var restSeconds: Int
 
-    init(item: RenderedItem, units: Units, isTrackingOnlyExtra: Bool = false) {
+    init(item: RenderedItem, units: Units, defaultLoad: String? = nil, isTrackingOnlyExtra: Bool = false) {
         self.id = item.itemId
         self.item = item
         self.units = units
         self.isTrackingOnlyExtra = isTrackingOnlyExtra
+        self.restSeconds = item.rest.seconds
         self.warmups = item.prescription.warmups.map { LiveSet(prescribed: $0, defaultLoad: $0.load, isWarmup: true) }
-        self.sets = item.prescription.sets.map { LiveSet(prescribed: $0, defaultLoad: $0.load) }
+        self.sets = item.prescription.sets.map { LiveSet(prescribed: $0, defaultLoad: $0.load ?? defaultLoad) }
     }
 
     var hasWarmups: Bool { !warmups.isEmpty }
@@ -202,6 +216,35 @@ final class LiveItem: Identifiable {
         }
     }
 
+    func apply(draft: DraftItem) {
+        performedExercise = draft.performedExercise
+        swapLabel = draft.swapLabel
+        swapPolicy = draft.swapPolicy
+        todayLoad = draft.todayLoad
+        for ds in draft.warmups {
+            warmups.first { $0.id == ds.id }?.apply(ds)
+        }
+        // User-added working sets are re-created so the overlay can address them by id.
+        while sets.count < draft.sets.count { addSet() }
+        for ds in draft.sets {
+            sets.first { $0.id == ds.id }?.apply(ds)
+        }
+    }
+
+    func draftItem() -> DraftItem {
+        DraftItem(
+            itemId: id,
+            exercise: item.exercise,
+            isExtra: isTrackingOnlyExtra,
+            performedExercise: performedExercise,
+            swapLabel: swapLabel,
+            swapPolicy: swapPolicy,
+            todayLoad: todayLoad,
+            warmups: warmups.map { $0.draftSet() },
+            sets: sets.map { $0.draftSet() }
+        )
+    }
+
     static func titleCase(_ exercise: String) -> String {
         exercise.replacingOccurrences(of: "_", with: " ").capitalized
     }
@@ -223,7 +266,7 @@ final class LiveItem: Identifiable {
     }
 
     static func defaultBaseLoad(for exercise: String, units: Units) -> String {
-        if isBodyweightExercise(exercise) {
+        if legacyBodyweightExercise(exercise) {
             return "0\(units.rawValue)"
         }
 
@@ -233,12 +276,27 @@ final class LiveItem: Identifiable {
         }
     }
 
-    static func isBodyweightExercise(_ exercise: String) -> Bool {
+    /// Engine metadata is authoritative. The name fallback only covers old rendered drafts and
+    /// runtime swaps authored before exercise alternatives carry implement metadata.
+    var isBodyweight: Bool {
+        if let performedExercise {
+            return Self.legacyBodyweightExercise(performedExercise)
+        }
+        return item.implement == .bodyweight
+            || (item.implement == nil && Self.legacyBodyweightExercise(item.exercise))
+    }
+
+    static func legacyBodyweightExercise(_ exercise: String) -> Bool {
         let normalized = normalized(exercise)
         return normalized.contains("pull_up")
             || normalized.contains("pullup")
             || normalized.contains("chin_up")
             || normalized.contains("chinup")
+            || normalized.contains("dip")
+            || normalized.contains("push_up")
+            || normalized.contains("pushup")
+            || normalized.contains("muscle_up")
+            || normalized.contains("muscleup")
     }
 
     /// Optional work that was started but not completed still sends its logged sets, so a user
@@ -286,18 +344,105 @@ final class LiveItem: Identifiable {
 @Observable
 final class LiveWorkout: Identifiable {
     let id = UUID()
-    let repo: ActiveRepo
+    private let repoReference: ActiveRepo?
+    /// Foreground-only repository access. Activity-only restores deliberately have no repo and
+    /// only use the mutation/draft APIs on this model.
+    var repo: ActiveRepo {
+        precondition(repoReference != nil, "An activity-only workout has no repository")
+        return repoReference!
+    }
     let session: RenderedSession
+    let units: Units
     let startedAt: String
     var items: [LiveItem]
 
     init(repo: ActiveRepo, session: RenderedSession, restoring record: TrainingRecord? = nil) {
-        self.repo = repo
+        self.repoReference = repo
         self.session = session
         self.startedAt = record?.startedAt ?? record?.savedAt ?? Self.timestamp()
-        let units = repo.plan?.plan.units ?? .kg
-        self.items = session.items.map { LiveItem(item: $0, units: units) }
+        let resolvedUnits = repo.plan?.plan.units ?? .kg
+        self.units = resolvedUnits
+        self.items = session.items.map {
+            LiveItem(item: $0, units: resolvedUnits, defaultLoad: repo.suggestedLoads[LiveItem.normalized($0.exercise)])
+        }
         if let record { restore(record) }
+    }
+
+    init(repo: ActiveRepo, session: RenderedSession, draft: WorkoutDraft) {
+        self.repoReference = repo
+        self.session = session
+        self.startedAt = draft.startedAt
+        let resolvedUnits = repo.plan?.plan.units ?? Units(rawValue: draft.unitsRaw) ?? .kg
+        self.units = resolvedUnits
+        self.items = session.items.map {
+            LiveItem(item: $0, units: resolvedUnits, defaultLoad: repo.suggestedLoads[LiveItem.normalized($0.exercise)])
+        }
+        restore(draft: draft)
+    }
+
+    /// Minimal reconstruction used by Live Activity intents in a freshly relaunched process.
+    init(session: RenderedSession, units: Units, draft: WorkoutDraft) {
+        self.repoReference = nil
+        self.session = session
+        self.units = units
+        self.startedAt = draft.startedAt
+        self.items = session.items.map { LiveItem(item: $0, units: units) }
+        restore(draft: draft)
+    }
+
+    private func restore(draft: WorkoutDraft) {
+        for d in draft.items {
+            if let item = items.first(where: { $0.id == d.itemId }) {
+                item.apply(draft: d)
+            } else if d.isExtra {
+                let item = Self.extraItem(
+                    id: d.itemId,
+                    exercise: d.exercise,
+                    load: d.sets.first?.load,
+                    sets: max(d.sets.count, 1),
+                    reps: d.sets.first?.reps ?? 5,
+                    units: units
+                )
+                if let warmdownIndex = items.firstIndex(where: { $0.isSessionWarmdown }) {
+                    items.insert(item, at: warmdownIndex)
+                } else {
+                    items.append(item)
+                }
+                item.apply(draft: d)
+            }
+        }
+    }
+
+    func draftItems() -> [DraftItem] {
+        items.map { $0.draftItem() }
+    }
+
+    /// Canonical replacement payload for history editing. Ordinary sets stay compact; per-set
+    /// detail is retained only where load or metrics differ from the lift-level value.
+    func replacementLifts(from record: TrainingRecord) -> [LiftRecord] {
+        items.compactMap { item in
+            let logged = item.sets.filter(\.logged).sorted { $0.id < $1.id }
+            guard !logged.isEmpty else { return nil }
+            let exercise = item.performedExercise ?? item.item.exercise
+            let weight = logged.first?.load
+            let existing = record.lifts.first {
+                $0.itemId == item.id || LiveItem.normalized($0.exercise) == LiveItem.normalized(exercise)
+            }
+            let actual = logged.compactMap { set -> ActualSet? in
+                guard !set.metrics.isEmpty || set.load != weight else { return nil }
+                return ActualSet(set: set.id, load: set.load, reps: set.reps, metrics: set.metrics)
+            }
+            return LiftRecord(
+                liftId: existing?.liftId ?? "edit.\(record.id).\(item.id)",
+                itemId: item.id,
+                exercise: exercise,
+                weight: weight,
+                sets: logged.map(\.reps),
+                actual: actual,
+                metrics: existing?.metrics ?? [:],
+                note: existing?.note
+            )
+        }
     }
 
     private func restore(_ record: TrainingRecord) {
@@ -317,7 +462,7 @@ final class LiveWorkout: Identifiable {
             load: lift.weight,
             sets: max(lift.sets.count, lift.actual.count, 1),
             reps: lift.sets.first ?? lift.actual.first?.reps ?? 5,
-            units: repo.plan?.plan.units ?? .kg
+            units: units
         )
         if let warmdownIndex = items.firstIndex(where: { $0.isSessionWarmdown }) {
             items.insert(item, at: warmdownIndex)
@@ -404,7 +549,7 @@ final class LiveWorkout: Identifiable {
             load: load,
             sets: setCount,
             reps: reps,
-            units: repo.plan?.plan.units ?? .kg
+            units: units
         )
         items.append(item)
         return item

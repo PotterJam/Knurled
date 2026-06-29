@@ -1,6 +1,6 @@
 # ADR 0003 — Declarative template-authoring model (progression primitives)
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-06-24
 
 ## Context
@@ -118,3 +118,10 @@ vocabulary is proven. The built-ins thus become the first documents written in t
 - The ~1% boundary is a stated non-goal; autoregulation/VBT would be a separate ADR if revisited.
 - Exercise catalogue expansion and repo-owned custom exercises can evolve independently of the
   template DSL because they describe available/displayable movements, not progression semantics.
+
+## Implementation note
+
+Implemented on 2026-06-28 in `engine/src/dsl.rs`. Repository-relative template references,
+vendoring, the generic evaluator, and the iOS no-template wizard are live. Phase 5 removed the
+compatibility bridge and legacy Rust renderers: all catalog entries now parse embedded DSL
+documents and use the same state, rendering, and reduction path as repository-owned templates.

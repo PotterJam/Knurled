@@ -6,12 +6,16 @@ use serde_json::json;
 
 use crate::backtest::{BacktestProjection, backtest};
 use crate::core::{
-    PatchFile, build_outputs, compile_plan, create_initial_state, render_next, simulate,
-    validate_execution_input,
+    PatchFile, apply_effects, build_outputs, compile_plan, compile_plan_with_template,
+    create_initial_state, reduce_item, render_next, simulate, validate_execution_input,
 };
 use crate::error::{KnurledError, Result};
 use crate::json::pretty_json;
 use crate::model::*;
+use crate::parser::parse_plan;
+use crate::programs::{
+    active_program_dir, active_program_relative_path, initialize_program_config,
+};
 use crate::record::{
     AmendRecordOutcome, AmendRecordRequest, LiftRecord, LogMonth, RecordAmendment, RecordKind,
     TrainingRecord, lift_record_id, month_key, month_path, record_order,
@@ -37,12 +41,18 @@ pub struct InitResult {
 
 pub fn read_training_repo(repo_path: impl AsRef<Path>) -> Result<TrainingRepo> {
     let root = repo_path.as_ref().to_path_buf();
-    let plan_path = root.join("plan.fitspec");
-    let lock_path = root.join("fitspec.lock");
+    let program_dir = active_program_dir(&root)?;
+    let plan_path = program_dir.join("plan.fitspec");
+    let lock_path = program_dir.join("fitspec.lock");
     let plan_text = read_required(&plan_path)?;
     let lock_text = read_optional(&lock_path)?.unwrap_or_default();
-    let patch_files = read_patch_files(&root)?;
-    let compiled = compile_plan(&plan_text, &lock_text, &patch_files)?;
+    let patch_files = read_patch_files(&program_dir)?;
+    let parsed_plan = parse_plan(&plan_text)?;
+    let custom_template = read_custom_template(&program_dir, &parsed_plan.template)?;
+    let compiled = match custom_template.as_deref() {
+        Some(text) => compile_plan_with_template(&plan_text, &lock_text, &patch_files, Some(text))?,
+        None => compile_plan(&plan_text, &lock_text, &patch_files)?,
+    };
 
     Ok(TrainingRepo {
         root,
@@ -53,13 +63,27 @@ pub fn read_training_repo(repo_path: impl AsRef<Path>) -> Result<TrainingRepo> {
     })
 }
 
+fn read_custom_template(program_dir: &Path, template: &str) -> Result<Option<String>> {
+    if !template.starts_with("./") {
+        return Ok(None);
+    }
+    let relative = template.trim_start_matches("./");
+    if relative.split('/').any(|part| part == "..") {
+        return Err(KnurledError::Parse(
+            "custom template path may not contain `..`".into(),
+        ));
+    }
+    let path = program_dir.join(relative);
+    fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|source| io_error(&path, source))
+}
+
 pub fn init_training_repo(repo_path: impl AsRef<Path>, template: &str) -> Result<InitResult> {
     let root = repo_path.as_ref();
     let reference = parse_template_ref(template);
     fs::create_dir_all(root).map_err(|source| io_error(root, source))?;
-    for dir in ["patches", "templates", "logs"] {
-        fs::create_dir_all(root.join(dir)).map_err(|source| io_error(root.join(dir), source))?;
-    }
+    fs::create_dir_all(root.join("logs")).map_err(|source| io_error(root.join("logs"), source))?;
 
     let files = if reference.id.starts_with("531.") {
         initial_531_files(&reference)?
@@ -69,15 +93,41 @@ pub fn init_training_repo(repo_path: impl AsRef<Path>, template: &str) -> Result
         initial_gzclp_files(&reference)?
     };
 
+    let plan = parse_plan(
+        files
+            .get("plan.fitspec")
+            .ok_or_else(|| KnurledError::Parse("starter template has no plan.fitspec".into()))?,
+    )?;
+    if let Some(config) = files.get("fitspec.toml") {
+        fs::write(root.join("fitspec.toml"), config)
+            .map_err(|source| io_error(root.join("fitspec.toml"), source))?;
+    }
+    let slug = initialize_program_config(root, &plan.name, &plan.template)?;
+    let program_dir = root.join("programs").join(&slug);
+    for dir in ["patches", "templates", "state"] {
+        fs::create_dir_all(program_dir.join(dir))
+            .map_err(|source| io_error(program_dir.join(dir), source))?;
+    }
+
     for (relative_path, text) in files {
-        let path = root.join(relative_path);
+        if relative_path == "fitspec.toml" {
+            continue;
+        }
+        let path = if relative_path == "README.md" {
+            root.join(relative_path)
+        } else {
+            program_dir.join(relative_path)
+        };
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|source| io_error(parent, source))?;
         }
         fs::write(&path, text).map_err(|source| io_error(path, source))?;
     }
-    for keep in ["patches/.gitkeep", "templates/.gitkeep", "logs/.gitkeep"] {
-        fs::write(root.join(keep), "").map_err(|source| io_error(root.join(keep), source))?;
+    fs::write(root.join("logs/.gitkeep"), "")
+        .map_err(|source| io_error(root.join("logs/.gitkeep"), source))?;
+    for keep in ["patches/.gitkeep", "templates/.gitkeep"] {
+        fs::write(program_dir.join(keep), "")
+            .map_err(|source| io_error(program_dir.join(keep), source))?;
     }
 
     let outputs = build_repo(root, true)?;
@@ -148,14 +198,23 @@ pub fn check_generated_repo(repo_path: impl AsRef<Path>) -> Result<GeneratedFile
     let mut missing = Vec::new();
 
     for (relative_path, expected_text) in expected {
-        let path = root.join(&relative_path);
+        let reported = if relative_path == "state/current.json" {
+            active_program_relative_path(root, &relative_path)?
+        } else {
+            relative_path.clone()
+        };
+        let path = if relative_path == "state/current.json" {
+            active_program_dir(root)?.join(&relative_path)
+        } else {
+            root.join(&relative_path)
+        };
         if !path.exists() {
-            missing.push(relative_path);
+            missing.push(reported);
             continue;
         }
         let actual = fs::read_to_string(&path).map_err(|source| io_error(&path, source))?;
         if actual != expected_text {
-            changed.push(relative_path);
+            changed.push(reported);
         }
     }
 
@@ -182,7 +241,7 @@ pub fn check_generated_repo(repo_path: impl AsRef<Path>) -> Result<GeneratedFile
 /// repo has not recorded anything yet.
 pub fn read_state(repo_path: impl AsRef<Path>) -> Result<StateProjection> {
     let root = repo_path.as_ref();
-    let path = root.join("state").join("current.json");
+    let path = active_program_dir(root)?.join("state").join("current.json");
     if let Some(text) = read_optional(&path)? {
         serde_json::from_str(&text).map_err(|source| KnurledError::Json { path, source })
     } else {
@@ -193,7 +252,7 @@ pub fn read_state(repo_path: impl AsRef<Path>) -> Result<StateProjection> {
 
 /// Write `state/current.json` (the source of truth).
 pub fn write_state(repo_path: impl AsRef<Path>, state: &StateProjection) -> Result<()> {
-    let dir = repo_path.as_ref().join("state");
+    let dir = active_program_dir(repo_path.as_ref())?.join("state");
     fs::create_dir_all(&dir).map_err(|source| io_error(&dir, source))?;
     let path = dir.join("current.json");
     fs::write(&path, pretty_json(state)?).map_err(|source| io_error(&path, source))
@@ -349,15 +408,98 @@ pub fn amend_training_record(
                 note,
             });
         }
+        RecordAmendment::ReplaceLifts { lifts } => {
+            if lifts.iter().any(|lift| lift.exercise.trim().is_empty()) {
+                return Err(KnurledError::InvalidExecutionInput(
+                    "replacement lifts require an exercise name".into(),
+                ));
+            }
+            record.lifts = lifts;
+        }
     }
 
     record.updated_at = Some(request.updated_at);
-    let changed_path = write_training_record(root, record.clone())?;
     record.revision += 1;
+    let changed_path = write_training_record(root, record.clone())?;
+    let recomputed_lanes = recompute_latest_lanes(root, &record)?;
+    let mut changed_files = vec![changed_path];
+    if !recomputed_lanes.is_empty() {
+        changed_files.push(active_program_relative_path(root, "state/current.json")?);
+    }
     Ok(AmendRecordOutcome {
         record,
-        changed_files: vec![changed_path],
+        changed_files,
+        recomputed_lanes,
     })
+}
+
+fn recompute_latest_lanes(root: &Path, record: &TrainingRecord) -> Result<Vec<String>> {
+    let repo = read_training_repo(root)?;
+    let mut state = read_state(root)?;
+    let checkpoints = state
+        .previous_lanes
+        .iter()
+        .filter(|(_, checkpoint)| checkpoint.record_id == record.id)
+        .map(|(lane, checkpoint)| (lane.clone(), checkpoint.clone()))
+        .collect::<Vec<_>>();
+    let mut recomputed = Vec::new();
+    for (lane, checkpoint) in checkpoints {
+        state
+            .lanes
+            .insert(lane.clone(), checkpoint.previous_state.clone());
+        if let Some(lift) = record
+            .lifts
+            .iter()
+            .find(|lift| lift.item_id.as_deref() == Some(checkpoint.item.item_id.as_str()))
+        {
+            let input = item_input_from_record(&checkpoint.item, lift);
+            let result = reduce_item(&checkpoint.item, &input, &repo.compiled, &state)?;
+            apply_effects(&mut state, &result.effects);
+        }
+        recomputed.push(lane);
+    }
+    if !recomputed.is_empty() {
+        write_state(root, &state)?;
+    }
+    recomputed.sort();
+    Ok(recomputed)
+}
+
+fn item_input_from_record(item: &RenderedItem, lift: &LiftRecord) -> ItemInput {
+    let sets = lift
+        .sets
+        .iter()
+        .enumerate()
+        .map(|(index, reps)| {
+            let set_number = index as u32 + 1;
+            let detail = lift.actual.iter().find(|set| set.set == set_number);
+            ActualSet {
+                set: set_number,
+                load: detail
+                    .and_then(|set| set.load.clone())
+                    .or_else(|| lift.weight.clone())
+                    .or_else(|| {
+                        item.prescription
+                            .sets
+                            .iter()
+                            .find(|set| set.set == set_number)
+                            .and_then(|set| set.load.clone())
+                    }),
+                reps: *reps,
+                metrics: detail.map(|set| set.metrics.clone()).unwrap_or_default(),
+            }
+        })
+        .collect();
+    ItemInput {
+        item_id: item.item_id.clone(),
+        mode: "per_set_reps".into(),
+        final_set_reps: None,
+        sets,
+        load: lift.weight.clone(),
+        performed_exercise: Some(lift.exercise.clone()),
+        swap_reason: None,
+        swap_policy: None,
+    }
 }
 
 pub fn merge_training_records(
@@ -543,7 +685,10 @@ fn persist_rendered_submit(
     if outcome.validation.status == ValidationStatus::Valid {
         write_state(root, &outcome.new_state)?;
         let record_path = write_training_record(root, outcome.record.clone())?;
-        outcome.changed_files = vec!["state/current.json".into(), record_path];
+        outcome.changed_files = vec![
+            active_program_relative_path(root, "state/current.json")?,
+            record_path,
+        ];
         if input.status != "partial" {
             for path in clear_partials_for_session(root, &rendered.session_id)? {
                 if !outcome.changed_files.contains(&path) {
@@ -567,7 +712,11 @@ pub fn backtest_records_repo(repo_path: impl AsRef<Path>) -> Result<BacktestProj
 pub fn write_generated_files(root: impl AsRef<Path>, outputs: &BuildOutputs) -> Result<()> {
     let root = root.as_ref();
     for (relative_path, text) in generated_file_map(outputs)? {
-        let path = root.join(relative_path);
+        let path = if relative_path == "state/current.json" {
+            active_program_dir(root)?.join(&relative_path)
+        } else {
+            root.join(&relative_path)
+        };
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|source| io_error(parent, source))?;
         }

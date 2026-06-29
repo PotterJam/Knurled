@@ -186,6 +186,9 @@ pub fn parse_lock(text: &str) -> Result<Lockfile> {
 /// `id@version` string, so a plan's identity is unaffected by which is used.
 fn parse_template_directive(node: &KdlNode) -> Result<String> {
     let id = node_string_arg(node, "template")?;
+    if id.starts_with("./") {
+        return Ok(id);
+    }
     let raw = match prop_string(node, "version") {
         Some(version) if !id.contains('@') => format!("{id}@{version}"),
         _ => id,
@@ -627,7 +630,12 @@ fn parse_implement(value: &str) -> Result<Implement> {
     Ok(match value.to_ascii_lowercase().as_str() {
         "barbell" => Implement::Barbell,
         "dumbbell" => Implement::Dumbbell,
-        other => return Err(parse_error(format!("unknown implement: {other}"))),
+        "bodyweight" => Implement::Bodyweight,
+        other => {
+            return Err(parse_error(format!(
+                "unknown implement: {other} (expected barbell|dumbbell|bodyweight)"
+            )));
+        }
     })
 }
 

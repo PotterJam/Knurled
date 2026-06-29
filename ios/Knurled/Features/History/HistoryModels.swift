@@ -125,6 +125,14 @@ struct HistoryDetailView: View {
     }
 
     var body: some View {
+        if canAmend {
+            EditableHistoryWorkoutView(record: $record, title: item.title)
+        } else {
+            readOnlyBody
+        }
+    }
+
+    private var readOnlyBody: some View {
         List {
             if item.canContinue {
                 Section {
@@ -203,6 +211,123 @@ struct HistoryDetailView: View {
             } catch {
                 amendmentError = error.localizedDescription
             }
+        }
+    }
+}
+
+private struct EditableHistoryWorkoutView: View {
+    @Binding var record: TrainingRecord
+    let title: String
+
+    @Environment(AppModel.self) private var app
+    @State private var workout: LiveWorkout?
+    @State private var baseline: [DraftItem] = []
+    @State private var isSaving = false
+    @State private var showsAddExercise = false
+    @State private var message: String?
+    @State private var errorMessage: String?
+
+    private let controller = WorkoutLiveController.shared
+
+    var body: some View {
+        Group {
+            if let workout {
+                ScrollView {
+                    LazyVStack(spacing: KnurledTheme.Spacing.s) {
+                        ForEach(workout.items) { item in
+                            LiveExerciseCard(
+                                live: item,
+                                controller: controller,
+                                onDelete: item.isTrackingOnlyExtra ? {
+                                    workout.removeItem(item)
+                                } : nil
+                            )
+                        }
+                        Button {
+                            showsAddExercise = true
+                        } label: {
+                            Label("Add Exercise", systemImage: "plus.circle")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding()
+                }
+                .safeAreaInset(edge: .bottom) {
+                    VStack(spacing: 6) {
+                        if let message {
+                            Text(message).font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Button {
+                            save(workout)
+                        } label: {
+                            if isSaving {
+                                ProgressView().frame(maxWidth: .infinity)
+                            } else {
+                                Text("Save changes").frame(maxWidth: .infinity)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isSaving || workout.draftItems() == baseline)
+                    }
+                    .padding()
+                    .background(.bar)
+                }
+                .sheet(isPresented: $showsAddExercise) {
+                    if let repo = app.activeRepo {
+                        AddExerciseSheet(repo: repo, catalog: app.exerciseCatalog) { exercise, load, sets, reps in
+                            _ = workout.addExtraExercise(exercise: exercise, load: load, setCount: sets, reps: reps)
+                        }
+                    }
+                }
+            } else if let errorMessage {
+                ContentUnavailableView("Couldn't edit workout", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+            } else {
+                ProgressView("Loading workout…")
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+        .alert("Couldn't save changes", isPresented: Binding(
+            get: { errorMessage != nil && workout != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "Unknown error")
+        }
+    }
+
+    private func load() async {
+        guard workout == nil, let repo = app.activeRepo, let sessionId = record.sessionId else { return }
+        do {
+            let session = try await app.engine.renderSession(dir: repo.url, sessionId: sessionId)
+            let loaded = LiveWorkout(repo: repo, session: session, restoring: record)
+            workout = loaded
+            baseline = loaded.draftItems()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func save(_ workout: LiveWorkout) {
+        guard let repo = app.activeRepo else { return }
+        isSaving = true
+        message = nil
+        Task {
+            do {
+                let lifts = workout.replacementLifts(from: record)
+                let outcome = try await app.amendRecord(record, amendment: .replaceLifts(lifts), in: repo)
+                record = outcome.record
+                baseline = workout.draftItems()
+                message = outcome.recomputedLanes.isEmpty
+                    ? "History updated; progression was already superseded."
+                    : "History and \(outcome.recomputedLanes.count) current progression lane(s) updated."
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isSaving = false
         }
     }
 }

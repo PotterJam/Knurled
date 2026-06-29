@@ -22,6 +22,7 @@ struct RenderedItem: Codable, Sendable, Hashable, Identifiable {
     var progressionLane: String
     var progressionRule: String
     var exercise: String
+    var implement: Implement?
     var display: DisplayFields
     var prescription: Prescription
     var executionContract: ExecutionContract
@@ -39,6 +40,7 @@ struct RenderedItem: Codable, Sendable, Hashable, Identifiable {
         progressionLane: String,
         progressionRule: String,
         exercise: String,
+        implement: Implement? = nil,
         display: DisplayFields,
         prescription: Prescription,
         executionContract: ExecutionContract,
@@ -53,6 +55,7 @@ struct RenderedItem: Codable, Sendable, Hashable, Identifiable {
         self.progressionLane = progressionLane
         self.progressionRule = progressionRule
         self.exercise = exercise
+        self.implement = implement
         self.display = display
         self.prescription = prescription
         self.executionContract = executionContract
@@ -70,6 +73,7 @@ struct RenderedItem: Codable, Sendable, Hashable, Identifiable {
         progressionLane = try container.decode(String.self, forKey: .progressionLane)
         progressionRule = try container.decode(String.self, forKey: .progressionRule)
         exercise = try container.decode(String.self, forKey: .exercise)
+        implement = try container.decodeIfPresent(Implement.self, forKey: .implement)
         display = try container.decode(DisplayFields.self, forKey: .display)
         prescription = try container.decode(Prescription.self, forKey: .prescription)
         executionContract = try container.decode(ExecutionContract.self, forKey: .executionContract)
@@ -117,6 +121,8 @@ struct PrescribedSet: Codable, Sendable, Hashable, Identifiable {
     var targetReps: Int
     var amrap: Bool
     var percentage: Int?
+    var repMin: Int? = nil
+    var repMax: Int? = nil
 
     var id: Int { self.set }
 }

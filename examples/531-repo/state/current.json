@@ -8,21 +8,25 @@
   "lanes": {
     "bench.main": {
       "cycle": 1,
+      "stage": "week 1",
       "training_max": "65kg",
       "week": 1
     },
     "deadlift.main": {
       "cycle": 1,
+      "stage": "week 1",
       "training_max": "110kg",
       "week": 1
     },
     "press.main": {
       "cycle": 1,
+      "stage": "week 1",
       "training_max": "42.5kg",
       "week": 1
     },
     "squat.main": {
       "cycle": 1,
+      "stage": "week 1",
       "training_max": "90kg",
       "week": 1
     }

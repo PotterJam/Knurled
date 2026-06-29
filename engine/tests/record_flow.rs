@@ -6,9 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use knurled_core::session::SubmitMode;
 use knurled_core::{
     ActualSet, AmendRecordRequest, ExecutionInput, ItemInput, RecordAmendment, SCHEMA_VERSION,
-    ValidationStatus, amend_training_record, backtest_records_repo, init_training_repo,
-    merge_training_records, read_records, read_state, read_training_repo, render_next,
-    render_session, submit_rendered_repo, submit_repo, synthetic_execution_input,
+    ValidationStatus, active_program_dir, amend_training_record, backtest_records_repo,
+    init_training_repo, merge_training_records, read_records, read_state, read_training_repo,
+    render_next, render_session, submit_rendered_repo, submit_repo, synthetic_execution_input,
 };
 use std::collections::BTreeMap;
 
@@ -126,7 +126,7 @@ fn record_merge_unions_same_day_ids_and_rejects_equal_revision_conflicts() {
 }
 
 #[test]
-fn completed_workout_can_be_amended_without_changing_training_state() {
+fn completed_workout_amendments_recompute_latest_lanes() {
     let root = temp_repo("amend-record");
     init_training_repo(&root, "gzcl.gzclp").unwrap();
     let repo = read_training_repo(&root).unwrap();
@@ -135,7 +135,10 @@ fn completed_workout_can_be_amended_without_changing_training_state() {
     let input = synthetic_execution_input(&rendered, "pass", 0);
     submit_repo(&root, &input, SubmitMode::Advance, "2026-06-24").unwrap();
 
-    let state_before = std::fs::read(root.join("state/current.json")).unwrap();
+    let state_path = active_program_dir(&root)
+        .unwrap()
+        .join("state/current.json");
+    let state_before = std::fs::read(&state_path).unwrap();
     let records = read_records(&root).unwrap();
     let record = &records[0];
     let lift = &record.lifts[0];
@@ -156,7 +159,20 @@ fn completed_workout_can_be_amended_without_changing_training_state() {
     )
     .unwrap();
     assert_eq!(added_set.record.revision, 2);
-    assert_eq!(added_set.changed_files, vec!["logs/2026/06.json"]);
+    assert_eq!(
+        added_set.changed_files,
+        vec![
+            "logs/2026/06.json".to_owned(),
+            active_program_dir(&root)
+                .unwrap()
+                .strip_prefix(&root)
+                .unwrap()
+                .join("state/current.json")
+                .to_string_lossy()
+                .into_owned(),
+        ]
+    );
+    assert!(!added_set.recomputed_lanes.is_empty());
 
     let added_exercise = amend_training_record(
         &root,
@@ -189,10 +205,7 @@ fn completed_workout_can_be_amended_without_changing_training_state() {
 
     assert_eq!(added_exercise.record.revision, 3);
     assert_eq!(added_exercise.record.lifts.last().unwrap().exercise, "curl");
-    assert_eq!(
-        std::fs::read(root.join("state/current.json")).unwrap(),
-        state_before
-    );
+    assert_eq!(std::fs::read(&state_path).unwrap(), state_before);
 
     let log_before_conflict = std::fs::read(root.join("logs/2026/06.json")).unwrap();
     let conflict = amend_training_record(
@@ -215,6 +228,84 @@ fn completed_workout_can_be_amended_without_changing_training_state() {
         log_before_conflict
     );
 
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn replacing_latest_record_recomputes_each_owned_lane() {
+    let root = temp_repo("edit-latest-record");
+    init_training_repo(&root, "gzcl.gzclp").unwrap();
+    let repo = read_training_repo(&root).unwrap();
+    let rendered = render_next(&repo.compiled, &read_state(&root).unwrap()).unwrap();
+    let input = synthetic_execution_input(&rendered, "pass", 0);
+    submit_repo(&root, &input, SubmitMode::Advance, "2026-06-24").unwrap();
+
+    let record = read_records(&root).unwrap().remove(0);
+    let mut lifts = record.lifts.clone();
+    let squat = lifts
+        .iter_mut()
+        .find(|lift| lift.item_id.as_deref() == Some("a1.t1"))
+        .unwrap();
+    *squat.sets.last_mut().unwrap() = 0;
+    let outcome = amend_training_record(
+        &root,
+        AmendRecordRequest {
+            record_id: record.id,
+            expected_revision: record.revision,
+            updated_at: "2026-06-24T18:00:00Z".into(),
+            amendment: RecordAmendment::ReplaceLifts { lifts },
+        },
+    )
+    .unwrap();
+
+    assert!(outcome.recomputed_lanes.contains(&"squat.t1".into()));
+    let lane = &read_state(&root).unwrap().lanes["squat.t1"];
+    assert_eq!(lane.load.as_deref(), Some("80kg"));
+    assert_eq!(lane.stage.as_deref(), Some("6x2+"));
+    assert_eq!(read_records(&root).unwrap()[0].revision, 2);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn replacing_superseded_record_is_history_only_per_lane() {
+    let root = temp_repo("edit-superseded-record");
+    init_training_repo(&root, "gzcl.gzclp").unwrap();
+
+    let repo = read_training_repo(&root).unwrap();
+    let first_rendered = render_next(&repo.compiled, &read_state(&root).unwrap()).unwrap();
+    let first_input = synthetic_execution_input(&first_rendered, "pass", 0);
+    submit_repo(&root, &first_input, SubmitMode::Advance, "2026-06-20").unwrap();
+    let first = read_records(&root).unwrap().remove(0);
+
+    // Continue until a later A1 owns squat.t1's one-step checkpoint.
+    for index in 1..=4 {
+        let repo = read_training_repo(&root).unwrap();
+        let rendered = render_next(&repo.compiled, &read_state(&root).unwrap()).unwrap();
+        let input = synthetic_execution_input(&rendered, "pass", index);
+        submit_repo(&root, &input, SubmitMode::Advance, "2026-06-21").unwrap();
+    }
+    let state_before = read_state(&root).unwrap();
+    assert_ne!(state_before.previous_lanes["squat.t1"].record_id, first.id);
+
+    let mut lifts = first.lifts.clone();
+    let squat = lifts
+        .iter_mut()
+        .find(|lift| lift.item_id.as_deref() == Some("a1.t1"))
+        .unwrap();
+    *squat.sets.last_mut().unwrap() = 0;
+    let outcome = amend_training_record(
+        &root,
+        AmendRecordRequest {
+            record_id: first.id,
+            expected_revision: first.revision,
+            updated_at: "2026-06-28T18:00:00Z".into(),
+            amendment: RecordAmendment::ReplaceLifts { lifts },
+        },
+    )
+    .unwrap();
+
+    assert!(!outcome.recomputed_lanes.contains(&"squat.t1".into()));
+    assert_eq!(read_state(&root).unwrap(), state_before);
     let _ = std::fs::remove_dir_all(&root);
 }
 

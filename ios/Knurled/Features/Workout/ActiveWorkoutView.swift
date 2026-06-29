@@ -5,19 +5,30 @@ struct ActiveWorkoutView: View {
     @State private var workout: LiveWorkout
     @State private var showFinish = false
     @State private var showAddExercise = false
+    @State private var showLeaveDialog = false
+    @State private var showDiscardConfirm = false
     @State private var draggingItemID: String?
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var pendingScroll: Task<Void, Never>?
+    @State private var restTarget: LiveItem?
 
+    private let resumeDraft: WorkoutDraft?
     private let controller = WorkoutLiveController.shared
 
     @Environment(AppModel.self) private var app
     @Environment(WorkoutSettings.self) private var workoutSettings
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
 
     init(repo: ActiveRepo, session: RenderedSession, restoring record: TrainingRecord? = nil) {
         _workout = State(initialValue: LiveWorkout(repo: repo, session: session, restoring: record))
+        self.resumeDraft = nil
+    }
+
+    init(repo: ActiveRepo, session: RenderedSession, draft: WorkoutDraft) {
+        _workout = State(initialValue: LiveWorkout(repo: repo, session: session, draft: draft))
+        self.resumeDraft = draft
     }
 
     var body: some View {
@@ -60,8 +71,11 @@ struct ActiveWorkoutView: View {
                 // gets left in a half-dragged look.
                 .onDrop(of: [.plainText], delegate: ResetDragDelegate(draggingItemID: $draggingItemID))
             }
+            .safeAreaInset(edge: .top) {
+                jumpStrip(proxy: proxy)
+            }
             .onAppear {
-                controller.begin(workout, restTimersEnabled: workoutSettings.restTimersEnabled)
+                controller.begin(workout, restTimersEnabled: workoutSettings.restTimersEnabled, resumingFrom: resumeDraft)
                 if let target = controller.currentScrollTarget {
                     proxy.scrollTo(WorkoutScrollDestination.exercise(target.exerciseID), anchor: .top)
                 }
@@ -83,12 +97,40 @@ struct ActiveWorkoutView: View {
         }
         .navigationTitle(workout.session.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    leave()
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { controller.persistDraft() }
+        }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                RestTimerBar(controller: controller)
+                RestTimerBar(controller: controller) {
+                    restTarget = controller.currentTarget?.item
+                }
                     .animation(.snappy, value: controller.isResting)
                 bottomBar
             }
+        }
+        .confirmationDialog("Leave workout?", isPresented: $showLeaveDialog, titleVisibility: .visible) {
+            Button("Pause & leave") { dismiss() }
+            Button("Discard workout", role: .destructive) { controller.discard(); dismiss() }
+            Button("Keep going", role: .cancel) {}
+        } message: {
+            Text("Your progress is saved automatically — you can resume right where you left off.")
+        }
+        .confirmationDialog("Discard this workout?", isPresented: $showDiscardConfirm, titleVisibility: .visible) {
+            Button("Discard workout", role: .destructive) { controller.discard(); dismiss() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deletes your in-progress workout. This can't be undone.")
         }
         .sheet(isPresented: $showFinish) {
             FinishWorkoutView(workout: workout) { dismiss() }
@@ -100,6 +142,35 @@ struct ActiveWorkoutView: View {
                 controller.modelChanged()
             }
         }
+        .sheet(item: $restTarget) { item in
+            SessionRestEditor(item: item, plan: workout.repo.plan) { seconds, saveToProgram in
+                item.restSeconds = seconds
+                if controller.isResting {
+                    controller.addRest(seconds - Int(controller.remaining.rounded(.up)))
+                }
+                guard saveToProgram else { return }
+                var policy = workout.repo.plan?.rest ?? RestPolicy()
+                policy.byExercise[LiveItem.normalized(item.performedExercise ?? item.item.exercise)] = seconds
+                Task {
+                    do {
+                        _ = try await app.applyPlanEdit(
+                            .quick(QuickPlanEdit(
+                                suggestedDays: nil,
+                                equipment: nil,
+                                customExercise: nil,
+                                accessory: nil,
+                                sessionExercises: nil,
+                                rest: policy
+                            )),
+                            in: workout.repo,
+                            message: "Update exercise rest"
+                        )
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
         .alert("Couldn't save", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
         } message: {
@@ -109,6 +180,61 @@ struct ActiveWorkoutView: View {
 
     private var warmupItems: [LiveItem] { workout.items.filter(\.isSessionWarmup) }
     private var bodyItems: [LiveItem] { workout.items.filter { !$0.isSessionWarmup } }
+
+    /// A pinned horizontal strip of the session's exercises for quick jumping. Tapping scrolls to
+    /// an exercise and, unless it's already done, moves the cursor onto it.
+    @ViewBuilder private func jumpStrip(proxy: ScrollViewProxy) -> some View {
+        if bodyItems.count > 1 {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(bodyItems) { item in
+                        jumpPill(item, proxy: proxy)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            .background(.bar)
+        }
+    }
+
+    private func jumpPill(_ item: LiveItem, proxy: ScrollViewProxy) -> some View {
+        let isCurrent = controller.isCurrentExercise(item)
+        let done = item.isComplete
+        return Button {
+            withAnimation(.snappy) {
+                proxy.scrollTo(WorkoutScrollDestination.exercise(item.id), anchor: .top)
+            }
+            if !done { controller.focus(item) }
+        } label: {
+            HStack(spacing: 4) {
+                if done {
+                    Image(systemName: "checkmark")
+                        .font(.caption2.weight(.bold))
+                }
+                Text(item.item.display.title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(pillBackground(isCurrent: isCurrent, done: done), in: Capsule())
+            .foregroundStyle(pillForeground(isCurrent: isCurrent, done: done))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func pillBackground(isCurrent: Bool, done: Bool) -> Color {
+        if isCurrent { return .accentColor }
+        if done { return Color.green.opacity(0.18) }
+        return Color(uiColor: .tertiarySystemFill)
+    }
+
+    private func pillForeground(isCurrent: Bool, done: Bool) -> Color {
+        if isCurrent { return .white }
+        if done { return Color.green }
+        return .secondary
+    }
 
     private func scroll(_ request: WorkoutScrollRequest, proxy: ScrollViewProxy) {
         pendingScroll?.cancel()
@@ -165,23 +291,81 @@ struct ActiveWorkoutView: View {
             Button {
                 showFinish = true
             } label: {
-                Label(submitTitle, systemImage: submitIcon)
+                Label("Finish", systemImage: "flag.checkered")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!workout.canSubmit || isSaving)
+            .disabled(!workout.canFinish || isSaving)
+
+            Menu {
+                if workout.canSaveProgress {
+                    Button("Submit partial to history", systemImage: "tray.and.arrow.down") {
+                        showFinish = true
+                    }
+                }
+                Button("Discard workout", systemImage: "trash", role: .destructive) {
+                    showDiscardConfirm = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .imageScale(.large)
+                    .frame(width: 44, height: 44)
+            }
         }
         .controlSize(.large)
         .padding()
         .background(.bar)
     }
 
-    private var submitTitle: String {
-        workout.canSaveProgress ? "Save Progress" : "Finish"
+    /// Progress is auto-saved, so leaving never loses data. Prompt only when something is logged
+    /// so the user can choose to keep the draft (pause) or drop it; an empty workout just exits.
+    private func leave() {
+        if workout.anyLogged {
+            showLeaveDialog = true
+        } else {
+            controller.discard()
+            dismiss()
+        }
+    }
+}
+
+private struct SessionRestEditor: View {
+    let item: LiveItem
+    let plan: PlanIR?
+    var onSave: (Int, Bool) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var seconds: Int
+    @State private var saveToProgram = false
+
+    init(item: LiveItem, plan: PlanIR?, onSave: @escaping (Int, Bool) -> Void) {
+        self.item = item
+        self.plan = plan
+        self.onSave = onSave
+        _seconds = State(initialValue: item.restSeconds)
     }
 
-    private var submitIcon: String {
-        workout.canSaveProgress ? "tray.and.arrow.down.fill" : "flag.checkered"
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("This workout") {
+                    Stepper("\(seconds / 60)m \(seconds % 60)s", value: $seconds, in: 15...600, step: 15)
+                }
+                Section {
+                    Toggle("Save for this exercise", isOn: $saveToProgram)
+                } footer: {
+                    Text("Saving updates the program; otherwise this applies only to the current workout.")
+                }
+            }
+            .navigationTitle("Rest after \(item.performedExerciseName)")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Apply") { onSave(seconds, saveToProgram); dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

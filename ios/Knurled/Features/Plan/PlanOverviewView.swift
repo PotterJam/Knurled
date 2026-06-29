@@ -37,19 +37,14 @@ struct PlanOverviewView: View {
                     .textCase(.uppercase)
 
                 NavigationLink {
-                    QuickPlanEditView(repo: repo, plan: plan)
+                    ProgramEditorView(repo: repo, plan: plan)
                 } label: {
-                    PlanActionRow(title: "Quick edits", systemImage: "slider.horizontal.3")
+                    PlanActionRow(title: "Edit program", systemImage: "slider.horizontal.3")
                 }
                 NavigationLink {
-                    PatchPlanEditView(repo: repo)
+                    ProgramBankView(repo: repo)
                 } label: {
-                    PlanActionRow(title: "Add patch", systemImage: "bandage")
-                }
-                NavigationLink {
-                    SwitchProgramView(repo: repo)
-                } label: {
-                    PlanActionRow(title: "Switch program", systemImage: "arrow.triangle.branch")
+                    PlanActionRow(title: "Program bank", systemImage: "square.stack.3d.up")
                 }
             }
             .padding()

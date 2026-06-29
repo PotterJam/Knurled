@@ -124,7 +124,7 @@ fn gzclp_t1_pass_increases_load_and_keeps_stage() {
     let result = reduce_input(&compiled, &state, &rendered, &input).unwrap();
     let squat = &result.new_state.lanes["squat.t1"];
 
-    assert_eq!(squat.load.as_deref(), Some("82.5kg"));
+    assert_eq!(squat.load.as_deref(), Some("85kg"));
     assert_eq!(squat.stage.as_deref(), Some("5x3+"));
     assert_eq!(
         result
@@ -225,7 +225,8 @@ fn gzclp_accessory_start_seeds_t3_lane() {
 
     assert_eq!(state.lanes["lat_pulldown.t3"].load.as_deref(), Some("40kg"));
     assert_eq!(t3.prescription.sets[0].load.as_deref(), Some("40kg"));
-    assert_eq!(t3.effect_preview.pass[0].to.as_deref(), Some("42.5kg"));
+    assert_eq!(t3.effect_preview.pass[0].op, "increase_reps");
+    assert_eq!(t3.effect_preview.pass[0].to.as_deref(), Some("16"));
 }
 
 #[test]
@@ -431,13 +432,14 @@ fn gzclp_first_accessory_attempt_sets_or_progresses_lane_load() {
         .find(|item| item.slot_id == "a1.t3")
         .unwrap();
 
-    assert_eq!(t3_result.outcome, "fail");
+    assert_eq!(t3_result.outcome, "pass");
     assert_eq!(t3_result.effects[0].op, "set_load");
     assert_eq!(t3_result.effects[0].to.as_deref(), Some("40kg"));
     assert_eq!(
         result.new_state.lanes["lat_pulldown.t3"].load.as_deref(),
         Some("40kg")
     );
+    assert_eq!(result.new_state.lanes["lat_pulldown.t3"].reps, Some(16));
 }
 
 #[test]
@@ -558,7 +560,7 @@ fn starting_strength_phase1_alternates_press_and_bench_with_deadlift_both_days()
     let compiled = compiled_starting_strength("starting-strength.phase1@1.0.0");
     let rendered = render_next(&compiled, &create_initial_state(&compiled)).unwrap();
 
-    assert_eq!(rendered.display_name, "Starting Strength Phase1 - Day A");
+    assert_eq!(rendered.display_name, "Starting Strength Phase 1 - Day A");
     assert_eq!(
         exercise_summary(&rendered),
         vec![("squat", 3, 5), ("press", 3, 5), ("deadlift", 1, 5)]
@@ -646,7 +648,7 @@ fn simulation_uses_reducer_effects() {
     assert_eq!(report.sessions.len(), 3);
     assert_eq!(
         report.final_state.lanes["squat.t1"].load.as_deref(),
-        Some("82.5kg")
+        Some("85kg")
     );
     assert_eq!(report.sessions[0].effects[0].op, "increase_load");
 }

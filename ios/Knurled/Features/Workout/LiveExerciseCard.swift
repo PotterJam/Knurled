@@ -70,6 +70,8 @@ struct LiveExerciseCard: View {
                             onEditRPE: { editingValue = .rpe(set) },
                             onToggled: { toggle(set) },
                             onChanged: { controller.modelChanged() },
+                            showsLoad: !live.isBodyweight,
+                            loadMissing: !live.isBodyweight && set.load == nil,
                             onDelete: set.isExtra ? {
                                 withAnimation(.snappy) {
                                     live.removeSet(set)
@@ -91,11 +93,12 @@ struct LiveExerciseCard: View {
             footer
         }
         .knurledCard()
-        .opacity(isCurrentExercise ? 1 : 0.7)
+        .opacity(isCurrentExercise ? 1 : 0.5)
         .overlay {
             if isCurrentExercise {
                 RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
-                    .strokeBorder(palette.accent, lineWidth: 2)
+                    .fill(palette.accent.opacity(0.06))
+                    .allowsHitTesting(false)
             }
         }
         // Tapping an unfocused, unfinished card jumps the cursor onto it — the way to do exercises
@@ -216,9 +219,15 @@ struct LiveExerciseCard: View {
     private func toggle(_ set: LiveSet) {
         if isPendingAmrap(set) {
             completingAmrapSet = set
-        } else {
-            controller.toggle(set: set, in: live)
+            return
         }
+        // A weighted set with no value yet can't be ticked — guide the user straight to the weight
+        // editor instead of silently logging an empty load.
+        if !set.logged, !live.isBodyweight, set.load == nil {
+            editingValue = .load(set)
+            return
+        }
+        controller.toggle(set: set, in: live)
     }
 
 }
@@ -295,7 +304,7 @@ private struct SetIndexBadge: View {
             .font(.caption.weight(.bold))
             .monospacedDigit()
             .foregroundStyle(isCurrent ? palette.accent : .secondary)
-            .frame(width: 26, height: 26)
+            .frame(width: 24, height: 24)
             .background(
                 Color(uiColor: .tertiarySystemFill),
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -338,6 +347,10 @@ struct SetRowView: View {
     var onEditRPE: () -> Void
     var onToggled: () -> Void
     var onChanged: () -> Void
+    /// False for bodyweight exercises, which carry no load — the weight chip is hidden entirely.
+    var showsLoad: Bool = true
+    /// True when a weighted set has no value yet and must be filled in before it can be ticked.
+    var loadMissing: Bool = false
     /// Non-nil only for user-added sets, which can be swiped away.
     var onDelete: (() -> Void)? = nil
     /// The completed "logged" band. Off when a parent (e.g. the warm-up block) paints completion at
@@ -363,7 +376,7 @@ struct SetRowView: View {
 
     private var rowContent: some View {
         @Bindable var set = set
-        return HStack(spacing: 12) {
+        return HStack(spacing: 10) {
             SetIndexBadge(label: indexLabel, isCurrent: isCurrent && !set.logged)
 
             prescriptionView
@@ -372,15 +385,15 @@ struct SetRowView: View {
 
             Button(action: onToggled) {
                 Image(systemName: set.logged ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
+                    .font(.title3)
                     .foregroundStyle(set.logged ? completedForeground : .secondary)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
         }
-        .frame(minHeight: 34)
-        .padding(.vertical, 2)
+        .frame(minHeight: 30)
+        .padding(.vertical, 1)
         .background {
             if set.logged && showsCompletedBand {
                 // Full-bleed band that fills the row up to the dividers and runs out to the card
@@ -447,10 +460,17 @@ struct SetRowView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
-            ValueChip(text: loadText, isChanged: loadChanged, truncates: true, action: onEditLoad)
+            if showsLoad {
+                ValueChip(
+                    text: loadMissing ? "Add weight" : (set.load ?? "—"),
+                    isChanged: loadMissing || loadChanged,
+                    truncates: true,
+                    action: onEditLoad
+                )
                 .layoutPriority(1)
-            Text("×")
-                .foregroundStyle(.secondary)
+                Text("×")
+                    .foregroundStyle(.secondary)
+            }
             ValueChip(
                 text: "\(repsPresentation.reps)\(repsPresentation.showsAmrapMarker ? "+" : "")",
                 isChanged: repsChanged,
@@ -470,10 +490,6 @@ struct SetRowView: View {
     private var prescribedText: String {
         let load = set.prescribed.load ?? "bw"
         return "\(load)×\(set.prescribed.targetReps)\(set.prescribed.amrap ? "+" : "")"
-    }
-
-    private var loadText: String {
-        return set.load ?? "bodyweight"
     }
 
     private var loadChanged: Bool {
@@ -840,11 +856,31 @@ struct WarmupBlockCard: View {
     let controller: WorkoutLiveController
 
     @State private var editingValue: SetValueEdit?
+    @State private var manuallyExpanded: Set<String> = []
     @Environment(\.knurledPalette) private var palette
 
     private var units: Units { items.first?.units ?? .kg }
     private var completedCount: Int { items.filter(\.isComplete).count }
     private var allComplete: Bool { !items.isEmpty && completedCount == items.count }
+
+    /// The warm-up you're on stays open; everything else collapses to a single line so a long
+    /// warm-up list doesn't dominate the screen. The user can still tap any row open.
+    private func isExpanded(_ item: LiveItem) -> Bool {
+        controller.isCurrentExercise(item) || manuallyExpanded.contains(item.id)
+    }
+
+    private func toggleExpanded(_ item: LiveItem) {
+        if manuallyExpanded.contains(item.id) {
+            manuallyExpanded.remove(item.id)
+        } else {
+            manuallyExpanded.insert(item.id)
+        }
+    }
+
+    private func summary(_ item: LiveItem) -> String {
+        let count = item.sets.count
+        return "\(count) \(count == 1 ? "set" : "sets")"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -863,7 +899,7 @@ struct WarmupBlockCard: View {
             }
 
             ForEach(items) { item in
-                warmupItemSection(item)
+                warmupItemSection(item, isExpanded: isExpanded(item))
                 if item.id != items.last?.id {
                     Divider().padding(.vertical, 2)
                 }
@@ -875,21 +911,36 @@ struct WarmupBlockCard: View {
         }
     }
 
-    @ViewBuilder private func warmupItemSection(_ item: LiveItem) -> some View {
+    @ViewBuilder private func warmupItemSection(_ item: LiveItem, isExpanded: Bool) -> some View {
         let done = item.isComplete
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                Text(item.item.display.title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(done ? completedForeground : .secondary)
-                if done {
-                    Image(systemName: "checkmark.circle.fill")
+            Button {
+                withAnimation(.snappy) { toggleExpanded(item) }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(item.item.display.title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(done ? completedForeground : .secondary)
+                    if done {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(completedForeground)
+                    }
+                    Spacer(minLength: 0)
+                    if !isExpanded {
+                        Text(done ? "Done" : summary(item))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption2)
-                        .foregroundStyle(completedForeground)
+                        .foregroundStyle(.tertiary)
                 }
-                Spacer(minLength: 0)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
+            if isExpanded {
             VStack(spacing: 0) {
                 ForEach(Array(item.sets.enumerated()), id: \.element.id) { _, set in
                     SetRowView(
@@ -912,6 +963,7 @@ struct WarmupBlockCard: View {
                     )
                     if set.id != item.sets.last?.id { Divider() }
                 }
+            }
             }
         }
         // The whole exercise — name and its sets — turns sage when done, instead of a thin band

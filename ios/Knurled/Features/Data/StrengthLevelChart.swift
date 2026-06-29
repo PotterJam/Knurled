@@ -11,7 +11,8 @@ struct StrengthLevelChart: View {
 
     private func level(_ sample: LiftSample) -> Double {
         StrengthStandards.levelValue(
-            ratio: sample.e1RMkg / bodyWeightKg,
+            e1rmKg: sample.e1RMkg,
+            bodyWeightKg: bodyWeightKg,
             lift: sample.lift,
             sex: sex
         )
@@ -45,7 +46,7 @@ struct StrengthLevelChart: View {
         VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
             Text("Strength level")
                 .font(.headline)
-            Text("Estimated 1RM ÷ body weight, mapped to \(sex.title.lowercased()) standards.")
+            Text("Estimated 1RM mapped to \(sex.title.lowercased()) strength standards for your body weight.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

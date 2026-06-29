@@ -218,6 +218,7 @@ struct AmendRecordRequest: Encodable, Sendable {
 enum RecordAmendment: Encodable, Sendable {
     case addSet(liftId: String, load: String?, reps: Int, metrics: [String: String])
     case addExercise(exercise: String, weight: String?, note: String?, sets: [ActualSet])
+    case replaceLifts([LiftRecord])
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -234,17 +235,28 @@ enum RecordAmendment: Encodable, Sendable {
             try container.encodeIfPresent(weight, forKey: .weight)
             try container.encodeIfPresent(note, forKey: .note)
             try container.encode(sets, forKey: .sets)
+        case .replaceLifts(let lifts):
+            try container.encode("replace_lifts", forKey: .op)
+            try container.encode(lifts, forKey: .lifts)
         }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case op, liftId, load, reps, metrics, exercise, weight, note, sets
+        case op, liftId, load, reps, metrics, exercise, weight, note, sets, lifts
     }
 }
 
 struct AmendRecordOutcome: Codable, Sendable, Hashable {
     var record: TrainingRecord
     var changedFiles: [String]
+    var recomputedLanes: [String]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        record = try container.decode(TrainingRecord.self, forKey: .record)
+        changedFiles = try container.decode([String].self, forKey: .changedFiles)
+        recomputedLanes = try container.decodeIfPresent([String].self, forKey: .recomputedLanes) ?? []
+    }
 }
 
 struct ExerciseResult: Codable, Sendable, Hashable {

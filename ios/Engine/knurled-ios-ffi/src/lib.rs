@@ -17,11 +17,15 @@ use std::os::raw::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
-    AmendRecordRequest, ENGINE_VERSION, ExecutionInput, PlanEdit, RenderedSession, SubmitMode,
+    AddProgramRequest, AmendRecordRequest, DslTemplate, ENGINE_VERSION, ExecutionInput, PlanEdit,
+    PreviewTemplateRequest, RenderedSession, SubmitMode,
     Units, amend_training_record, apply_plan_edit, build_outputs, build_repo, builtin_templates,
-    exercise_catalog, init_training_repo, merge_record_repos, preview_plan_edit, read_records,
-    read_state, read_training_repo, reduce_input, render_session, submit_rendered_repo,
-    suggest_initial_numbers, validate_execution_input, validate_repo,
+    exercise_catalog, init_training_repo, merge_record_repos, preview_plan_edit, preview_template,
+    parse_template_dsl, read_records,
+    read_state, read_training_repo, reduce_input, render_session, render_template_dsl, submit_rendered_repo,
+    suggest_initial_numbers, suggest_load, validate_execution_input, validate_repo,
+    add_program, delete_program, list_programs, set_active_program,
+    suggest_program_adjustments, vendor_template,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -403,6 +407,12 @@ struct InitialNumberSuggestionRequest {
     units: Units,
 }
 
+#[derive(serde::Deserialize)]
+struct LoadSuggestionRequest {
+    exercise: String,
+    units: Units,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn knurled_suggest_initial_numbers(
     dir: *const c_char,
@@ -423,6 +433,195 @@ pub extern "C" fn knurled_suggest_initial_numbers(
         };
         match suggest_initial_numbers(dir, &request.template, request.units) {
             Ok(suggestions) => ok(suggestions),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_suggest_load(
+    dir: *const c_char,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_suggest_load", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request: LoadSuggestionRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid load suggestion request: {error}")),
+        };
+        match suggest_load(dir, &request.exercise, request.units) {
+            Ok(suggestion) => ok(suggestion),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_list_programs(dir: *const c_char) -> *mut c_char {
+    guard("knurled_list_programs", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match list_programs(dir) {
+            Ok(programs) => ok(programs),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_add_program(
+    dir: *const c_char,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard("knurled_add_program", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request: AddProgramRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid add program request: {error}")),
+        };
+        match add_program(dir, request) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_set_active_program(
+    dir: *const c_char,
+    slug: *const c_char,
+) -> *mut c_char {
+    guard("knurled_set_active_program", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let slug = match unsafe { borrow(slug) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match set_active_program(dir, slug) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_delete_program(
+    dir: *const c_char,
+    slug: *const c_char,
+) -> *mut c_char {
+    guard("knurled_delete_program", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let slug = match unsafe { borrow(slug) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match delete_program(dir, slug) {
+            Ok(outcome) => ok(outcome),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_suggest_program_adjustments(dir: *const c_char) -> *mut c_char {
+    guard("knurled_suggest_program_adjustments", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match suggest_program_adjustments(dir) {
+            Ok(suggestions) => ok(suggestions),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+/// Renders a structured `DslTemplate` (JSON) to canonical `.fitspec` text — the
+/// inverse of `knurled_parse_template`. The app edits the structured model and
+/// renders here so the engine stays the sole producer of DSL text. -> { "text": "..." }
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_render_template(dsl_json: *const c_char) -> *mut c_char {
+    guard("knurled_render_template", || {
+        let dsl_json = match unsafe { borrow(dsl_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let dsl: DslTemplate = match serde_json::from_str(dsl_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid template: {error}")),
+        };
+        ok(json!({ "text": render_template_dsl(&dsl) }))
+    })
+}
+
+/// Parses a template into a structured `DslTemplate` (JSON) for the editor. The
+/// argument is either raw `.fitspec` text (an existing program's template) or a
+/// built-in reference like `gzcl.gzclp@1.0.0` to fork — references are vendored
+/// to their shipped document first, so the app forks a built-in with one call.
+/// -> { "dsl": DslTemplate }
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_parse_template(text: *const c_char) -> *mut c_char {
+    guard("knurled_parse_template", || {
+        let text = match unsafe { borrow(text) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        // A built-in reference carries no DSL body; vendor it to its document
+        // first. Anything containing a `{` is treated as literal template text.
+        let document = if text.contains('{') {
+            text.to_owned()
+        } else {
+            match vendor_template(text) {
+                Ok(document) => document,
+                Err(error) => return fail(error),
+            }
+        };
+        match parse_template_dsl(&document, "./templates/custom.fitspec") {
+            Ok(template) => ok(json!({ "dsl": template.dsl })),
+            Err(error) => fail(error),
+        }
+    })
+}
+
+/// Validates a candidate template and renders its first workout without writing
+/// anything. Request JSON is a `PreviewTemplateRequest` (structured `dsl` or raw
+/// `text`, plus units/initial_numbers/suggested_days/rest).
+/// -> { validation, preview } */
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_preview_template(request_json: *const c_char) -> *mut c_char {
+    guard("knurled_preview_template", || {
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let request: PreviewTemplateRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid preview request: {error}")),
+        };
+        match preview_template(request) {
+            Ok(result) => ok(result),
             Err(error) => fail(error),
         }
     })

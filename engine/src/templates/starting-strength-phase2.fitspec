@@ -1,0 +1,43 @@
+template "Starting Strength Phase 2" version="1.0.0" {
+  rotation a b
+  rest 120
+  warmup basis="top_set" empty_bar_sets=1 empty_bar_reps=5 {
+    step intensity=65 reps=3
+    step intensity=80 reps=2
+  }
+  session a display="Day A" {
+    item "squat.linear" slot="a.squat"
+    item "press.linear" slot="a.press"
+    item "deadlift.linear" slot="a.deadlift"
+  }
+  session b display="Day B" {
+    item "squat.linear" slot="b.squat"
+    item "bench.linear" slot="b.bench"
+    item "power_clean.linear" slot="b.power_clean"
+  }
+  lane "squat.linear" exercise="squat" tier="linear" basis="working_weight" rest=180 {
+    stage "3x5" { set count=3 reps=5 }
+    on pass { increase_load by=5 }
+    on stall count=3 { deload percent=90 }
+  }
+  lane "bench.linear" exercise="bench" tier="linear" basis="working_weight" rest=180 {
+    stage "3x5" { set count=3 reps=5 }
+    on pass { increase_load by=2.5 }
+    on stall count=3 { deload percent=90 }
+  }
+  lane "press.linear" exercise="press" tier="linear" basis="working_weight" rest=180 {
+    stage "3x5" { set count=3 reps=5 }
+    on pass { increase_load by=2.5 }
+    on stall count=3 { deload percent=90 }
+  }
+  lane "deadlift.linear" exercise="deadlift" tier="linear" basis="working_weight" rest=240 {
+    stage "1x5" { set count=1 reps=5 }
+    on pass { increase_load by=5 }
+    on stall count=3 { deload percent=90 }
+  }
+  lane "power_clean.linear" exercise="power_clean" tier="linear" basis="working_weight" rest=180 {
+    stage "5x3" { set count=5 reps=3 }
+    on pass { increase_load by=2.5 }
+    on stall count=3 { deload percent=90 }
+  }
+}

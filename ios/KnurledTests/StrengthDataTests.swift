@@ -45,27 +45,42 @@ import Foundation
     }
 
     @Test func beginnerThresholdLandsOnLevelOne() {
-        // Male squat beginner multiple is 1.25 -> ratio 1.25 maps to level 1.0.
-        let v = StrengthStandards.levelValue(ratio: 1.25, lift: .squat, sex: .male)
+        // Male squat at 100kg body weight: beginner 1RM standard is 95kg -> level 1.0.
+        let v = StrengthStandards.levelValue(e1rmKg: 95, bodyWeightKg: 100, lift: .squat, sex: .male)
         #expect(abs(v - 1.0) < 0.0001)
     }
 
     @Test func advancedThresholdLandsOnLevelFour() {
-        let v = StrengthStandards.levelValue(ratio: 2.75, lift: .squat, sex: .male)
+        // Male squat at 100kg body weight: advanced 1RM standard is 201kg -> level 4.0.
+        let v = StrengthStandards.levelValue(e1rmKg: 201, bodyWeightKg: 100, lift: .squat, sex: .male)
         #expect(abs(v - 4.0) < 0.0001)
     }
 
+    @Test func eliteThresholdLandsOnLevelFive() {
+        // Male squat at 100kg body weight: elite 1RM standard is 243kg -> level 5.0.
+        let v = StrengthStandards.levelValue(e1rmKg: 243, bodyWeightKg: 100, lift: .squat, sex: .male)
+        #expect(abs(v - 5.0) < 0.0001)
+    }
+
+    @Test func thresholdsInterpolateAcrossBodyWeight() {
+        // 95kg body weight sits halfway between the 90kg and 100kg male squat rows,
+        // so each threshold is the midpoint (e.g. beginner: (83+95)/2 = 89).
+        let t = StrengthStandards.thresholds(lift: .squat, sex: .male, bodyWeightKg: 95)
+        #expect(t.count == 5)
+        #expect(abs(t[0] - 89) < 0.0001)
+        #expect(abs(t[3] - 192.5) < 0.0001)
+    }
+
     @Test func levelIsMonotonic() {
-        let low = StrengthStandards.levelValue(ratio: 1.0, lift: .bench, sex: .male)
-        let high = StrengthStandards.levelValue(ratio: 1.6, lift: .bench, sex: .male)
+        let low = StrengthStandards.levelValue(e1rmKg: 80, bodyWeightKg: 100, lift: .bench, sex: .male)
+        let high = StrengthStandards.levelValue(e1rmKg: 140, bodyWeightKg: 100, lift: .bench, sex: .male)
         #expect(high > low)
     }
 
-    @Test func sexChangesLevelForSameRatio() {
-        // Female standards are lower, so the same ratio reads as a higher level.
-        let ratio = 1.0
-        let male = StrengthStandards.levelValue(ratio: ratio, lift: .bench, sex: .male)
-        let female = StrengthStandards.levelValue(ratio: ratio, lift: .bench, sex: .female)
+    @Test func sexChangesLevelForSameLift() {
+        // Female standards are lower, so the same lift at the same body weight reads higher.
+        let male = StrengthStandards.levelValue(e1rmKg: 70, bodyWeightKg: 70, lift: .bench, sex: .male)
+        let female = StrengthStandards.levelValue(e1rmKg: 70, bodyWeightKg: 70, lift: .bench, sex: .female)
         #expect(female > male)
         #expect(abs(female - male) > 0.1) // a substantial shift, not cosmetic
     }

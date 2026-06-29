@@ -2,7 +2,7 @@
   "accessories": {},
   "engine_version": "0.1.0",
   "exercise_options": {},
-  "lock_hash": "sha256:683f8191444bb4be1c6008790d393286a42169351229afa9077b402e007820ef",
+  "lock_hash": "sha256:eedca36603d693b33d49bf2e26109b83bad73a8863e185abf838a82760baa117",
   "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "patches": [],
   "plan": {
@@ -38,120 +38,612 @@
       "deadlift_day",
       "press_day"
     ],
+    "dsl": {
+      "lanes": {
+        "bench.main": {
+          "basis": "training_max",
+          "exercise": "bench",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "recompute_tm"
+                },
+                {
+                  "op": "reset_stage"
+                },
+                {
+                  "op": "advance_cycle"
+                }
+              ],
+              "trigger": {
+                "kind": "cycle_end"
+              }
+            }
+          ],
+          "sequence": "waves",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 65,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 5
+                }
+              ],
+              "id": "week 1"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 70,
+                  "reps": 3
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 80,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 90,
+                  "reps": 3
+                }
+              ],
+              "id": "week 2"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 95,
+                  "reps": 1
+                }
+              ],
+              "id": "week 3"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 40,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 50,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 60,
+                  "reps": 5
+                }
+              ],
+              "id": "deload"
+            }
+          ],
+          "tier": "main"
+        },
+        "deadlift.main": {
+          "basis": "training_max",
+          "exercise": "deadlift",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "recompute_tm"
+                },
+                {
+                  "op": "reset_stage"
+                },
+                {
+                  "op": "advance_cycle"
+                }
+              ],
+              "trigger": {
+                "kind": "cycle_end"
+              }
+            }
+          ],
+          "sequence": "waves",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 65,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 5
+                }
+              ],
+              "id": "week 1"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 70,
+                  "reps": 3
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 80,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 90,
+                  "reps": 3
+                }
+              ],
+              "id": "week 2"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 95,
+                  "reps": 1
+                }
+              ],
+              "id": "week 3"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 40,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 50,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 60,
+                  "reps": 5
+                }
+              ],
+              "id": "deload"
+            }
+          ],
+          "tier": "main"
+        },
+        "press.main": {
+          "basis": "training_max",
+          "exercise": "press",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "recompute_tm"
+                },
+                {
+                  "op": "reset_stage"
+                },
+                {
+                  "op": "advance_cycle"
+                }
+              ],
+              "trigger": {
+                "kind": "cycle_end"
+              }
+            }
+          ],
+          "sequence": "waves",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 65,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 5
+                }
+              ],
+              "id": "week 1"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 70,
+                  "reps": 3
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 80,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 90,
+                  "reps": 3
+                }
+              ],
+              "id": "week 2"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 95,
+                  "reps": 1
+                }
+              ],
+              "id": "week 3"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 40,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 50,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 60,
+                  "reps": 5
+                }
+              ],
+              "id": "deload"
+            }
+          ],
+          "tier": "main"
+        },
+        "squat.main": {
+          "basis": "training_max",
+          "exercise": "squat",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "recompute_tm"
+                },
+                {
+                  "op": "reset_stage"
+                },
+                {
+                  "op": "advance_cycle"
+                }
+              ],
+              "trigger": {
+                "kind": "cycle_end"
+              }
+            }
+          ],
+          "sequence": "waves",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 65,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 5
+                }
+              ],
+              "id": "week 1"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 70,
+                  "reps": 3
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 80,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 90,
+                  "reps": 3
+                }
+              ],
+              "id": "week 2"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 75,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 85,
+                  "reps": 3
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 95,
+                  "reps": 1
+                }
+              ],
+              "id": "week 3"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 40,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 50,
+                  "reps": 5
+                },
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 60,
+                  "reps": 5
+                }
+              ],
+              "id": "deload"
+            }
+          ],
+          "tier": "main"
+        }
+      },
+      "name": "5/3/1 for Beginners",
+      "rest_seconds": 150,
+      "rotation": [
+        "squat_day",
+        "bench_day",
+        "deadlift_day",
+        "press_day"
+      ],
+      "session_display_names": {
+        "bench_day": "Bench",
+        "deadlift_day": "Deadlift",
+        "press_day": "Press",
+        "squat_day": "Squat"
+      },
+      "sessions": {
+        "bench_day": [
+          {
+            "lane": "bench.main",
+            "slot_id": "bench.main"
+          }
+        ],
+        "deadlift_day": [
+          {
+            "lane": "deadlift.main",
+            "slot_id": "deadlift.main"
+          }
+        ],
+        "press_day": [
+          {
+            "lane": "press.main",
+            "slot_id": "press.main"
+          }
+        ],
+        "squat_day": [
+          {
+            "lane": "squat.main",
+            "slot_id": "squat.main"
+          }
+        ]
+      },
+      "version": "1.0.0",
+      "warmup": {
+        "basis": "training_max",
+        "empty_bar_reps": 0,
+        "empty_bar_sets": 0,
+        "ramp": [
+          {
+            "percentage": 40,
+            "reps": 5
+          },
+          {
+            "percentage": 50,
+            "reps": 5
+          },
+          {
+            "percentage": 60,
+            "reps": 3
+          }
+        ]
+      }
+    },
     "id": "531.beginners",
-    "increments": {
-      "default": 2.5,
-      "lower": 5.0,
-      "upper": 2.5
-    },
-    "kind": "five_three_one",
-    "lanes": {
-      "t1_stages": [],
-      "t2_stages": [],
-      "t3_pass_final_set_reps": 0,
-      "t3_target_reps": 0
-    },
     "rest": {
       "by_tier": {
         "main": 180
       },
       "default_seconds": 150
     },
-    "sessions": {
-      "bench_day": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "bench",
-          "slot_id": "bench.main",
-          "tier": "main"
-        }
-      ],
-      "deadlift_day": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "deadlift",
-          "slot_id": "deadlift.main",
-          "tier": "main"
-        }
-      ],
-      "press_day": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "press",
-          "slot_id": "press.main",
-          "tier": "main"
-        }
-      ],
-      "squat_day": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "squat",
-          "slot_id": "squat.main",
-          "tier": "main"
-        }
-      ]
-    },
-    "version": "1.0.0",
-    "weeks": [
-      {
-        "percentages": [
-          65,
-          75,
-          85
-        ],
-        "reps": [
-          "5",
-          "5",
-          "5+"
-        ],
-        "week": 1
-      },
-      {
-        "percentages": [
-          70,
-          80,
-          90
-        ],
-        "reps": [
-          "3",
-          "3",
-          "3+"
-        ],
-        "week": 2
-      },
-      {
-        "percentages": [
-          75,
-          85,
-          95
-        ],
-        "reps": [
-          "5",
-          "3",
-          "1+"
-        ],
-        "week": 3
-      },
-      {
-        "percentages": [
-          40,
-          50,
-          60
-        ],
-        "reps": [
-          "5",
-          "5",
-          "5"
-        ],
-        "week": 4
-      }
-    ]
+    "version": "1.0.0"
   },
-  "template_hash": "sha256:d55242ba38ac8b1647aa877bae22c90d9d22659ebe11df637075937b1330cf54",
+  "template_hash": "sha256:06530cf9ed2b6555e5e3c9f362f30db9b63e2650e45a8419190dd3a939c6d243",
   "training_maxes": {
     "bench": "65kg",
     "deadlift": "110kg",

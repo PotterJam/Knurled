@@ -7,6 +7,7 @@
   "engine_version": "0.1.0",
   "lanes": {
     "barbell_row.t3": {
+      "reps": 15,
       "stage": "3x15+"
     },
     "bench.t1": {
@@ -26,6 +27,7 @@
       "stage": "3x10"
     },
     "lat_pulldown.t3": {
+      "reps": 15,
       "stage": "3x15+"
     },
     "press.t1": {

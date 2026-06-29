@@ -9,7 +9,11 @@ struct DataHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: KnurledTheme.Spacing.m) {
-                    BodyMetricsCard(weightFocused: $bodyWeightFocused)
+                    // Captured once here while unset; afterwards it's edited from
+                    // Settings → Profile and this onboarding card stays out of the way.
+                    if metrics.bodyWeight == nil {
+                        BodyMetricsCard(weightFocused: $bodyWeightFocused)
+                    }
                     content
                         .contentShape(Rectangle())
                         .onTapGesture {

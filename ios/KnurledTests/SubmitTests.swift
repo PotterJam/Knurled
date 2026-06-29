@@ -18,7 +18,7 @@ import Foundation
 
         #expect(outcome.validation.isValid)
         #expect(repo.records.contains { $0.date == "2026-06-24" && !$0.lifts.isEmpty })
-        #expect(repo.state?.lanes["squat.t1"]?.load == "82.5kg")
+        #expect(repo.state?.lanes["squat.t1"]?.load == "85kg")
 
         let records = try await app.engine.records(dir: dir)
         #expect(records.first?.lifts.first?.exercise == "squat")

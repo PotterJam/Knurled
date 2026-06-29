@@ -44,6 +44,13 @@ enum GitHubChangedFiles {
                 paths.append(generated)
             }
         }
+        let programs = dir.appending(path: "programs", directoryHint: .isDirectory)
+        if let enumerator = FileManager.default.enumerator(at: programs, includingPropertiesForKeys: nil) {
+            for case let url as URL in enumerator where url.lastPathComponent == "current.json"
+                && url.deletingLastPathComponent().lastPathComponent == "state" {
+                if let relative = repoRelativePath(for: url, root: dir) { paths.append(relative) }
+            }
+        }
         return paths
     }
 
@@ -186,7 +193,8 @@ extension AppModel {
     }
 
     static func apply(initialNumbers: InitialTrainingNumbers, to dir: URL) throws {
-        let planURL = dir.appending(path: "plan.fitspec")
+        let programDir = RepoLayout.activeProgramDirectory(in: dir)
+        let planURL = programDir.appending(path: "plan.fitspec")
         var plan = try String(contentsOf: planURL, encoding: .utf8)
         plan = Self.replacingPlanUnits(in: plan, with: initialNumbers.units)
         plan = try Self.replacingInitialNumberBlock(in: plan, with: initialNumbers)
@@ -194,7 +202,7 @@ extension AppModel {
 
         // `initRepo` wrote state from template defaults; drop it so build derives from the
         // edited first-workout numbers.
-        let stateURL = dir.appending(path: "state/current.json")
+        let stateURL = programDir.appending(path: "state/current.json")
         if FileManager.default.fileExists(atPath: stateURL.path(percentEncoded: false)) {
             try FileManager.default.removeItem(at: stateURL)
         }

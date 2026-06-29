@@ -23,6 +23,15 @@ protocol WorkoutEngine: Sendable {
     func previewPlanEdit(dir: URL, edit: PlanEdit) async throws -> PlanEditOutcome
     func applyPlanEdit(dir: URL, edit: PlanEdit) async throws -> PlanEditOutcome
     func suggestInitialNumbers(dir: URL, request: InitialNumberSuggestionRequest) async throws -> InitialNumberSuggestions
+    func suggestLoad(dir: URL, request: LoadSuggestionRequest) async throws -> InitialNumberSuggestion
+    func listPrograms(dir: URL) async throws -> [ProgramSummary]
+    func addProgram(dir: URL, request: AddProgramRequest) async throws -> ProgramMutationOutcome
+    func setActiveProgram(dir: URL, slug: String) async throws -> ProgramMutationOutcome
+    func deleteProgram(dir: URL, slug: String) async throws -> ProgramMutationOutcome
+    func suggestProgramAdjustments(dir: URL) async throws -> [ProgramAdjustmentSuggestion]
+    func renderTemplate(dsl: DslTemplate) async throws -> String
+    func parseTemplate(text: String) async throws -> DslTemplate
+    func previewTemplate(request: PreviewTemplateRequest) async throws -> TemplatePreview
 }
 
 enum EngineError: Error, Sendable, LocalizedError {

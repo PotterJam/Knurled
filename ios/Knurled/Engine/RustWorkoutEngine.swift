@@ -79,6 +79,55 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(InitialNumberSuggestions.self, from: raw)
     }
 
+    func suggestLoad(dir: URL, request: LoadSuggestionRequest) throws -> InitialNumberSuggestion {
+        let json = try encode(request)
+        let raw = try call(dir: dir, json: json) { knurled_suggest_load($0, $1) }
+        return try decode(InitialNumberSuggestion.self, from: raw)
+    }
+
+    func listPrograms(dir: URL) throws -> [ProgramSummary] {
+        let raw = try call(dir: dir) { knurled_list_programs($0) }
+        return try decode([ProgramSummary].self, from: raw)
+    }
+
+    func addProgram(dir: URL, request: AddProgramRequest) throws -> ProgramMutationOutcome {
+        let json = try encode(request)
+        let raw = try call(dir: dir, json: json) { knurled_add_program($0, $1) }
+        return try decode(ProgramMutationOutcome.self, from: raw)
+    }
+
+    func setActiveProgram(dir: URL, slug: String) throws -> ProgramMutationOutcome {
+        let raw = try call(dir: dir, json: slug) { knurled_set_active_program($0, $1) }
+        return try decode(ProgramMutationOutcome.self, from: raw)
+    }
+
+    func deleteProgram(dir: URL, slug: String) throws -> ProgramMutationOutcome {
+        let raw = try call(dir: dir, json: slug) { knurled_delete_program($0, $1) }
+        return try decode(ProgramMutationOutcome.self, from: raw)
+    }
+
+    func suggestProgramAdjustments(dir: URL) throws -> [ProgramAdjustmentSuggestion] {
+        let raw = try call(dir: dir) { knurled_suggest_program_adjustments($0) }
+        return try decode([ProgramAdjustmentSuggestion].self, from: raw)
+    }
+
+    func renderTemplate(dsl: DslTemplate) throws -> String {
+        let json = try encode(dsl)
+        let raw = try call(json: json) { knurled_render_template($0) }
+        return try decode(RenderedTemplateText.self, from: raw).text
+    }
+
+    func parseTemplate(text: String) throws -> DslTemplate {
+        let raw = try call(json: text) { knurled_parse_template($0) }
+        return try decode(ParsedTemplate.self, from: raw).dsl
+    }
+
+    func previewTemplate(request: PreviewTemplateRequest) throws -> TemplatePreview {
+        let json = try encode(request)
+        let raw = try call(json: json) { knurled_preview_template($0) }
+        return try decode(TemplatePreview.self, from: raw)
+    }
+
     func reduce(dir: URL, session: RenderedSession, input: ExecutionInput) throws -> ReductionResult {
         let sessionJSON = try encode(session)
         let inputJSON = try encode(input)
@@ -119,6 +168,17 @@ actor RustWorkoutEngine: WorkoutEngine {
     ) throws -> String {
         try dir.path(percentEncoded: false).withCString { cdir in
             guard let pointer = body(cdir) else { throw EngineError.emptyResponse }
+            defer { knurled_string_free(pointer) }
+            return String(cString: pointer)
+        }
+    }
+
+    private func call(
+        json: String,
+        _ body: (UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    ) throws -> String {
+        try json.withCString { cjson in
+            guard let pointer = body(cjson) else { throw EngineError.emptyResponse }
             defer { knurled_string_free(pointer) }
             return String(cString: pointer)
         }

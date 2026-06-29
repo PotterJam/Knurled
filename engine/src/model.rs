@@ -16,14 +16,6 @@ pub enum Units {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TemplateKind {
-    Gzclp,
-    FiveThreeOne,
-    StartingStrength,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Plan {
     #[serde(rename = "type")]
     pub kind: String,
@@ -152,46 +144,150 @@ pub enum PatchOperation {
 pub struct BuiltinTemplate {
     pub id: String,
     pub version: String,
-    pub kind: TemplateKind,
     pub default_rotation: Vec<String>,
-    pub sessions: Map<Vec<TemplateSlot>>,
     pub rest: RestPolicy,
-    pub lanes: TemplateLaneRules,
-    pub increments: TemplateIncrements,
-    pub weeks: Vec<FiveThreeOneWeek>,
+    pub dsl: DslTemplate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TemplateSlot {
+pub struct DslTemplate {
+    pub name: String,
+    pub version: String,
+    pub rotation: Vec<String>,
+    pub rest_seconds: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warmup: Option<WarmupScheme>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub session_display_names: Map<String>,
+    pub sessions: Map<Vec<DslSessionItem>>,
+    pub lanes: Map<DslLane>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DslSessionItem {
+    pub lane: String,
     pub slot_id: String,
-    pub tier: String,
-    pub exercise: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accessory_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_exercise: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TemplateLaneRules {
-    pub t1_stages: Vec<String>,
-    pub t2_stages: Vec<String>,
-    pub t3_target_reps: u32,
-    pub t3_pass_final_set_reps: u32,
+pub struct DslLane {
+    pub exercise: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<String>,
+    pub basis: DslBasis,
+    #[serde(default)]
+    pub initial: DslInitial,
+    pub sequence: DslSequence,
+    pub stages: Vec<DslStage>,
+    pub rules: Vec<DslRule>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest_seconds: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warmup: Option<WarmupScheme>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TemplateIncrements {
-    pub default: f64,
-    pub upper: f64,
-    pub lower: f64,
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DslInitial {
+    #[default]
+    Basis,
+    Percent {
+        percentage: u32,
+    },
+    Performed,
 }
 
-impl Eq for TemplateIncrements {}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DslBasis {
+    WorkingWeight,
+    TrainingMax,
+    Bodyweight,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DslSequence {
+    #[default]
+    None,
+    Stages,
+    Cycle,
+    Waves,
+    Rotation,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FiveThreeOneWeek {
-    pub week: u32,
-    pub percentages: Vec<u32>,
-    pub reps: Vec<String>,
+pub struct DslStage {
+    pub id: String,
+    pub groups: Vec<DslSetGroup>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DslSetGroup {
+    pub count: u32,
+    pub reps: u32,
+    /// Integer percent of the selected basis.
+    pub intensity: u32,
+    #[serde(default)]
+    pub amrap: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rep_min: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rep_max: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rpe: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DslRule {
+    pub trigger: DslTrigger,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    pub effects: Vec<DslEffect>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DslTrigger {
+    Pass,
+    Fail,
+    AmrapGte { reps: u32 },
+    Stall { count: u32 },
+    CycleEnd,
+    RangeTop,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum DslEffect {
+    IncreaseLoad { amount: String },
+    Deload { percent: u32 },
+    ResetLoad { percent: u32 },
+    AdvanceStage,
+    ResetStage,
+    IncreaseReps { amount: u32 },
+    ResetReps,
+    RecomputeTm { amount: String },
+    AdvanceCycle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RenderedDslRule {
+    pub trigger: DslTrigger,
+    pub effects: Vec<DslEffect>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RenderedDslContext {
+    pub basis: DslBasis,
+    pub sequence: DslSequence,
+    pub initial: DslInitial,
+    pub first_stage: String,
+    pub next_stage: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -390,6 +486,7 @@ pub enum RoundingMode {
 pub enum Implement {
     Barbell,
     Dumbbell,
+    Bodyweight,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -439,6 +536,17 @@ pub struct StateProjection {
     pub cursor: Cursor,
     pub lanes: Map<LaneState>,
     pub sessions: Map<SessionState>,
+    /// One authored transition back per lane. This is enough to revise the latest record on a
+    /// lane without turning authored state into a replay-derived projection.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub previous_lanes: Map<LaneCheckpoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LaneCheckpoint {
+    pub record_id: String,
+    pub previous_state: LaneState,
+    pub item: Box<RenderedItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -460,6 +568,10 @@ pub struct LaneState {
     pub week: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycle: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reps: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stall: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -492,6 +604,7 @@ pub struct RenderedItem {
     pub progression_lane: String,
     pub progression_rule: String,
     pub exercise: String,
+    pub implement: Implement,
     pub display: DisplayFields,
     pub prescription: Prescription,
     pub execution_contract: ExecutionContract,
@@ -500,6 +613,10 @@ pub struct RenderedItem {
     pub identity: ItemIdentity,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exercise_options: Option<RenderedExerciseOptions>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dsl_rules: Vec<RenderedDslRule>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dsl_context: Option<RenderedDslContext>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -566,6 +683,10 @@ pub struct PrescribedSet {
     pub amrap: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub percentage: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rep_min: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rep_max: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -782,4 +903,31 @@ pub struct PreviewReport {
     pub schema_version: String,
     pub sessions: serde_json::Value,
     pub final_state: Option<StateProjection>,
+}
+
+/// Input to [`crate::preview_template`]: a candidate template (structured `dsl`
+/// or raw `text`) plus the plan-level numbers needed to render a first workout.
+/// The app posts this on every edit to drive live validation + preview without
+/// writing anything to disk.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct PreviewTemplateRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dsl: Option<DslTemplate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub units: Units,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub initial_numbers: Map<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_days: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest: Option<RestPolicy>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PreviewTemplateResult {
+    pub validation: ValidationReport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<RenderedSession>,
 }

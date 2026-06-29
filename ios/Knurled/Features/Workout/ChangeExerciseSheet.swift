@@ -187,6 +187,7 @@ struct LoadEditDraft {
     var destinationText = ""
 }
 
+@MainActor
 enum LoadControl {
     static func parse(_ load: String?, defaultUnit: Units) -> (value: Double, unit: Units)? {
         guard let load else { return nil }
@@ -213,7 +214,7 @@ enum LoadControl {
     }
 
     static func defaultValue(for exercise: String, unit: Units) -> Double {
-        if isBodyweightExercise(exercise) {
+        if LiveItem.legacyBodyweightExercise(exercise) {
             return 0
         }
 
@@ -221,16 +222,6 @@ enum LoadControl {
         case .kg: 20
         case .lb: 45
         }
-    }
-
-    static func isBodyweightExercise(_ exercise: String) -> Bool {
-        let normalized = exercise
-            .replacingOccurrences(of: " ", with: "_")
-            .lowercased()
-        return normalized.contains("pull_up")
-            || normalized.contains("pullup")
-            || normalized.contains("chin_up")
-            || normalized.contains("chinup")
     }
 
     static func format(_ value: Double, unit: Units) -> String {

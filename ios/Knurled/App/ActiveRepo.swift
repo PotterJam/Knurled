@@ -13,6 +13,9 @@ final class ActiveRepo: Identifiable {
     var lastValidOutputs: BuildOutputs?
     var plan: PlanIR?
     var records: [TrainingRecord] = []
+    var programs: [ProgramSummary] = []
+    /// Engine-owned, global-history prefills keyed by normalized exercise name.
+    var suggestedLoads: [String: String] = [:]
     var isRefreshing = false
     var loadError: String?
     var remote: GitHubRemote?
@@ -43,6 +46,23 @@ final class ActiveRepo: Identifiable {
             if built.validation.isValid { lastValidOutputs = built }
             plan = try? PlanIR.load(dir: url)
             records = try await engine.records(dir: url)
+            programs = (try? await engine.listPrograms(dir: url)) ?? []
+            suggestedLoads = [:]
+            if let session = built.nextWorkout, let units = plan?.plan.units {
+                let exercises = Set(session.items.compactMap { item in
+                    item.prescription.sets.allSatisfy { $0.load == nil }
+                        && item.implement != .bodyweight ? item.exercise : nil
+                })
+                for exercise in exercises {
+                    let suggestion = try await engine.suggestLoad(
+                        dir: url,
+                        request: LoadSuggestionRequest(exercise: exercise, units: units)
+                    )
+                    if let value = suggestion.value {
+                        suggestedLoads[LiveItem.normalized(exercise)] = "\(value)\(units.rawValue)"
+                    }
+                }
+            }
             loadError = nil
         } catch {
             loadError = error.localizedDescription

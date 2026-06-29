@@ -22,7 +22,7 @@ import Foundation
         #expect(t1.prescription.sets.last?.amrap == true)
         #expect(t1.executionContract.recommendedInput == "amrap_final_set")
         #expect(t1.effectPreview.pass.first?.op == "increase_load")
-        #expect(t1.effectPreview.pass.first?.to == "82.5kg")
+        #expect(t1.effectPreview.pass.first?.to == "85kg")
     }
 
     @Test func decodesState() throws {

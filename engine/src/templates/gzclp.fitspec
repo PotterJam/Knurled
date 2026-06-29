@@ -1,0 +1,111 @@
+template "GZCLP" version="1.0.0" {
+  rotation a1 b1 a2 b2
+  rest 120
+  warmup basis="top_set" empty_bar_sets=1 empty_bar_reps=5 {
+    step intensity=65 reps=3
+    step intensity=80 reps=2
+  }
+
+  session a1 display="A1" {
+    item "squat.t1" slot="a1.t1"
+    item "bench.t2" slot="a1.t2"
+    item "accessory.t3" slot="a1.t3" accessory="A1.T3" default_exercise="lat_pulldown"
+  }
+  session b1 display="B1" {
+    item "press.t1" slot="b1.t1"
+    item "deadlift.t2" slot="b1.t2"
+    item "accessory.t3" slot="b1.t3" accessory="B1.T3" default_exercise="barbell_row"
+  }
+  session a2 display="A2" {
+    item "bench.t1" slot="a2.t1"
+    item "squat.t2" slot="a2.t2"
+    item "accessory.t3" slot="a2.t3" accessory="A2.T3" default_exercise="lat_pulldown"
+  }
+  session b2 display="B2" {
+    item "deadlift.t1" slot="b2.t1"
+    item "press.t2" slot="b2.t2"
+    item "accessory.t3" slot="b2.t3" accessory="B2.T3" default_exercise="barbell_row"
+  }
+
+  lane "squat.t1" exercise="squat" tier="t1" basis="working_weight" sequence="stages" rest=180 {
+    stage "5x3+" { set count=5 reps=3 amrap=#true }
+    stage "6x2+" { set count=6 reps=2 amrap=#true }
+    stage "10x1+" { set count=10 reps=1 amrap=#true }
+    on pass { increase_load by=5 }
+    on fail stage="5x3+" { advance_stage }
+    on fail stage="6x2+" { advance_stage }
+    on fail stage="10x1+" { reset_load percent=90; reset_stage }
+  }
+  lane "bench.t1" exercise="bench" tier="t1" basis="working_weight" sequence="stages" rest=180 {
+    stage "5x3+" { set count=5 reps=3 amrap=#true }
+    stage "6x2+" { set count=6 reps=2 amrap=#true }
+    stage "10x1+" { set count=10 reps=1 amrap=#true }
+    on pass { increase_load by=2.5 }
+    on fail stage="5x3+" { advance_stage }
+    on fail stage="6x2+" { advance_stage }
+    on fail stage="10x1+" { reset_load percent=90; reset_stage }
+  }
+  lane "press.t1" exercise="press" tier="t1" basis="working_weight" sequence="stages" rest=180 {
+    stage "5x3+" { set count=5 reps=3 amrap=#true }
+    stage "6x2+" { set count=6 reps=2 amrap=#true }
+    stage "10x1+" { set count=10 reps=1 amrap=#true }
+    on pass { increase_load by=2.5 }
+    on fail stage="5x3+" { advance_stage }
+    on fail stage="6x2+" { advance_stage }
+    on fail stage="10x1+" { reset_load percent=90; reset_stage }
+  }
+  lane "deadlift.t1" exercise="deadlift" tier="t1" basis="working_weight" sequence="stages" rest=180 {
+    stage "5x3+" { set count=5 reps=3 amrap=#true }
+    stage "6x2+" { set count=6 reps=2 amrap=#true }
+    stage "10x1+" { set count=10 reps=1 amrap=#true }
+    on pass { increase_load by=5 }
+    on fail stage="5x3+" { advance_stage }
+    on fail stage="6x2+" { advance_stage }
+    on fail stage="10x1+" { reset_load percent=90; reset_stage }
+  }
+
+  lane "squat.t2" exercise="squat" tier="t2" basis="working_weight" initial="80%" sequence="stages" rest=150 {
+    stage "3x10" { set count=3 reps=10 }
+    stage "3x8" { set count=3 reps=8 }
+    stage "3x6" { set count=3 reps=6 }
+    on pass { increase_load by=5 }
+    on fail stage="3x10" { advance_stage }
+    on fail stage="3x8" { advance_stage }
+    on fail stage="3x6" { reset_load percent=90; reset_stage }
+  }
+  lane "bench.t2" exercise="bench" tier="t2" basis="working_weight" initial="80%" sequence="stages" rest=150 {
+    stage "3x10" { set count=3 reps=10 }
+    stage "3x8" { set count=3 reps=8 }
+    stage "3x6" { set count=3 reps=6 }
+    on pass { increase_load by=2.5 }
+    on fail stage="3x10" { advance_stage }
+    on fail stage="3x8" { advance_stage }
+    on fail stage="3x6" { reset_load percent=90; reset_stage }
+  }
+  lane "press.t2" exercise="press" tier="t2" basis="working_weight" initial="80%" sequence="stages" rest=150 {
+    stage "3x10" { set count=3 reps=10 }
+    stage "3x8" { set count=3 reps=8 }
+    stage "3x6" { set count=3 reps=6 }
+    on pass { increase_load by=2.5 }
+    on fail stage="3x10" { advance_stage }
+    on fail stage="3x8" { advance_stage }
+    on fail stage="3x6" { reset_load percent=90; reset_stage }
+  }
+  lane "deadlift.t2" exercise="deadlift" tier="t2" basis="working_weight" initial="80%" sequence="stages" rest=150 {
+    stage "3x10" { set count=3 reps=10 }
+    stage "3x8" { set count=3 reps=8 }
+    stage "3x6" { set count=3 reps=6 }
+    on pass { increase_load by=5 }
+    on fail stage="3x10" { advance_stage }
+    on fail stage="3x8" { advance_stage }
+    on fail stage="3x6" { reset_load percent=90; reset_stage }
+  }
+  lane "accessory.t3" exercise="accessory" tier="t3" basis="working_weight" initial="performed" sequence="none" rest=90 {
+    stage "3x15+" {
+      set count=2 reps=15
+      set count=1 reps=15 rep_min=15 rep_max=25 amrap=#true
+    }
+    on pass { increase_reps by=1 }
+    on range_top { increase_load by=2.5; reset_reps }
+  }
+}

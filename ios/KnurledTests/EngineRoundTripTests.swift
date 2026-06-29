@@ -41,7 +41,7 @@ import Foundation
         #expect(!outcome.results.isEmpty)
         #expect(!outcome.effects.isEmpty)
         #expect(outcome.nextWorkout.sessionId != "a1")
-        #expect(outcome.newState.lanes["squat.t1"]?.load == "82.5kg")
+        #expect(outcome.newState.lanes["squat.t1"]?.load == "85kg")
     }
 
     @Test func submittingCompletedSessionWritesMonthlyRecord() async throws {

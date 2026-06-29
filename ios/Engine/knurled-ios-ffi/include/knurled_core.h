@@ -56,6 +56,35 @@ char *knurled_apply_plan_edit(const char *dir, const char *plan_edit_json);
  * Request JSON: { "template": "...@...", "units": "kg"|"lb" }. -> initial number suggestions */
 char *knurled_suggest_initial_numbers(const char *dir, const char *request_json);
 
+/* Suggests the most recent global-history load for one exercise.
+ * Request JSON: { "exercise": "...", "units": "kg"|"lb" }. */
+char *knurled_suggest_load(const char *dir, const char *request_json);
+
+/* Program-bank operations. */
+char *knurled_list_programs(const char *dir);
+char *knurled_add_program(const char *dir, const char *request_json);
+char *knurled_set_active_program(const char *dir, const char *slug);
+char *knurled_delete_program(const char *dir, const char *slug);
+char *knurled_suggest_program_adjustments(const char *dir);
+
+/* In-app custom-program authoring (Phase 6). The engine owns DSL text generation;
+ * the app edits a structured DslTemplate and round-trips through these. */
+
+/* Renders a structured DslTemplate (JSON) to canonical .fitspec text.
+ * -> { "text": "..." } */
+char *knurled_render_template(const char *dsl_json);
+
+/* Parses a template into a structured DslTemplate (JSON) for the editor. The
+ * argument is either raw .fitspec text or a built-in reference (e.g.
+ * "gzcl.gzclp@1.0.0") to fork; references are vendored first.
+ * -> { "dsl": <DslTemplate> } */
+char *knurled_parse_template(const char *text);
+
+/* Validates a candidate template and renders its first workout without writing.
+ * Request JSON is a PreviewTemplateRequest ({ dsl|text, units, initial_numbers,
+ * suggested_days, rest }). -> { "validation": ..., "preview": ... } */
+char *knurled_preview_template(const char *request_json);
+
 /* -> engine version string */
 char *knurled_engine_version(void);
 
