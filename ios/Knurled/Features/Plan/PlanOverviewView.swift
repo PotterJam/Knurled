@@ -6,12 +6,6 @@ struct PlanOverviewView: View {
     let repo: ActiveRepo
     let plan: PlanIR
 
-    struct RotationRow: Identifiable {
-        let id: String
-        let label: String
-        let isNext: Bool
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -19,7 +13,6 @@ struct PlanOverviewView: View {
                     PlanSummaryPanel(
                         repo: repo,
                         plan: plan,
-                        rotationRows: rotationRows,
                         suggestedDays: suggestedDaysText
                     )
 
@@ -56,24 +49,11 @@ struct PlanOverviewView: View {
         let days = plan.schedule.suggestedDays
         return days.isEmpty ? "None" : days.map { $0.capitalized }.joined(separator: ", ")
     }
-
-    private var rotationRows: [RotationRow] {
-        let next = repo.state?.cursor.nextSession
-        let rotation = plan.schedule.rotation
-        guard let nextIndex = rotation.firstIndex(where: { $0 == next }) else {
-            return rotation.map { RotationRow(id: $0, label: "", isNext: false) }
-        }
-        return rotation.enumerated().map { index, session in
-            let label = index == nextIndex ? "Next" : (index < nextIndex ? "Done" : "Then")
-            return RotationRow(id: session, label: label, isNext: index == nextIndex)
-        }
-    }
 }
 
 private struct PlanSummaryPanel: View {
     let repo: ActiveRepo
     let plan: PlanIR
-    let rotationRows: [PlanOverviewView.RotationRow]
     let suggestedDays: String
 
     var body: some View {
@@ -93,23 +73,17 @@ private struct PlanSummaryPanel: View {
             Divider()
 
             VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
-                LabeledContent("Rotation") {
-                    Text(rotationText)
-                        .font(.callout.monospaced())
-                        .multilineTextAlignment(.trailing)
+                if !plan.schedule.rotation.isEmpty {
+                    RotationIndicator(
+                        rotation: plan.schedule.rotation,
+                        currentSession: repo.state?.cursor.nextSession ?? ""
+                    )
                 }
                 LabeledContent("Days", value: suggestedDays)
             }
             .font(.callout)
         }
         .knurledCard()
-    }
-
-    private var rotationText: String {
-        rotationRows.map { row in
-            row.isNext ? "\(row.id.uppercased()) next" : row.id.uppercased()
-        }
-        .joined(separator: "  ")
     }
 }
 

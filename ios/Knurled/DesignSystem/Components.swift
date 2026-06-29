@@ -96,6 +96,41 @@ struct HorizontalNumberPicker: View {
     }
 }
 
+struct RotationIndicator: View {
+    let rotation: [String]
+    let currentSession: String
+
+    @Environment(\.knurledPalette) private var palette
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(Array(rotation.enumerated()), id: \.offset) { idx, session in
+                    if idx > 0 {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 4)
+                    }
+                    Text(session.uppercased())
+                        .font(.caption.weight(session == currentSession ? .bold : .regular))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            session == currentSession
+                                ? palette.accent
+                                : Color(uiColor: .tertiarySystemFill),
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                        .foregroundStyle(session == currentSession ? .white : .secondary)
+                }
+            }
+            .padding(.horizontal, KnurledTheme.Spacing.m)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
 struct TierBadge: View {
     let tier: String
 

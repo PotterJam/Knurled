@@ -268,7 +268,8 @@ private struct EditableHistoryWorkoutView: View {
                                 controller: controller,
                                 onDelete: item.isTrackingOnlyExtra ? {
                                     workout.removeItem(item)
-                                } : nil
+                                } : nil,
+                                allActive: true
                             )
                         }
                         Button {

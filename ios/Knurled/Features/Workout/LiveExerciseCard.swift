@@ -5,6 +5,7 @@ struct LiveExerciseCard: View {
     let controller: WorkoutLiveController
     /// Non-nil only for exercises the user added this session, which can be removed.
     var onDelete: (() -> Void)? = nil
+    var allActive: Bool = false
     @State private var showChange = false
     @State private var confirmDelete = false
     @State private var editingValue: SetValueEdit?
@@ -94,7 +95,7 @@ struct LiveExerciseCard: View {
             footer
         }
         .knurledCard()
-        .opacity(isCurrentExercise ? 1 : 0.5)
+        .opacity(allActive || isCurrentExercise ? 1 : 0.5)
         .overlay {
             if isCurrentExercise {
                 RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)

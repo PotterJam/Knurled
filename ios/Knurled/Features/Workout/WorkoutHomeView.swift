@@ -178,10 +178,10 @@ struct NextWorkoutView: View {
                 skipButton(forward: true, systemImage: "chevron.right", label: "Skip to next workout")
             }
 
-            Text("Skip ahead or back through your rotation — nothing is logged.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if let rotation = repo.plan?.schedule.rotation, !rotation.isEmpty {
+                RotationIndicator(rotation: rotation, currentSession: session.sessionId)
+                    .padding(.vertical, 4)
+            }
 
             if let skipError {
                 Text(skipError)
