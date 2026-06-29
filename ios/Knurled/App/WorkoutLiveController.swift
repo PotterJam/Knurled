@@ -70,6 +70,7 @@ final class WorkoutLiveController {
     private var restTimersEnabled = true
     private var tickTask: Task<Void, Never>?
     private var draftSaveTask: Task<Void, Never>?
+    private var persistTask: Task<Void, Never>?
     private var activity: ActivityHandle?
 
     private init() {}
@@ -205,6 +206,8 @@ final class WorkoutLiveController {
         stopRest()
         draftSaveTask?.cancel()
         draftSaveTask = nil
+        persistTask?.cancel()
+        persistTask = nil
         workout = nil
         focusedItemID = nil
         preferredTarget = nil
@@ -214,15 +217,33 @@ final class WorkoutLiveController {
 
     // MARK: - Draft persistence
 
-    /// Snapshots the live workout (including the cursor) and writes it to the crash-safe draft
-    /// file. Cheap enough to call on every meaningful mutation; the 30s ticker covers idle gaps.
+    /// Coalesce frequent mutations — stepper taps, reps-wheel scrubs, RPE nudges — into a single
+    /// save shortly after the user stops. The write encodes the whole rendered session and lands
+    /// atomically on disk; doing that synchronously on every change stalled the main actor and
+    /// made the Live Activity and in-app numbers feel laggy. Durability backstops: the 30s
+    /// autosave, the scene-background flush, and the flush when the workout screen is dismissed.
     func persistDraft() {
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            self?.persistDraftNow()
+        }
+    }
+
+    /// Snapshot and write the draft immediately, skipping the debounce — used when the app is
+    /// backgrounded or the workout screen is dismissed and the latest state must hit disk now.
+    func persistDraftNow() {
+        persistTask?.cancel()
+        persistTask = nil
         guard let draft = snapshot() else { return }
         DraftStore.shared.save(draft)
     }
 
     /// Drops the saved draft and ends the session (explicit discard, or after a finished workout).
     func discard() {
+        persistTask?.cancel()
+        persistTask = nil
         DraftStore.shared.clear()
         end()
     }

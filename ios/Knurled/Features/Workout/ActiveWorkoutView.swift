@@ -82,6 +82,9 @@ struct ActiveWorkoutView: View {
             }
             .onDisappear {
                 pendingScroll?.cancel()
+                // Flush any debounced draft save before tearing down, so leaving mid-edit keeps
+                // the latest state. After a discard the workout is already gone and this no-ops.
+                controller.persistDraftNow()
                 controller.end()
             }
             .onChange(of: workoutSettings.restTimersEnabled) { _, enabled in
@@ -108,7 +111,7 @@ struct ActiveWorkoutView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { controller.persistDraft() }
+            if phase == .background { controller.persistDraftNow() }
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
