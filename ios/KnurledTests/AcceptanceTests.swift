@@ -63,7 +63,7 @@ import Foundation
         let squat = try #require(result(outcome, slot: "a1.t1"))
         #expect(squat.outcome == "pass")
         #expect(squat.actual.last?.reps == 7)
-        #expect(squat.effects.contains { $0.op == "increase_load" && $0.to == "82.5kg" })
+        #expect(squat.effects.contains { $0.op == "increase_load" && $0.to == "85kg" })
     }
 
     // §40.3 — Straight-set miss yields fail and the template failure effect.

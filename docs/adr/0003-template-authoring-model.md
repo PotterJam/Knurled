@@ -122,6 +122,6 @@ vocabulary is proven. The built-ins thus become the first documents written in t
 ## Implementation note
 
 Implemented on 2026-06-28 in `engine/src/dsl.rs`. Repository-relative template references,
-vendoring/parity fixtures, the generic evaluator, and the iOS no-template wizard are live. Built-in
-documents retain a pinned compatibility bridge while their evaluator output remains protected by
-the byte-identical parity gate.
+vendoring, the generic evaluator, and the iOS no-template wizard are live. Phase 5 removed the
+compatibility bridge and legacy Rust renderers: all catalog entries now parse embedded DSL
+documents and use the same state, rendering, and reduction path as repository-owned templates.

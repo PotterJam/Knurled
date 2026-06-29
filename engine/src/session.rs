@@ -178,6 +178,7 @@ fn reset_baselines(
         let Some(lane) = state.lanes.get_mut(&item.progression_lane) else {
             continue;
         };
+        lane.stall = Some(0);
         if lane.training_max.is_some() {
             let from = lane.training_max.clone();
             lane.training_max = Some(weight.clone());

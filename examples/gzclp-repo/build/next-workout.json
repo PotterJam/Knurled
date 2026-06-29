@@ -7,6 +7,38 @@
         "subtitle": "80kg - 5x3+",
         "title": "Squat T1"
       },
+      "dsl_context": {
+        "basis": "working_weight",
+        "first_stage": "5x3+",
+        "initial": {
+          "kind": "basis"
+        },
+        "next_stage": "6x2+",
+        "sequence": "stages"
+      },
+      "dsl_rules": [
+        {
+          "effects": [
+            {
+              "amount": "5",
+              "op": "increase_load"
+            }
+          ],
+          "trigger": {
+            "kind": "pass"
+          }
+        },
+        {
+          "effects": [
+            {
+              "op": "advance_stage"
+            }
+          ],
+          "trigger": {
+            "kind": "fail"
+          }
+        }
+      ],
       "effect_preview": {
         "adjusted_today": [],
         "fail": [
@@ -22,7 +54,7 @@
             "from": "80kg",
             "lane": "squat.t1",
             "op": "increase_load",
-            "to": "82.5kg"
+            "to": "85kg"
           }
         ]
       },
@@ -75,10 +107,11 @@
         "item_id": "a1.t1",
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "squat.t1",
-        "progression_rule": "gzcl.t1",
-        "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
+        "progression_rule": "dsl.t1",
+        "rendered_session_hash": "sha256:fdf5ecd3e9c6488bf40fcf6e82f93c3a6cbab9743df1ecddee0c848125e36c1a",
         "slot_id": "a1.t1"
       },
+      "implement": "barbell",
       "item_id": "a1.t1",
       "prescription": {
         "sets": [
@@ -122,35 +155,22 @@
           },
           {
             "amrap": false,
-            "load": "20kg",
-            "set": 2,
-            "target_reps": 5
-          },
-          {
-            "amrap": false,
-            "load": "35kg",
-            "percentage": 45,
-            "set": 3,
-            "target_reps": 5
-          },
-          {
-            "amrap": false,
             "load": "52.5kg",
             "percentage": 65,
-            "set": 4,
+            "set": 2,
             "target_reps": 3
           },
           {
             "amrap": false,
-            "load": "67.5kg",
-            "percentage": 85,
-            "set": 5,
+            "load": "65kg",
+            "percentage": 80,
+            "set": 3,
             "target_reps": 2
           }
         ]
       },
       "progression_lane": "squat.t1",
-      "progression_rule": "gzcl.t1",
+      "progression_rule": "dsl.t1",
       "rest": {
         "key": "t1",
         "seconds": 180,
@@ -163,6 +183,39 @@
         "subtitle": "45kg - 3x10",
         "title": "Bench T2"
       },
+      "dsl_context": {
+        "basis": "working_weight",
+        "first_stage": "3x10",
+        "initial": {
+          "kind": "percent",
+          "percentage": 80
+        },
+        "next_stage": "3x8",
+        "sequence": "stages"
+      },
+      "dsl_rules": [
+        {
+          "effects": [
+            {
+              "amount": "2.5",
+              "op": "increase_load"
+            }
+          ],
+          "trigger": {
+            "kind": "pass"
+          }
+        },
+        {
+          "effects": [
+            {
+              "op": "advance_stage"
+            }
+          ],
+          "trigger": {
+            "kind": "fail"
+          }
+        }
+      ],
       "effect_preview": {
         "adjusted_today": [],
         "fail": [
@@ -236,10 +289,11 @@
         "item_id": "a1.t2",
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "bench.t2",
-        "progression_rule": "gzcl.t2",
-        "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
+        "progression_rule": "dsl.t2",
+        "rendered_session_hash": "sha256:fdf5ecd3e9c6488bf40fcf6e82f93c3a6cbab9743df1ecddee0c848125e36c1a",
         "slot_id": "a1.t2"
       },
+      "implement": "barbell",
       "item_id": "a1.t2",
       "prescription": {
         "sets": [
@@ -271,35 +325,22 @@
           },
           {
             "amrap": false,
-            "load": "20kg",
-            "set": 2,
-            "target_reps": 5
-          },
-          {
-            "amrap": false,
-            "load": "20kg",
-            "percentage": 45,
-            "set": 3,
-            "target_reps": 5
-          },
-          {
-            "amrap": false,
             "load": "30kg",
             "percentage": 65,
-            "set": 4,
+            "set": 2,
             "target_reps": 3
           },
           {
             "amrap": false,
-            "load": "37.5kg",
-            "percentage": 85,
-            "set": 5,
+            "load": "35kg",
+            "percentage": 80,
+            "set": 3,
             "target_reps": 2
           }
         ]
       },
       "progression_lane": "bench.t2",
-      "progression_rule": "gzcl.t2",
+      "progression_rule": "dsl.t2",
       "rest": {
         "key": "t2",
         "seconds": 150,
@@ -312,10 +353,53 @@
         "subtitle": "bodyweight - 3x15+",
         "title": "Lat Pulldown T3"
       },
+      "dsl_context": {
+        "basis": "working_weight",
+        "first_stage": "3x15+",
+        "initial": {
+          "kind": "performed"
+        },
+        "next_stage": "3x15+",
+        "sequence": "none"
+      },
+      "dsl_rules": [
+        {
+          "effects": [
+            {
+              "amount": 1,
+              "op": "increase_reps"
+            }
+          ],
+          "trigger": {
+            "kind": "pass"
+          }
+        },
+        {
+          "effects": [
+            {
+              "amount": "2.5",
+              "op": "increase_load"
+            },
+            {
+              "op": "reset_reps"
+            }
+          ],
+          "trigger": {
+            "kind": "range_top"
+          }
+        }
+      ],
       "effect_preview": {
         "adjusted_today": [],
         "fail": [],
-        "pass": []
+        "pass": [
+          {
+            "from": "15",
+            "lane": "lat_pulldown.t3",
+            "op": "increase_reps",
+            "to": "16"
+          }
+        ]
       },
       "execution_contract": {
         "completion_rule": "all_required_sets_meet_target",
@@ -343,14 +427,40 @@
         "required_for_completion": true
       },
       "exercise": "lat_pulldown",
+      "exercise_options": {
+        "allow_runtime_swap": true,
+        "alternatives": [
+          {
+            "exercise": "pull_up",
+            "label": "Pull-up",
+            "option_id": "pull_up",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "chin_up",
+            "label": "Chin-up",
+            "option_id": "chin_up",
+            "policy": "tracking_only"
+          },
+          {
+            "exercise": "neutral_grip_pulldown",
+            "label": "Neutral-Grip Pulldown",
+            "option_id": "neutral_grip_pulldown",
+            "policy": "tracking_only"
+          }
+        ],
+        "default_policy": "tracking_only",
+        "primary": "lat_pulldown"
+      },
       "identity": {
         "item_id": "a1.t3",
         "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
         "progression_lane": "lat_pulldown.t3",
-        "progression_rule": "gzcl.t3",
-        "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
+        "progression_rule": "dsl.t3",
+        "rendered_session_hash": "sha256:fdf5ecd3e9c6488bf40fcf6e82f93c3a6cbab9743df1ecddee0c848125e36c1a",
         "slot_id": "a1.t3"
       },
+      "implement": "barbell",
       "item_id": "a1.t3",
       "prescription": {
         "sets": [
@@ -369,13 +479,15 @@
           {
             "amrap": true,
             "load": null,
+            "rep_max": 25,
+            "rep_min": 15,
             "set": 3,
             "target_reps": 15
           }
         ]
       },
       "progression_lane": "lat_pulldown.t3",
-      "progression_rule": "gzcl.t3",
+      "progression_rule": "dsl.t3",
       "rest": {
         "key": "t3",
         "seconds": 90,
@@ -385,10 +497,10 @@
     }
   ],
   "plan_hash": "sha256:37a48ef27faf1d210219b875f421c6520b4586949f71ba45d52cdcbb7f25d930",
-  "rendered_session_hash": "sha256:64a09a96f0926d5e0399fa4b79ab4c3a3d1635dac84fe49017d0a396fb397109",
+  "rendered_session_hash": "sha256:fdf5ecd3e9c6488bf40fcf6e82f93c3a6cbab9743df1ecddee0c848125e36c1a",
   "schema_version": "0.1",
   "session_id": "a1",
   "suggested_date": null,
-  "template_hash": "sha256:f759b186f5de27cdf86e8846ea8af72e12623fcb5b290d0a4e217dd1971e010c",
+  "template_hash": "sha256:3474cbfe48c6f477a45fd2f966bc8bcdea02068a8f4a148fc4309cf43a4ff795",
   "type": "rendered_session"
 }

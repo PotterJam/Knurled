@@ -7,7 +7,7 @@
   },
   "engine_version": "0.1.0",
   "exercise_options": {},
-  "lock_hash": "sha256:4e3f4c7a5f8006d56e64b847207197b3af40ea8cc2ffb013bcfa293b143c21eb",
+  "lock_hash": "sha256:c589fb9fc1559c13be2098b1fe5abd8279d5dbbf12fa4904c64749d56b1c0cbd",
   "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "patches": [],
   "plan": {
@@ -47,27 +47,929 @@
       "a2",
       "b2"
     ],
+    "dsl": {
+      "lanes": {
+        "accessory.t3": {
+          "basis": "working_weight",
+          "exercise": "accessory",
+          "initial": {
+            "kind": "performed"
+          },
+          "rest_seconds": 90,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": 1,
+                  "op": "increase_reps"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                },
+                {
+                  "op": "reset_reps"
+                }
+              ],
+              "trigger": {
+                "kind": "range_top"
+              }
+            }
+          ],
+          "sequence": "none",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 2,
+                  "intensity": 100,
+                  "reps": 15
+                },
+                {
+                  "amrap": true,
+                  "count": 1,
+                  "intensity": 100,
+                  "rep_max": 25,
+                  "rep_min": 15,
+                  "reps": 15
+                }
+              ],
+              "id": "3x15+"
+            }
+          ],
+          "tier": "t3"
+        },
+        "bench.t1": {
+          "basis": "working_weight",
+          "exercise": "bench",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "5x3+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "6x2+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "10x1+",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 5,
+                  "intensity": 100,
+                  "reps": 3
+                }
+              ],
+              "id": "5x3+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 6,
+                  "intensity": 100,
+                  "reps": 2
+                }
+              ],
+              "id": "6x2+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 10,
+                  "intensity": 100,
+                  "reps": 1
+                }
+              ],
+              "id": "10x1+"
+            }
+          ],
+          "tier": "t1"
+        },
+        "bench.t2": {
+          "basis": "working_weight",
+          "exercise": "bench",
+          "initial": {
+            "kind": "percent",
+            "percentage": 80
+          },
+          "rest_seconds": 150,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x10",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x8",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "3x6",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 10
+                }
+              ],
+              "id": "3x10"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 8
+                }
+              ],
+              "id": "3x8"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 6
+                }
+              ],
+              "id": "3x6"
+            }
+          ],
+          "tier": "t2"
+        },
+        "deadlift.t1": {
+          "basis": "working_weight",
+          "exercise": "deadlift",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "5x3+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "6x2+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "10x1+",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 5,
+                  "intensity": 100,
+                  "reps": 3
+                }
+              ],
+              "id": "5x3+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 6,
+                  "intensity": 100,
+                  "reps": 2
+                }
+              ],
+              "id": "6x2+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 10,
+                  "intensity": 100,
+                  "reps": 1
+                }
+              ],
+              "id": "10x1+"
+            }
+          ],
+          "tier": "t1"
+        },
+        "deadlift.t2": {
+          "basis": "working_weight",
+          "exercise": "deadlift",
+          "initial": {
+            "kind": "percent",
+            "percentage": 80
+          },
+          "rest_seconds": 150,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x10",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x8",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "3x6",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 10
+                }
+              ],
+              "id": "3x10"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 8
+                }
+              ],
+              "id": "3x8"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 6
+                }
+              ],
+              "id": "3x6"
+            }
+          ],
+          "tier": "t2"
+        },
+        "press.t1": {
+          "basis": "working_weight",
+          "exercise": "press",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "5x3+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "6x2+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "10x1+",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 5,
+                  "intensity": 100,
+                  "reps": 3
+                }
+              ],
+              "id": "5x3+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 6,
+                  "intensity": 100,
+                  "reps": 2
+                }
+              ],
+              "id": "6x2+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 10,
+                  "intensity": 100,
+                  "reps": 1
+                }
+              ],
+              "id": "10x1+"
+            }
+          ],
+          "tier": "t1"
+        },
+        "press.t2": {
+          "basis": "working_weight",
+          "exercise": "press",
+          "initial": {
+            "kind": "percent",
+            "percentage": 80
+          },
+          "rest_seconds": 150,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x10",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x8",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "3x6",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 10
+                }
+              ],
+              "id": "3x10"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 8
+                }
+              ],
+              "id": "3x8"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 6
+                }
+              ],
+              "id": "3x6"
+            }
+          ],
+          "tier": "t2"
+        },
+        "squat.t1": {
+          "basis": "working_weight",
+          "exercise": "squat",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "5x3+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "6x2+",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "10x1+",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 5,
+                  "intensity": 100,
+                  "reps": 3
+                }
+              ],
+              "id": "5x3+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 6,
+                  "intensity": 100,
+                  "reps": 2
+                }
+              ],
+              "id": "6x2+"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 10,
+                  "intensity": 100,
+                  "reps": 1
+                }
+              ],
+              "id": "10x1+"
+            }
+          ],
+          "tier": "t1"
+        },
+        "squat.t2": {
+          "basis": "working_weight",
+          "exercise": "squat",
+          "initial": {
+            "kind": "percent",
+            "percentage": 80
+          },
+          "rest_seconds": 150,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x10",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "advance_stage"
+                }
+              ],
+              "stage": "3x8",
+              "trigger": {
+                "kind": "fail"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "reset_load",
+                  "percent": 90
+                },
+                {
+                  "op": "reset_stage"
+                }
+              ],
+              "stage": "3x6",
+              "trigger": {
+                "kind": "fail"
+              }
+            }
+          ],
+          "sequence": "stages",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 10
+                }
+              ],
+              "id": "3x10"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 8
+                }
+              ],
+              "id": "3x8"
+            },
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 6
+                }
+              ],
+              "id": "3x6"
+            }
+          ],
+          "tier": "t2"
+        }
+      },
+      "name": "GZCLP",
+      "rest_seconds": 120,
+      "rotation": [
+        "a1",
+        "b1",
+        "a2",
+        "b2"
+      ],
+      "session_display_names": {
+        "a1": "A1",
+        "a2": "A2",
+        "b1": "B1",
+        "b2": "B2"
+      },
+      "sessions": {
+        "a1": [
+          {
+            "lane": "squat.t1",
+            "slot_id": "a1.t1"
+          },
+          {
+            "lane": "bench.t2",
+            "slot_id": "a1.t2"
+          },
+          {
+            "accessory_key": "A1.T3",
+            "default_exercise": "lat_pulldown",
+            "lane": "accessory.t3",
+            "slot_id": "a1.t3"
+          }
+        ],
+        "a2": [
+          {
+            "lane": "bench.t1",
+            "slot_id": "a2.t1"
+          },
+          {
+            "lane": "squat.t2",
+            "slot_id": "a2.t2"
+          },
+          {
+            "accessory_key": "A2.T3",
+            "default_exercise": "lat_pulldown",
+            "lane": "accessory.t3",
+            "slot_id": "a2.t3"
+          }
+        ],
+        "b1": [
+          {
+            "lane": "press.t1",
+            "slot_id": "b1.t1"
+          },
+          {
+            "lane": "deadlift.t2",
+            "slot_id": "b1.t2"
+          },
+          {
+            "accessory_key": "B1.T3",
+            "default_exercise": "barbell_row",
+            "lane": "accessory.t3",
+            "slot_id": "b1.t3"
+          }
+        ],
+        "b2": [
+          {
+            "lane": "deadlift.t1",
+            "slot_id": "b2.t1"
+          },
+          {
+            "lane": "press.t2",
+            "slot_id": "b2.t2"
+          },
+          {
+            "accessory_key": "B2.T3",
+            "default_exercise": "barbell_row",
+            "lane": "accessory.t3",
+            "slot_id": "b2.t3"
+          }
+        ]
+      },
+      "version": "1.0.0",
+      "warmup": {
+        "basis": "top_set",
+        "empty_bar_reps": 5,
+        "empty_bar_sets": 1,
+        "ramp": [
+          {
+            "percentage": 65,
+            "reps": 3
+          },
+          {
+            "percentage": 80,
+            "reps": 2
+          }
+        ]
+      }
+    },
     "id": "gzcl.gzclp",
-    "increments": {
-      "default": 2.5,
-      "lower": 5.0,
-      "upper": 2.5
-    },
-    "kind": "gzclp",
-    "lanes": {
-      "t1_stages": [
-        "5x3+",
-        "6x2+",
-        "10x1+"
-      ],
-      "t2_stages": [
-        "3x10",
-        "3x8",
-        "3x6"
-      ],
-      "t3_pass_final_set_reps": 25,
-      "t3_target_reps": 15
-    },
     "rest": {
       "by_tier": {
         "t1": 180,
@@ -76,104 +978,9 @@
       },
       "default_seconds": 120
     },
-    "sessions": {
-      "a1": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "squat",
-          "slot_id": "a1.t1",
-          "tier": "t1"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "bench",
-          "slot_id": "a1.t2",
-          "tier": "t2"
-        },
-        {
-          "accessory_key": "A1.T3",
-          "default_exercise": "lat_pulldown",
-          "exercise": null,
-          "slot_id": "a1.t3",
-          "tier": "t3"
-        }
-      ],
-      "a2": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "bench",
-          "slot_id": "a2.t1",
-          "tier": "t1"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "squat",
-          "slot_id": "a2.t2",
-          "tier": "t2"
-        },
-        {
-          "accessory_key": "A2.T3",
-          "default_exercise": "lat_pulldown",
-          "exercise": null,
-          "slot_id": "a2.t3",
-          "tier": "t3"
-        }
-      ],
-      "b1": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "press",
-          "slot_id": "b1.t1",
-          "tier": "t1"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "deadlift",
-          "slot_id": "b1.t2",
-          "tier": "t2"
-        },
-        {
-          "accessory_key": "B1.T3",
-          "default_exercise": "barbell_row",
-          "exercise": null,
-          "slot_id": "b1.t3",
-          "tier": "t3"
-        }
-      ],
-      "b2": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "deadlift",
-          "slot_id": "b2.t1",
-          "tier": "t1"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "press",
-          "slot_id": "b2.t2",
-          "tier": "t2"
-        },
-        {
-          "accessory_key": "B2.T3",
-          "default_exercise": "barbell_row",
-          "exercise": null,
-          "slot_id": "b2.t3",
-          "tier": "t3"
-        }
-      ]
-    },
-    "version": "1.0.0",
-    "weeks": []
+    "version": "1.0.0"
   },
-  "template_hash": "sha256:f759b186f5de27cdf86e8846ea8af72e12623fcb5b290d0a4e217dd1971e010c",
+  "template_hash": "sha256:3474cbfe48c6f477a45fd2f966bc8bcdea02068a8f4a148fc4309cf43a4ff795",
   "training_maxes": {},
   "type": "compiled_plan"
 }

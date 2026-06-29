@@ -185,6 +185,25 @@ fn warmup_scope_precedence_prefers_the_more_specific_scope() {
 }
 
 #[test]
+fn unmatched_plan_warmup_scope_falls_back_to_the_template_scheme() {
+    let plan = gzclp_plan(
+        r#"
+  warmup {
+    tier T1 {
+      ramp { step 50 5 }
+    }
+  }
+"#,
+    );
+    let session = render(&plan, GZCLP);
+
+    assert_eq!(item(&session, "a1.t1").prescription.warmups.len(), 1);
+    let t2 = &item(&session, "a1.t2").prescription.warmups;
+    assert_eq!(t2.len(), 3);
+    assert_eq!(t2[1].percentage, Some(65));
+}
+
+#[test]
 fn bodyweight_lifts_get_no_warmups() {
     // Starting Strength phase 3 has a chins slot with no load to ramp from.
     let plan = r#"plan "SS" {

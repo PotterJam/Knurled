@@ -1,5 +1,5 @@
 [templates."531.beginners"]
 version = "1.0.0"
 source = "builtin"
-content_hash = "sha256:d55242ba38ac8b1647aa877bae22c90d9d22659ebe11df637075937b1330cf54"
+content_hash = "sha256:06530cf9ed2b6555e5e3c9f362f30db9b63e2650e45a8419190dd3a939c6d243"
 engine_version = "0.1.0"

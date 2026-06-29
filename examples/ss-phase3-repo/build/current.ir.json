@@ -2,7 +2,7 @@
   "accessories": {},
   "engine_version": "0.1.0",
   "exercise_options": {},
-  "lock_hash": "sha256:9b36c475746c4a467e3026531685df6dff80d895610b7fcea0db35b7f143df43",
+  "lock_hash": "sha256:1beac474d3fb664eaa0817443a43e4725078b2f296ad719271beac2d6ad28ee9",
   "patch_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "patches": [],
   "plan": {
@@ -43,126 +43,373 @@
       "a_clean",
       "b_chins_2"
     ],
+    "dsl": {
+      "lanes": {
+        "bench.linear": {
+          "basis": "working_weight",
+          "exercise": "bench",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "deload",
+                  "percent": 90
+                }
+              ],
+              "trigger": {
+                "count": 3,
+                "kind": "stall"
+              }
+            }
+          ],
+          "sequence": "none",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 5
+                }
+              ],
+              "id": "3x5"
+            }
+          ],
+          "tier": "linear"
+        },
+        "chin_up.bodyweight": {
+          "basis": "bodyweight",
+          "exercise": "chin_up",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 120,
+          "rules": [],
+          "sequence": "none",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": true,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 0
+                }
+              ],
+              "id": "3 sets to fatigue"
+            }
+          ],
+          "tier": "bodyweight"
+        },
+        "deadlift.linear": {
+          "basis": "working_weight",
+          "exercise": "deadlift",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 240,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "deload",
+                  "percent": 90
+                }
+              ],
+              "trigger": {
+                "count": 3,
+                "kind": "stall"
+              }
+            }
+          ],
+          "sequence": "none",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 1,
+                  "intensity": 100,
+                  "reps": 5
+                }
+              ],
+              "id": "1x5"
+            }
+          ],
+          "tier": "linear"
+        },
+        "power_clean.linear": {
+          "basis": "working_weight",
+          "exercise": "power_clean",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "deload",
+                  "percent": 90
+                }
+              ],
+              "trigger": {
+                "count": 3,
+                "kind": "stall"
+              }
+            }
+          ],
+          "sequence": "none",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 5,
+                  "intensity": 100,
+                  "reps": 3
+                }
+              ],
+              "id": "5x3"
+            }
+          ],
+          "tier": "linear"
+        },
+        "press.linear": {
+          "basis": "working_weight",
+          "exercise": "press",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "2.5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "deload",
+                  "percent": 90
+                }
+              ],
+              "trigger": {
+                "count": 3,
+                "kind": "stall"
+              }
+            }
+          ],
+          "sequence": "none",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 5
+                }
+              ],
+              "id": "3x5"
+            }
+          ],
+          "tier": "linear"
+        },
+        "squat.linear": {
+          "basis": "working_weight",
+          "exercise": "squat",
+          "initial": {
+            "kind": "basis"
+          },
+          "rest_seconds": 180,
+          "rules": [
+            {
+              "effects": [
+                {
+                  "amount": "5",
+                  "op": "increase_load"
+                }
+              ],
+              "trigger": {
+                "kind": "pass"
+              }
+            },
+            {
+              "effects": [
+                {
+                  "op": "deload",
+                  "percent": 90
+                }
+              ],
+              "trigger": {
+                "count": 3,
+                "kind": "stall"
+              }
+            }
+          ],
+          "sequence": "none",
+          "stages": [
+            {
+              "groups": [
+                {
+                  "amrap": false,
+                  "count": 3,
+                  "intensity": 100,
+                  "reps": 5
+                }
+              ],
+              "id": "3x5"
+            }
+          ],
+          "tier": "linear"
+        }
+      },
+      "name": "Starting Strength Phase 3",
+      "rest_seconds": 120,
+      "rotation": [
+        "a_deadlift",
+        "b_chins_1",
+        "a_clean",
+        "b_chins_2"
+      ],
+      "session_display_names": {
+        "a_clean": "Day A - Power Clean",
+        "a_deadlift": "Day A - Deadlift",
+        "b_chins_1": "Day B - Chin-ups",
+        "b_chins_2": "Day B - Chin-ups"
+      },
+      "sessions": {
+        "a_clean": [
+          {
+            "lane": "squat.linear",
+            "slot_id": "a_clean.squat"
+          },
+          {
+            "lane": "press.linear",
+            "slot_id": "a_clean.press"
+          },
+          {
+            "lane": "power_clean.linear",
+            "slot_id": "a_clean.power_clean"
+          }
+        ],
+        "a_deadlift": [
+          {
+            "lane": "squat.linear",
+            "slot_id": "a_deadlift.squat"
+          },
+          {
+            "lane": "press.linear",
+            "slot_id": "a_deadlift.press"
+          },
+          {
+            "lane": "deadlift.linear",
+            "slot_id": "a_deadlift.deadlift"
+          }
+        ],
+        "b_chins_1": [
+          {
+            "lane": "squat.linear",
+            "slot_id": "b_chins_1.squat"
+          },
+          {
+            "lane": "bench.linear",
+            "slot_id": "b_chins_1.bench"
+          },
+          {
+            "lane": "chin_up.bodyweight",
+            "slot_id": "b_chins_1.chins"
+          }
+        ],
+        "b_chins_2": [
+          {
+            "lane": "squat.linear",
+            "slot_id": "b_chins_2.squat"
+          },
+          {
+            "lane": "bench.linear",
+            "slot_id": "b_chins_2.bench"
+          },
+          {
+            "lane": "chin_up.bodyweight",
+            "slot_id": "b_chins_2.chins"
+          }
+        ]
+      },
+      "version": "1.0.0",
+      "warmup": {
+        "basis": "top_set",
+        "empty_bar_reps": 5,
+        "empty_bar_sets": 1,
+        "ramp": [
+          {
+            "percentage": 65,
+            "reps": 3
+          },
+          {
+            "percentage": 80,
+            "reps": 2
+          }
+        ]
+      }
+    },
     "id": "starting-strength.phase3",
-    "increments": {
-      "default": 2.5,
-      "lower": 5.0,
-      "upper": 2.5
-    },
-    "kind": "starting_strength",
-    "lanes": {
-      "t1_stages": [],
-      "t2_stages": [],
-      "t3_pass_final_set_reps": 0,
-      "t3_target_reps": 0
-    },
     "rest": {
       "by_tier": {
-        "1x5": 240,
-        "3x5": 180,
-        "5x3": 180,
-        "chins": 120
+        "bodyweight": 120,
+        "linear": 180
       },
       "default_seconds": 120
     },
-    "sessions": {
-      "a_clean": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "squat",
-          "slot_id": "a_clean.squat",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "press",
-          "slot_id": "a_clean.press",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "power_clean",
-          "slot_id": "a_clean.power_clean",
-          "tier": "5x3"
-        }
-      ],
-      "a_deadlift": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "squat",
-          "slot_id": "a_deadlift.squat",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "press",
-          "slot_id": "a_deadlift.press",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "deadlift",
-          "slot_id": "a_deadlift.deadlift",
-          "tier": "1x5"
-        }
-      ],
-      "b_chins_1": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "squat",
-          "slot_id": "b_chins_1.squat",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "bench",
-          "slot_id": "b_chins_1.bench",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "chin_up",
-          "slot_id": "b_chins_1.chins",
-          "tier": "chins"
-        }
-      ],
-      "b_chins_2": [
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "squat",
-          "slot_id": "b_chins_2.squat",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "bench",
-          "slot_id": "b_chins_2.bench",
-          "tier": "3x5"
-        },
-        {
-          "accessory_key": null,
-          "default_exercise": null,
-          "exercise": "chin_up",
-          "slot_id": "b_chins_2.chins",
-          "tier": "chins"
-        }
-      ]
-    },
-    "version": "1.0.0",
-    "weeks": []
+    "version": "1.0.0"
   },
-  "template_hash": "sha256:3c439f4f942ab23c01948bac7eb57bcbc87368b8a73085af26d457e8fe126085",
+  "template_hash": "sha256:d2e72798cc9a8afc9924fc55e072e7dd708cc2e78798006be722d00b93f2fa1a",
   "training_maxes": {},
   "type": "compiled_plan"
 }

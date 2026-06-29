@@ -200,10 +200,7 @@ pub fn add_program(
         request.custom_template
     {
         let template = parse_template_dsl(&document, "./templates/custom.fitspec")?;
-        let dsl = template
-            .dsl
-            .as_ref()
-            .expect("custom parser always sets DSL");
+        let dsl = &template.dsl;
         let mut starts = Map::new();
         let mut training_maxes = Map::new();
         for lane in dsl.lanes.values() {

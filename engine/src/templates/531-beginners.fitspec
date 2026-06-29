@@ -1,0 +1,110 @@
+template "5/3/1 for Beginners" version="1.0.0" {
+  rotation squat_day bench_day deadlift_day press_day
+  rest 150
+  warmup basis="training_max" {
+    step intensity=40 reps=5
+    step intensity=50 reps=5
+    step intensity=60 reps=3
+  }
+  session squat_day display="Squat" { item "squat.main" slot="squat.main" }
+  session bench_day display="Bench" { item "bench.main" slot="bench.main" }
+  session deadlift_day display="Deadlift" { item "deadlift.main" slot="deadlift.main" }
+  session press_day display="Press" { item "press.main" slot="press.main" }
+
+  lane "squat.main" exercise="squat" tier="main" basis="training_max" sequence="waves" rest=180 {
+    stage "week 1" {
+      set count=1 reps=5 intensity=65
+      set count=1 reps=5 intensity=75
+      set count=1 reps=5 intensity=85 amrap=#true
+    }
+    stage "week 2" {
+      set count=1 reps=3 intensity=70
+      set count=1 reps=3 intensity=80
+      set count=1 reps=3 intensity=90 amrap=#true
+    }
+    stage "week 3" {
+      set count=1 reps=5 intensity=75
+      set count=1 reps=3 intensity=85
+      set count=1 reps=1 intensity=95 amrap=#true
+    }
+    stage "deload" {
+      set count=1 reps=5 intensity=40
+      set count=1 reps=5 intensity=50
+      set count=1 reps=5 intensity=60
+    }
+    on pass { advance_stage }
+    on cycle_end { recompute_tm by=5; reset_stage; advance_cycle }
+  }
+  lane "bench.main" exercise="bench" tier="main" basis="training_max" sequence="waves" rest=180 {
+    stage "week 1" {
+      set count=1 reps=5 intensity=65
+      set count=1 reps=5 intensity=75
+      set count=1 reps=5 intensity=85 amrap=#true
+    }
+    stage "week 2" {
+      set count=1 reps=3 intensity=70
+      set count=1 reps=3 intensity=80
+      set count=1 reps=3 intensity=90 amrap=#true
+    }
+    stage "week 3" {
+      set count=1 reps=5 intensity=75
+      set count=1 reps=3 intensity=85
+      set count=1 reps=1 intensity=95 amrap=#true
+    }
+    stage "deload" {
+      set count=1 reps=5 intensity=40
+      set count=1 reps=5 intensity=50
+      set count=1 reps=5 intensity=60
+    }
+    on pass { advance_stage }
+    on cycle_end { recompute_tm by=2.5; reset_stage; advance_cycle }
+  }
+  lane "deadlift.main" exercise="deadlift" tier="main" basis="training_max" sequence="waves" rest=180 {
+    stage "week 1" {
+      set count=1 reps=5 intensity=65
+      set count=1 reps=5 intensity=75
+      set count=1 reps=5 intensity=85 amrap=#true
+    }
+    stage "week 2" {
+      set count=1 reps=3 intensity=70
+      set count=1 reps=3 intensity=80
+      set count=1 reps=3 intensity=90 amrap=#true
+    }
+    stage "week 3" {
+      set count=1 reps=5 intensity=75
+      set count=1 reps=3 intensity=85
+      set count=1 reps=1 intensity=95 amrap=#true
+    }
+    stage "deload" {
+      set count=1 reps=5 intensity=40
+      set count=1 reps=5 intensity=50
+      set count=1 reps=5 intensity=60
+    }
+    on pass { advance_stage }
+    on cycle_end { recompute_tm by=5; reset_stage; advance_cycle }
+  }
+  lane "press.main" exercise="press" tier="main" basis="training_max" sequence="waves" rest=180 {
+    stage "week 1" {
+      set count=1 reps=5 intensity=65
+      set count=1 reps=5 intensity=75
+      set count=1 reps=5 intensity=85 amrap=#true
+    }
+    stage "week 2" {
+      set count=1 reps=3 intensity=70
+      set count=1 reps=3 intensity=80
+      set count=1 reps=3 intensity=90 amrap=#true
+    }
+    stage "week 3" {
+      set count=1 reps=5 intensity=75
+      set count=1 reps=3 intensity=85
+      set count=1 reps=1 intensity=95 amrap=#true
+    }
+    stage "deload" {
+      set count=1 reps=5 intensity=40
+      set count=1 reps=5 intensity=50
+      set count=1 reps=5 intensity=60
+    }
+    on pass { advance_stage }
+    on cycle_end { recompute_tm by=2.5; reset_stage; advance_cycle }
+  }
+}

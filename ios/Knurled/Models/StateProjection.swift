@@ -44,6 +44,7 @@ struct LaneState: Codable, Sendable, Hashable {
     var week: Int?
     var cycle: Int?
     var reps: Int?
+    var stall: Int?
 }
 
 struct SessionState: Codable, Sendable, Hashable {

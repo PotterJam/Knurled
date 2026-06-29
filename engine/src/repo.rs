@@ -453,7 +453,7 @@ fn recompute_latest_lanes(root: &Path, record: &TrainingRecord) -> Result<Vec<St
             .find(|lift| lift.item_id.as_deref() == Some(checkpoint.item.item_id.as_str()))
         {
             let input = item_input_from_record(&checkpoint.item, lift);
-            let result = reduce_item(&checkpoint.item, &input, &repo.compiled)?;
+            let result = reduce_item(&checkpoint.item, &input, &repo.compiled, &state)?;
             apply_effects(&mut state, &result.effects);
         }
         recomputed.push(lane);

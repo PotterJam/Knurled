@@ -148,8 +148,11 @@ requires removing a small plate before the work set.
 template "Wave + AMRAP" version="1.0.0" {
   rotation day
   rest 150
-  session day { item "squat.main" slot="day.squat" }
-  lane "squat.main" exercise="squat" basis="working_weight" sequence="cycle" {
+  warmup basis="top_set" empty_bar_sets=1 empty_bar_reps=5 {
+    step intensity=50 reps=5
+  }
+  session day display="Training Day" { item "squat.main" slot="day.squat" }
+  lane "squat.main" exercise="squat" tier="main" basis="working_weight" sequence="cycle" rest=180 {
     warmup intensity=50 reps=5
     stage "wave" {
       set count=1 reps=5 intensity=80
@@ -165,15 +168,22 @@ template "Wave + AMRAP" version="1.0.0" {
 ```
 
 - Basis: `working_weight`, `training_max`, `bodyweight`.
+- Initial value: `initial="basis"` (default), a percentage such as `initial="80%"`, or
+  `initial="performed"` to capture the first logged load.
 - Sequence: `none`, `stages`, `cycle`, `waves`, `rotation`.
 - Set facets: `count`, `reps`, percentage `intensity`, `amrap`, `rep_min`/`rep_max`, `rpe`.
 - Triggers: `pass`, `fail`, `amrap_gte`, `stall`, `cycle_end`, `range_top`.
 - Effects: `increase_load`, `deload`, `reset_load`, `advance_stage`, `reset_stage`,
-  `increase_reps`, `recompute_tm`, `advance_cycle`.
-- Warmup facet: repeated `warmup intensity=<percent> reps=<count>` nodes on a lane.
+  `increase_reps`, `reset_reps`, `recompute_tm`, `advance_cycle`.
+- Rules may be stage-scoped, for example `on fail stage="10x1+" { … }`.
+- Sessions accept `display=`, and items may bind a plan accessory with `accessory=` plus
+  `default_exercise=`. Lanes accept `tier=` and `rest=`; rendered lane identity is always
+  `<resolved exercise>.<tier>`.
+- Warmups may use the full template-level scheme shown above. The repeated lane shorthand
+  `warmup intensity=<percent> reps=<count>` remains accepted.
 
-There are no variables, loops, functions, or arbitrary conditionals. `template vendor` produces a
-pinned built-in DSL document; parity tests require its rendered output to remain byte-identical.
+There are no variables, loops, functions, or arbitrary conditionals. Every built-in is an embedded
+DSL document, and `template vendor` copies that real document into the repository for editing.
 
 ### `equipment`
 

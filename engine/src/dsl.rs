@@ -8,7 +8,7 @@ use kdl::{KdlDocument, KdlNode, KdlValue};
 use crate::error::{KnurledError, Result};
 use crate::model::*;
 use crate::parser::normalize_exercise;
-use crate::templates::{DEFAULT_TEMPLATE_VERSION, builtin_template, parse_template_ref};
+use crate::templates::{DEFAULT_TEMPLATE_VERSION, builtin_template_document, parse_template_ref};
 
 pub fn parse_template_dsl(text: &str, source_id: &str) -> Result<BuiltinTemplate> {
     let doc = text
@@ -21,18 +21,12 @@ pub fn parse_template_dsl(text: &str, source_id: &str) -> Result<BuiltinTemplate
     let body = top
         .children()
         .ok_or_else(|| parse_error("template requires a body"))?;
-    if let Some(node) = body
-        .nodes()
-        .iter()
-        .find(|node| node.name().value() == "builtin")
-    {
-        return builtin_template(&arg(node, "builtin template reference")?);
-    }
-
     let name = arg(top, "template name")?;
     let version = prop(top, "version").unwrap_or_else(|| DEFAULT_TEMPLATE_VERSION.into());
     let mut rotation = Vec::new();
     let mut rest_seconds = 120;
+    let mut template_warmup = None;
+    let mut session_display_names = Map::new();
     let mut sessions = Map::new();
     let mut lanes = Map::new();
 
@@ -49,8 +43,12 @@ pub fn parse_template_dsl(text: &str, source_id: &str) -> Result<BuiltinTemplate
                     .parse()
                     .map_err(|_| parse_error("rest must be integer seconds"))?
             }
+            "warmup" => template_warmup = Some(parse_warmup(node)?),
             "session" => {
                 let id = arg(node, "session id")?.to_ascii_lowercase();
+                if let Some(display_name) = prop(node, "display") {
+                    session_display_names.insert(id.clone(), display_name);
+                }
                 let session_body = node
                     .children()
                     .ok_or_else(|| parse_error("session requires items"))?;
@@ -66,6 +64,9 @@ pub fn parse_template_dsl(text: &str, source_id: &str) -> Result<BuiltinTemplate
                     items.push(DslSessionItem {
                         slot_id: prop(item, "slot").unwrap_or_else(|| format!("{id}.{lane}")),
                         lane,
+                        accessory_key: prop(item, "accessory"),
+                        default_exercise: prop(item, "default_exercise")
+                            .map(|exercise| normalize_exercise(&exercise)),
                     });
                 }
                 sessions.insert(id, items);
@@ -103,48 +104,31 @@ pub fn parse_template_dsl(text: &str, source_id: &str) -> Result<BuiltinTemplate
         version: version.clone(),
         rotation: rotation.clone(),
         rest_seconds,
+        warmup: template_warmup,
+        session_display_names,
         sessions: sessions.clone(),
         lanes: lanes.clone(),
     };
-    let template_slots = sessions
-        .iter()
-        .map(|(session, items)| {
-            let slots = items
-                .iter()
-                .map(|item| TemplateSlot {
-                    slot_id: item.slot_id.clone(),
-                    tier: "dsl".into(),
-                    exercise: Some(lanes[&item.lane].exercise.clone()),
-                    accessory_key: None,
-                    default_exercise: None,
-                })
-                .collect();
-            (session.clone(), slots)
-        })
-        .collect();
     Ok(BuiltinTemplate {
         id: source_id.into(),
         version,
-        kind: TemplateKind::Custom,
         default_rotation: rotation,
-        sessions: template_slots,
         rest: RestPolicy {
             default_seconds: Some(rest_seconds),
+            by_tier: lanes
+                .iter()
+                .filter_map(|(lane_id, lane)| {
+                    lane.rest_seconds.map(|seconds| {
+                        (
+                            lane.tier.clone().unwrap_or_else(|| lane_tier(lane_id)),
+                            seconds,
+                        )
+                    })
+                })
+                .collect(),
             ..RestPolicy::default()
         },
-        lanes: TemplateLaneRules {
-            t1_stages: Vec::new(),
-            t2_stages: Vec::new(),
-            t3_target_reps: 0,
-            t3_pass_final_set_reps: 0,
-        },
-        increments: TemplateIncrements {
-            default: 2.5,
-            upper: 2.5,
-            lower: 5.0,
-        },
-        weeks: Vec::new(),
-        dsl: Some(dsl),
+        dsl,
     })
 }
 
@@ -157,6 +141,21 @@ fn parse_lane(node: &KdlNode) -> Result<DslLane> {
         "training_max" => DslBasis::TrainingMax,
         "bodyweight" => DslBasis::Bodyweight,
         other => return Err(parse_error(format!("unknown basis: {other}"))),
+    };
+    let initial = match prop(node, "initial").as_deref().unwrap_or("basis") {
+        "basis" => DslInitial::Basis,
+        "performed" => DslInitial::Performed,
+        value if value.ends_with('%') => {
+            let percentage = value
+                .trim_end_matches('%')
+                .parse::<u32>()
+                .map_err(|_| parse_error("initial percentage must be an integer"))?;
+            if percentage == 0 {
+                return Err(parse_error("initial percentage must be positive"));
+            }
+            DslInitial::Percent { percentage }
+        }
+        other => return Err(parse_error(format!("unknown initial source: {other}"))),
     };
     let sequence = match prop(node, "sequence").as_deref().unwrap_or("none") {
         "none" => DslSequence::None,
@@ -171,27 +170,36 @@ fn parse_lane(node: &KdlNode) -> Result<DslLane> {
         .ok_or_else(|| parse_error("lane requires a body"))?;
     let mut stages = Vec::new();
     let mut rules = Vec::new();
-    let mut warmup = Vec::new();
+    let mut warmup: Option<WarmupScheme> = None;
     for child in body.nodes() {
         match child.name().value() {
             "stage" => stages.push(parse_stage(child)?),
             "on" => rules.push(parse_rule(child)?),
-            "warmup" => warmup.push(WarmupStep {
-                percentage: uint_prop(child, "intensity", 0)?,
-                reps: uint_prop(child, "reps", 0)?,
-            }),
+            "warmup" => merge_warmup(&mut warmup, parse_warmup(child)?),
             other => return Err(parse_error(format!("unknown lane directive: {other}"))),
         }
     }
     if stages.is_empty() {
         return Err(parse_error("lane requires at least one stage"));
     }
+    for rule in &rules {
+        if let Some(stage) = &rule.stage
+            && !stages.iter().any(|candidate| candidate.id == *stage)
+        {
+            return Err(parse_error(format!(
+                "rule references unknown stage: {stage}"
+            )));
+        }
+    }
     Ok(DslLane {
         exercise,
+        tier: prop(node, "tier").map(|tier| tier.to_ascii_lowercase()),
         basis,
+        initial,
         sequence,
         stages,
         rules,
+        rest_seconds: optional_uint_prop(node, "rest")?,
         warmup,
     })
 }
@@ -214,13 +222,24 @@ fn parse_stage(node: &KdlNode) -> Result<DslStage> {
         if count == 0 {
             return Err(parse_error("set count must be positive"));
         }
+        let rep_min = optional_uint_prop(group, "rep_min")?;
+        let rep_max = optional_uint_prop(group, "rep_max")?;
+        if rep_min.is_some() != rep_max.is_some()
+            || rep_min
+                .zip(rep_max)
+                .is_some_and(|(minimum, maximum)| minimum == 0 || maximum < minimum)
+        {
+            return Err(parse_error(
+                "rep_min and rep_max must form a positive ascending range",
+            ));
+        }
         groups.push(DslSetGroup {
             count,
             reps,
             intensity: uint_prop(group, "intensity", 100)?,
             amrap: bool_prop(group, "amrap", false),
-            rep_min: optional_uint_prop(group, "rep_min")?,
-            rep_max: optional_uint_prop(group, "rep_max")?,
+            rep_min,
+            rep_max,
             rpe: optional_uint_prop(group, "rpe")?,
         });
     }
@@ -237,9 +256,13 @@ fn parse_rule(node: &KdlNode) -> Result<DslRule> {
         "amrap_gte" => DslTrigger::AmrapGte {
             reps: uint_prop(node, "reps", 0)?,
         },
-        "stall" => DslTrigger::Stall {
-            count: uint_prop(node, "count", 1)?,
-        },
+        "stall" => {
+            let count = uint_prop(node, "count", 1)?;
+            if count == 0 {
+                return Err(parse_error("stall count must be positive"));
+            }
+            DslTrigger::Stall { count }
+        }
         "cycle_end" => DslTrigger::CycleEnd,
         "range_top" => DslTrigger::RangeTop,
         other => return Err(parse_error(format!("unknown trigger: {other}"))),
@@ -264,6 +287,7 @@ fn parse_rule(node: &KdlNode) -> Result<DslRule> {
             "increase_reps" => DslEffect::IncreaseReps {
                 amount: uint_prop(effect, "by", 1)?,
             },
+            "reset_reps" => DslEffect::ResetReps,
             "recompute_tm" => DslEffect::RecomputeTm {
                 amount: prop(effect, "by").unwrap_or_else(|| "2.5".into()),
             },
@@ -271,18 +295,79 @@ fn parse_rule(node: &KdlNode) -> Result<DslRule> {
             other => return Err(parse_error(format!("unknown effect: {other}"))),
         });
     }
-    Ok(DslRule { trigger, effects })
+    Ok(DslRule {
+        trigger,
+        stage: prop(node, "stage"),
+        effects,
+    })
 }
 
-/// Vendor a built-in as a pinned DSL document. The `builtin` bridge is also the parity fixture:
-/// parsing it must yield byte-identical output before a built-in can be expanded into primitives.
+fn parse_warmup(node: &KdlNode) -> Result<WarmupScheme> {
+    let mut scheme = WarmupScheme {
+        empty_bar_sets: uint_prop(node, "empty_bar_sets", 0)?,
+        empty_bar_reps: uint_prop(node, "empty_bar_reps", 0)?,
+        basis: match prop(node, "basis").as_deref().unwrap_or("top_set") {
+            "top_set" => WarmupBasis::TopSet,
+            "working_weight" => WarmupBasis::WorkingWeight,
+            "training_max" => WarmupBasis::TrainingMax,
+            other => return Err(parse_error(format!("unknown warmup basis: {other}"))),
+        },
+        ..WarmupScheme::default()
+    };
+
+    if prop(node, "intensity").is_some() || prop(node, "reps").is_some() {
+        scheme.ramp.push(WarmupStep {
+            percentage: uint_prop(node, "intensity", 0)?,
+            reps: uint_prop(node, "reps", 0)?,
+        });
+    }
+    if let Some(body) = node.children() {
+        for child in body.nodes() {
+            if child.name().value() != "step" {
+                return Err(parse_error(format!(
+                    "unknown warmup directive: {}",
+                    child.name().value()
+                )));
+            }
+            scheme.ramp.push(WarmupStep {
+                percentage: uint_prop(child, "intensity", 0)?,
+                reps: uint_prop(child, "reps", 0)?,
+            });
+        }
+    }
+    if scheme.empty_bar_sets > 0 && scheme.empty_bar_reps == 0 {
+        return Err(parse_error("warmup empty-bar reps must be positive"));
+    }
+    if scheme
+        .ramp
+        .iter()
+        .any(|step| step.percentage == 0 || step.percentage > 100 || step.reps == 0)
+    {
+        return Err(parse_error(
+            "warmup steps require intensity 1-100 and positive reps",
+        ));
+    }
+    Ok(scheme)
+}
+
+fn merge_warmup(target: &mut Option<WarmupScheme>, incoming: WarmupScheme) {
+    if let Some(existing) = target {
+        existing.empty_bar_sets = existing.empty_bar_sets.max(incoming.empty_bar_sets);
+        existing.empty_bar_reps = existing.empty_bar_reps.max(incoming.empty_bar_reps);
+        existing.ramp.extend(incoming.ramp);
+    } else {
+        *target = Some(incoming);
+    }
+}
+
+fn lane_tier(lane: &str) -> String {
+    lane.rsplit('.').next().unwrap_or("main").to_owned()
+}
+
+/// Vendor the real embedded DSL document for a built-in template.
 pub fn vendor_template(input: &str) -> Result<String> {
     let reference = parse_template_ref(input);
-    let template = builtin_template(&reference.normalized)?;
-    Ok(format!(
-        "template \"{}\" version=\"{}\" {{\n  builtin \"{}\"\n}}\n",
-        template.id, template.version, reference.normalized
-    ))
+    Ok(builtin_template_document(&reference.normalized)?.to_owned())
 }
 
 fn args(node: &KdlNode) -> Vec<String> {

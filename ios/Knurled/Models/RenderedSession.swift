@@ -121,6 +121,8 @@ struct PrescribedSet: Codable, Sendable, Hashable, Identifiable {
     var targetReps: Int
     var amrap: Bool
     var percentage: Int?
+    var repMin: Int? = nil
+    var repMax: Int? = nil
 
     var id: Int { self.set }
 }

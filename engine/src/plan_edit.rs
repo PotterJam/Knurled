@@ -455,10 +455,24 @@ pub(crate) fn starter_plan(
 ) -> Plan {
     let mut starts = Map::new();
     let mut training_maxes = Map::new();
-    match template.kind {
-        TemplateKind::FiveThreeOne => training_maxes = normalize_lift_map(initial_numbers),
-        TemplateKind::Gzclp | TemplateKind::StartingStrength | TemplateKind::Custom => {
-            starts = normalize_lift_map(initial_numbers)
+    let initial_numbers = normalize_lift_map(initial_numbers);
+    {
+        let dsl = &template.dsl;
+        for lane in dsl.lanes.values() {
+            if lane.initial == DslInitial::Performed || lane.basis == DslBasis::Bodyweight {
+                continue;
+            }
+            if let Some(value) = initial_numbers.get(&lane.exercise) {
+                match lane.basis {
+                    DslBasis::WorkingWeight => {
+                        starts.insert(lane.exercise.clone(), value.clone());
+                    }
+                    DslBasis::TrainingMax => {
+                        training_maxes.insert(lane.exercise.clone(), value.clone());
+                    }
+                    DslBasis::Bodyweight => {}
+                }
+            }
         }
     }
 
@@ -475,7 +489,7 @@ pub(crate) fn starter_plan(
         },
         starts,
         training_maxes,
-        accessories: default_accessories(&template.kind, &template.sessions),
+        accessories: default_accessories(template),
         exercises: Map::new(),
         exercise_options: Map::new(),
         rest: RestPolicy::default(),
@@ -485,33 +499,36 @@ pub(crate) fn starter_plan(
     }
 }
 
-fn default_accessories(kind: &TemplateKind, sessions: &Map<Vec<TemplateSlot>>) -> Map<String> {
-    if *kind != TemplateKind::Gzclp {
-        return Map::new();
-    }
-    sessions
+fn default_accessories(template: &BuiltinTemplate) -> Map<String> {
+    template
+        .dsl
+        .sessions
         .values()
-        .flat_map(|slots| slots.iter())
-        .filter_map(|slot| {
+        .flatten()
+        .filter_map(|item| {
             Some((
-                slot.accessory_key.as_ref()?.to_ascii_uppercase(),
-                slot.default_exercise.clone()?,
+                item.accessory_key.as_ref()?.to_ascii_uppercase(),
+                item.default_exercise.clone()?,
             ))
         })
         .collect()
 }
 
 fn initial_number_exercises(template: &BuiltinTemplate) -> Vec<String> {
-    let mut exercises = template
-        .sessions
+    let dsl = &template.dsl;
+    let training_max_based = dsl
+        .lanes
         .values()
-        .flatten()
-        .filter(|slot| slot.tier != "chins")
-        .filter_map(|slot| slot.exercise.clone())
+        .any(|lane| lane.basis == DslBasis::TrainingMax);
+    let mut exercises = dsl
+        .lanes
+        .values()
+        .filter(|lane| lane.basis != DslBasis::Bodyweight && lane.initial != DslInitial::Performed)
+        .map(|lane| lane.exercise.clone())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    if template.kind == TemplateKind::FiveThreeOne {
+    if training_max_based {
         exercises.sort_by_key(|exercise| match exercise.as_str() {
             "squat" => 0,
             "bench" => 1,

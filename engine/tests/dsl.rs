@@ -2,9 +2,9 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use knurled_core::{
-    SubmitMode, builtin_template, compile_plan, create_initial_state, parse_template_dsl,
-    read_state, read_training_repo, render_next, stable_json, submit_repo,
-    synthetic_execution_input, vendor_template,
+    SubmitMode, builtin_template, builtin_templates, compile_plan, create_initial_state,
+    parse_template_dsl, read_state, read_training_repo, reduce_input, render_lockfile, render_next,
+    submit_repo, synthetic_execution_input, vendor_template,
 };
 
 fn temp_repo(name: &str) -> std::path::PathBuf {
@@ -16,38 +16,123 @@ fn temp_repo(name: &str) -> std::path::PathBuf {
 }
 
 #[test]
-fn vendored_builtins_are_byte_identical_at_the_evaluator_gate() {
-    for (reference, plan) in [
-        (
-            "gzcl.gzclp@1.0.0",
-            include_str!("../../examples/gzclp-repo/plan.fitspec"),
-        ),
-        (
-            "531.beginners@1.0.0",
-            include_str!("../../examples/531-repo/plan.fitspec"),
-        ),
-        (
-            "starting-strength.phase3@1.0.0",
-            include_str!("../../examples/ss-phase3-repo/plan.fitspec"),
-        ),
-    ] {
-        let lock = knurled_core::render_lockfile(reference).unwrap();
-        let compiled = compile_plan(plan, &lock, &[]).unwrap();
-        let legacy = builtin_template(reference).unwrap();
-        let vendored =
-            parse_template_dsl(&vendor_template(reference).unwrap(), "vendored").unwrap();
-        assert_eq!(vendored, legacy);
-
-        let state = create_initial_state(&compiled);
-        let expected = render_next(&compiled, &state).unwrap();
-        let mut through_document = compiled.clone();
-        through_document.template = vendored;
-        let actual = render_next(&through_document, &state).unwrap();
-        assert_eq!(
-            stable_json(&actual).unwrap(),
-            stable_json(&expected).unwrap()
-        );
+fn every_catalog_entry_vendors_a_real_dsl_document() {
+    assert_eq!(builtin_templates().len(), 7);
+    for info in builtin_templates() {
+        let reference = format!("{}@{}", info.id, info.version);
+        let document = vendor_template(&reference).unwrap();
+        assert!(!document.contains("builtin \""));
+        let vendored = parse_template_dsl(&document, "vendored").unwrap();
+        let shipped = builtin_template(&reference).unwrap();
+        assert_eq!(vendored.dsl, shipped.dsl);
     }
+}
+
+fn gzclp_compiled() -> knurled_core::CompiledPlan {
+    let plan = include_str!("../../examples/gzclp-repo/plan.fitspec");
+    compile_plan(plan, &render_lockfile("gzcl.gzclp@1.0.0").unwrap(), &[]).unwrap()
+}
+
+#[test]
+fn starting_strength_third_consecutive_failure_deloads_and_resets_stall() {
+    let plan = r#"plan "SS" {
+  template "starting-strength.phase1@1.0.0"
+  units kg
+  schedule next_workout { rotation a b; suggested_days mon wed fri }
+  starts { squat "60kg"; press "30kg"; bench "40kg"; deadlift "80kg" }
+}
+"#;
+    let compiled = compile_plan(
+        plan,
+        &render_lockfile("starting-strength.phase1@1.0.0").unwrap(),
+        &[],
+    )
+    .unwrap();
+    let mut state = create_initial_state(&compiled);
+    for index in 0..3 {
+        let rendered = render_next(&compiled, &state).unwrap();
+        let input = synthetic_execution_input(&rendered, "all-fail", index);
+        state = reduce_input(&compiled, &state, &rendered, &input)
+            .unwrap()
+            .new_state;
+    }
+    assert_eq!(state.lanes["squat.linear"].load.as_deref(), Some("55kg"));
+    assert_eq!(state.lanes["squat.linear"].stall, Some(0));
+}
+
+#[test]
+fn gzclp_last_stage_failure_resets_load_and_stage() {
+    let compiled = gzclp_compiled();
+    let mut state = create_initial_state(&compiled);
+    state.lanes.get_mut("squat.t1").unwrap().load = Some("100kg".into());
+    state.lanes.get_mut("squat.t1").unwrap().stage = Some("10x1+".into());
+    let rendered = render_next(&compiled, &state).unwrap();
+    let input = synthetic_execution_input(&rendered, "all-fail", 0);
+    let state = reduce_input(&compiled, &state, &rendered, &input)
+        .unwrap()
+        .new_state;
+    assert_eq!(state.lanes["squat.t1"].load.as_deref(), Some("90kg"));
+    assert_eq!(state.lanes["squat.t1"].stage.as_deref(), Some("5x3+"));
+}
+
+#[test]
+fn gzclp_accessory_uses_double_progression_and_first_performed_load() {
+    let compiled = gzclp_compiled();
+    let state = create_initial_state(&compiled);
+    let rendered = render_next(&compiled, &state).unwrap();
+    let mut input = synthetic_execution_input(&rendered, "all-pass", 0);
+    let accessory = input
+        .inputs
+        .iter_mut()
+        .find(|item| item.item_id == "a1.t3")
+        .unwrap();
+    accessory.load = Some("40kg".into());
+    accessory.final_set_reps = Some(20);
+    let state = reduce_input(&compiled, &state, &rendered, &input)
+        .unwrap()
+        .new_state;
+    assert_eq!(state.lanes["lat_pulldown.t3"].load.as_deref(), Some("40kg"));
+    assert_eq!(state.lanes["lat_pulldown.t3"].reps, Some(16));
+
+    let mut state = state;
+    state.cursor.next_session = "a1".into();
+    let rendered = render_next(&compiled, &state).unwrap();
+    let mut input = synthetic_execution_input(&rendered, "all-pass", 1);
+    let accessory = input
+        .inputs
+        .iter_mut()
+        .find(|item| item.item_id == "a1.t3")
+        .unwrap();
+    accessory.final_set_reps = Some(25);
+    let state = reduce_input(&compiled, &state, &rendered, &input)
+        .unwrap()
+        .new_state;
+    assert_eq!(
+        state.lanes["lat_pulldown.t3"].load.as_deref(),
+        Some("42.5kg")
+    );
+    assert_eq!(state.lanes["lat_pulldown.t3"].reps, Some(15));
+}
+
+#[test]
+fn five_three_one_bumps_training_max_after_deload() {
+    let plan = include_str!("../../examples/531-repo/plan.fitspec");
+    let compiled =
+        compile_plan(plan, &render_lockfile("531.beginners@1.0.0").unwrap(), &[]).unwrap();
+    let mut state = create_initial_state(&compiled);
+    for index in 0..4 {
+        state.cursor.next_session = "squat_day".into();
+        let rendered = render_next(&compiled, &state).unwrap();
+        let input = synthetic_execution_input(&rendered, "all-pass", index);
+        state = reduce_input(&compiled, &state, &rendered, &input)
+            .unwrap()
+            .new_state;
+    }
+    let squat = &state.lanes["squat.main"];
+    assert_eq!(squat.training_max.as_deref(), Some("95kg"));
+    assert_eq!(squat.stage.as_deref(), Some("week 1"));
+    assert_eq!(squat.week, Some(1));
+    assert_eq!(squat.cycle, Some(2));
 }
 
 #[test]

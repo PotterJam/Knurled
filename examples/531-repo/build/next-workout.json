@@ -1,21 +1,42 @@
 {
-  "display_name": "5/3/1 - Squat",
+  "display_name": "5/3/1 for Beginners - Squat",
   "engine_version": "0.1.0",
   "items": [
     {
       "display": {
-        "subtitle": "57.5kg - 5 / 5 / 5+",
+        "subtitle": "57.5kg - week 1",
         "title": "Squat MAIN"
       },
+      "dsl_context": {
+        "basis": "training_max",
+        "first_stage": "week 1",
+        "initial": {
+          "kind": "basis"
+        },
+        "next_stage": "week 2",
+        "sequence": "waves"
+      },
+      "dsl_rules": [
+        {
+          "effects": [
+            {
+              "op": "advance_stage"
+            }
+          ],
+          "trigger": {
+            "kind": "pass"
+          }
+        }
+      ],
       "effect_preview": {
         "adjusted_today": [],
         "fail": [],
         "pass": [
           {
-            "from": "1",
+            "from": "week 1",
             "lane": "squat.main",
-            "op": "advance_531_week",
-            "to": "2"
+            "op": "advance_stage",
+            "to": "week 2"
           }
         ]
       },
@@ -68,10 +89,11 @@
         "item_id": "squat.main",
         "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
         "progression_lane": "squat.main",
-        "progression_rule": "531.main",
-        "rendered_session_hash": "sha256:5bbab32d160eae1e5a61f2eb4fece2c6067cecbfd394b37eb9fe08a35f5e4ad9",
+        "progression_rule": "dsl.main",
+        "rendered_session_hash": "sha256:5d9619f470071135674377bbfcfb5ce417aaadf7ddc963dd2920cedaa8e228c4",
         "slot_id": "squat.main"
       },
+      "implement": "barbell",
       "item_id": "squat.main",
       "prescription": {
         "sets": [
@@ -122,7 +144,7 @@
         ]
       },
       "progression_lane": "squat.main",
-      "progression_rule": "531.main",
+      "progression_rule": "dsl.main",
       "rest": {
         "key": "main",
         "seconds": 180,
@@ -132,10 +154,10 @@
     }
   ],
   "plan_hash": "sha256:75fce6ad3905ccc9dafe92aada6a154809d5432a8ee8821623364fa860fa0112",
-  "rendered_session_hash": "sha256:5bbab32d160eae1e5a61f2eb4fece2c6067cecbfd394b37eb9fe08a35f5e4ad9",
+  "rendered_session_hash": "sha256:5d9619f470071135674377bbfcfb5ce417aaadf7ddc963dd2920cedaa8e228c4",
   "schema_version": "0.1",
   "session_id": "squat_day",
   "suggested_date": null,
-  "template_hash": "sha256:d55242ba38ac8b1647aa877bae22c90d9d22659ebe11df637075937b1330cf54",
+  "template_hash": "sha256:06530cf9ed2b6555e5e3c9f362f30db9b63e2650e45a8419190dd3a939c6d243",
   "type": "rendered_session"
 }

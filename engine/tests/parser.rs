@@ -171,7 +171,7 @@ fn parses_lockfile_template_entries() {
         LockEntry {
             version: "1.0.0".into(),
             source: "builtin".into(),
-            content_hash: "sha256:f759b186f5de27cdf86e8846ea8af72e12623fcb5b290d0a4e217dd1971e010c"
+            content_hash: "sha256:3474cbfe48c6f477a45fd2f966bc8bcdea02068a8f4a148fc4309cf43a4ff795"
                 .into(),
             engine_version: "0.1.0".into(),
         }
