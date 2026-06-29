@@ -91,6 +91,27 @@ final class AppModel {
         return outcome
     }
 
+    /// Skips the next workout one rotation step forward or backward without recording
+    /// anything or moving the lanes — only the schedule cursor moves (ADR 0007). Used when
+    /// a few days were missed and the same rotation slot should be skipped, with no training
+    /// record and no progression penalty. Persists the new cursor and best-effort pushes it.
+    @discardableResult
+    func skipWorkout(forward: Bool, in repo: ActiveRepo) async throws -> BuildOutputs {
+        let before = repo.state?.cursor
+        let outputs = try await engine.skipWorkout(dir: repo.url, forward: forward)
+        await repo.refresh(engine: engine)
+        // Going back from the program's very first workout is a no-op in the engine; don't
+        // manufacture an empty commit for a cursor that didn't move.
+        guard outputs.state.cursor != before else { return outputs }
+        let session = outputs.nextWorkout?.sessionId.uppercased() ?? "workout"
+        try await pushProgramChange(
+            GitHubChangedFiles.present(in: repo.url),
+            in: repo,
+            message: "Skip to \(session)"
+        )
+        return outputs
+    }
+
     private func pushProgramChange(_ files: [String], in repo: ActiveRepo, message: String) async throws {
         do {
             try await push(repo: repo, message: message, files: files)

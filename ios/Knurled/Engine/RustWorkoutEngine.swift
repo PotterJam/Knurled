@@ -32,6 +32,11 @@ actor RustWorkoutEngine: WorkoutEngine {
         return try decode(BuildOutputs.self, from: raw)
     }
 
+    func skipWorkout(dir: URL, forward: Bool) throws -> BuildOutputs {
+        let raw = try call(dir: dir) { knurled_skip_workout($0, forward ? 1 : 0) }
+        return try decode(BuildOutputs.self, from: raw)
+    }
+
     func records(dir: URL) throws -> [TrainingRecord] {
         let raw = try call(dir: dir) { knurled_read_records($0) }
         return try decode([TrainingRecord].self, from: raw)
