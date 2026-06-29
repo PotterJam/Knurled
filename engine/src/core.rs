@@ -635,6 +635,48 @@ pub(crate) fn advance_cursor(state: &mut StateProjection, rotation: &[String], s
     }
 }
 
+/// Move the schedule cursor one workout forward or backward in the rotation
+/// without recording anything or touching the lanes — the "skip ahead / go back"
+/// navigation. Skipping past the end of the rotation rolls over to the next
+/// week; going back past the start of the rotation rolls back to the previous
+/// week. The program's first workout (week 1, first session in the rotation) is
+/// the floor: going back from there is a no-op so the cursor never lands on an
+/// invalid week. Returns `true` when the cursor actually moved.
+pub(crate) fn skip_cursor(state: &mut StateProjection, rotation: &[String], forward: bool) -> bool {
+    let len = rotation.len();
+    let normalized = state.cursor.next_session.to_ascii_lowercase();
+    let index = rotation
+        .iter()
+        .position(|candidate| candidate == &normalized)
+        .unwrap_or(0);
+
+    if forward {
+        let next_index = (index + 1) % len.max(1);
+        if let Some(session) = rotation.get(next_index) {
+            state.cursor.next_session = session.clone();
+        }
+        if next_index == 0 {
+            state.cursor.week += 1;
+        }
+        true
+    } else {
+        if index == 0 {
+            // Already at the first session of the week: roll back a week, or stay
+            // put if we're already at the program's very first workout.
+            if state.cursor.week <= 1 {
+                return false;
+            }
+            state.cursor.week -= 1;
+            if let Some(session) = rotation.last() {
+                state.cursor.next_session = session.clone();
+            }
+        } else if let Some(session) = rotation.get(index - 1) {
+            state.cursor.next_session = session.clone();
+        }
+        true
+    }
+}
+
 /// Build the generated outputs from the source-of-truth `state` (ADR 0007):
 /// the next workout rendered from `state`, plus the compiled-plan IR and
 /// validation. No replay — `state` is authoritative.

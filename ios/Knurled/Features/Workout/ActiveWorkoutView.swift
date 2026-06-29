@@ -79,6 +79,9 @@ struct ActiveWorkoutView: View {
                 if let target = controller.currentScrollTarget {
                     proxy.scrollTo(WorkoutScrollDestination.exercise(target.exerciseID), anchor: .top)
                 }
+                // Starting the workout commits to it: flush any locally-skipped cursor to GitHub
+                // now, in the background, rather than on every skip tap.
+                Task { await app.syncPendingChanges(in: workout.repo) }
             }
             .onDisappear {
                 pendingScroll?.cancel()

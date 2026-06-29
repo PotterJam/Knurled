@@ -22,7 +22,8 @@ use knurled_core::{
     Units, amend_training_record, apply_plan_edit, build_outputs, build_repo, builtin_templates,
     exercise_catalog, init_training_repo, merge_record_repos, preview_plan_edit, preview_template,
     parse_template_dsl, read_records,
-    read_state, read_training_repo, reduce_input, render_session, render_template_dsl, submit_rendered_repo,
+    read_state, read_training_repo, reduce_input, render_session, render_template_dsl,
+    skip_workout_repo, submit_rendered_repo,
     suggest_initial_numbers, suggest_load, validate_execution_input, validate_repo,
     add_program, delete_program, list_programs, set_active_program,
     suggest_program_adjustments, vendor_template,
@@ -218,6 +219,25 @@ pub extern "C" fn knurled_submit(
             Err(error) => return fail(error),
         };
         ok(outcome)
+    })
+}
+
+/// Skips the next workout one step forward (`forward != 0`) or backward through
+/// the rotation without recording anything or moving the lanes — only the cursor
+/// changes (ADR 0007). Persists the new `state` and regenerated `build/` outputs
+/// and returns the fresh `BuildOutputs`. Used when a few days were missed and the
+/// same rotation slot should be skipped, with no training record and no penalty.
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_skip_workout(dir: *const c_char, forward: c_int) -> *mut c_char {
+    guard("knurled_skip_workout", || {
+        let dir = match unsafe { borrow(dir) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        match skip_workout_repo(dir, forward != 0) {
+            Ok(outputs) => ok(outputs),
+            Err(error) => fail(error),
+        }
     })
 }
 

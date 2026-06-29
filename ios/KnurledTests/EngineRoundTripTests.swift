@@ -72,6 +72,30 @@ import Foundation
         #expect(FileManager.default.fileExists(atPath: dir.appending(path: "logs/2026/06.json").path()))
     }
 
+    @Test func skippingMovesTheCursorWithoutRecordingAnything() async throws {
+        let dir = try SampleRepo.makeWorkingCopy()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let engine = RustWorkoutEngine()
+        let before = try await engine.build(dir: dir, write: false)
+        #expect(before.nextWorkout?.sessionId == "a1")
+
+        // Skip ahead: the next workout advances through the rotation, lanes are untouched,
+        // and nothing is logged.
+        let forward = try await engine.skipWorkout(dir: dir, forward: true)
+        #expect(forward.nextWorkout?.sessionId == "b1")
+        #expect(forward.state.lanes == before.state.lanes)
+        #expect(try await engine.records(dir: dir).isEmpty)
+
+        // Persisted: a fresh build reads the skipped cursor back off disk.
+        #expect(try await engine.build(dir: dir, write: false).nextWorkout?.sessionId == "b1")
+
+        // Going back returns to where we started.
+        let back = try await engine.skipWorkout(dir: dir, forward: false)
+        #expect(back.nextWorkout?.sessionId == "a1")
+        #expect(try await engine.records(dir: dir).isEmpty)
+    }
+
     private static func passingInput(for item: RenderedItem) -> ItemInput {
         if item.executionContract.recommendedInput == InputMode.amrapFinalSet {
             let target = item.prescription.sets.last?.targetReps ?? 1

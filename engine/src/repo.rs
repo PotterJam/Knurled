@@ -700,6 +700,22 @@ fn persist_rendered_submit(
     Ok(outcome)
 }
 
+/// Skip the next workout one step forward or backward through the rotation
+/// without recording anything or moving the lanes (ADR 0007 — the cursor is the
+/// only thing that changes). Persists the new `state` and regenerated `build/`
+/// outputs, then returns them so the caller can render the new next workout.
+/// Use this when a few days were missed and the same rotation slot should be
+/// skipped, with no training record and no progression penalty.
+pub fn skip_workout_repo(repo_path: impl AsRef<Path>, forward: bool) -> Result<BuildOutputs> {
+    let root = repo_path.as_ref();
+    let repo = read_training_repo(root)?;
+    let mut state = read_state(root)?;
+    crate::core::skip_cursor(&mut state, &repo.compiled.schedule.rotation, forward);
+    let outputs = build_outputs(&repo.compiled, &state)?;
+    write_generated_files(root, &outputs)?;
+    Ok(outputs)
+}
+
 /// Backtest the repo's plan over its recorded workouts (the opt-in, replay-free
 /// projection of ADR 0007).
 pub fn backtest_records_repo(repo_path: impl AsRef<Path>) -> Result<BacktestProjection> {

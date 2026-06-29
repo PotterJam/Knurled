@@ -32,6 +32,8 @@ struct NextWorkoutView: View {
     @Environment(AppModel.self) private var app
     @Environment(DraftStore.self) private var draftStore
     @State private var isSyncing = false
+    @State private var isSkipping = false
+    @State private var skipError: String?
     @State private var draft: WorkoutDraft?
 
     var body: some View {
@@ -156,15 +158,36 @@ struct NextWorkoutView: View {
 
     private var header: some View {
         VStack(alignment: .center, spacing: 6) {
-            Text(session.displayName)
-                .font(.title2.bold())
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: KnurledTheme.Spacing.s) {
+                skipButton(forward: false, systemImage: "chevron.left", label: "Previous workout")
 
-            if let day = WorkoutFormat.relativeDay(fromISO: session.suggestedDate) {
-                Text("Suggested: \(day)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .center, spacing: 6) {
+                    Text(session.displayName)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    if let day = WorkoutFormat.relativeDay(fromISO: session.suggestedDate) {
+                        Text("Suggested: \(day)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                skipButton(forward: true, systemImage: "chevron.right", label: "Skip to next workout")
+            }
+
+            Text("Skip ahead or back through your rotation — nothing is logged.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if let skipError {
+                Text(skipError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
             }
 
             HStack(spacing: 8) {
@@ -178,6 +201,36 @@ struct NextWorkoutView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private func skipButton(forward: Bool, systemImage: String, label: String) -> some View {
+        Button {
+            skip(forward: forward)
+        } label: {
+            Image(systemName: systemImage)
+                .font(.title3.weight(.semibold))
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.bordered)
+        .clipShape(Circle())
+        .disabled(isSkipping)
+        .accessibilityLabel(label)
+    }
+
+    private func skip(forward: Bool) {
+        skipError = nil
+        Task {
+            isSkipping = true
+            defer { isSkipping = false }
+            do {
+                try await app.skipWorkout(forward: forward, in: repo)
+                // The cursor moved, so any in-progress draft no longer matches the workout on
+                // screen; reload so the start bar reflects the freshly selected session.
+                draft = draftStore.hasDraft ? draftStore.load() : nil
+            } catch {
+                skipError = error.localizedDescription
+            }
         }
     }
 }

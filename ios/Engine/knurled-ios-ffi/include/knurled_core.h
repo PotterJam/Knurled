@@ -32,6 +32,11 @@ char *knurled_reduce_input(const char *dir, const char *rendered_session_json, c
  * the day to logs/<yyyy>/<mm>.json. On invalid input nothing is written.
  * -> submit outcome (validation, record, new_state, effects, changed_files) */
 char *knurled_submit(const char *dir, const char *rendered_session_json, const char *execution_input_json, const char *mode, const char *date);
+/* Skips the next workout one rotation step forward (forward != 0) or backward without
+ * recording anything or moving the lanes — only the schedule cursor changes (ADR 0007).
+ * Persists the new state and regenerated build/ outputs. -> build outputs */
+char *knurled_skip_workout(const char *dir, int forward);
+
 char *knurled_read_records(const char *dir);
 char *knurled_amend_record(const char *dir, const char *request_json);
 char *knurled_merge_record_repos(const char *source_dir, const char *target_dir);

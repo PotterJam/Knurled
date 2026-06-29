@@ -41,8 +41,8 @@ pub use repo::{
     InitResult, TrainingRepo, amend_training_record, backtest_records_repo, build_repo,
     check_generated_repo, init_training_repo, merge_record_repos, merge_training_records,
     preview_repo, read_records, read_state, read_training_repo, serialize_record_files,
-    simulate_repo, submit_rendered_repo, submit_repo, validate_repo, write_generated_files,
-    write_state, write_training_record,
+    simulate_repo, skip_workout_repo, submit_rendered_repo, submit_repo, validate_repo,
+    write_generated_files, write_state, write_training_record,
 };
 pub use session::{SubmitMode, SubmitOutcome, submit_session};
 pub use suggest::{ProgramAdjustmentSuggestion, suggest_program_adjustments};
