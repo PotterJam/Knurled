@@ -787,7 +787,7 @@ struct RepsWheelEditor: View {
     }
 }
 
-private struct AmrapRepsEditor: View {
+struct AmrapRepsEditor: View {
     let set: LiveSet
     var onDone: (Int) -> Void
 

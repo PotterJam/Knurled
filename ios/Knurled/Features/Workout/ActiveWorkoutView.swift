@@ -157,10 +157,19 @@ struct ActiveWorkoutView: View {
         }
         .sheet(isPresented: $showRepsEditor) {
             if let (item, set) = controller.currentTarget {
-                RepsWheelEditor(set: set, onDone: { reps in
-                    controller.editReps(set: set, in: item, reps: reps)
-                })
-                .presentationDetents([.height(260)])
+                // An AMRAP final set gets the dedicated editor (target hint, records the exact
+                // count); every other set dials reps on the plain wheel and logs on done.
+                if item.isAmrap && set.id == item.lastRequiredSetID && !set.logged {
+                    AmrapRepsEditor(set: set) { reps in
+                        controller.completeAmrap(set: set, in: item, reps: reps)
+                    }
+                    .presentationDetents([.height(330)])
+                } else {
+                    RepsWheelEditor(set: set, onDone: { reps in
+                        controller.editReps(set: set, in: item, reps: reps)
+                    })
+                    .presentationDetents([.height(260)])
+                }
             }
         }
         .sheet(item: $restTarget) { item in

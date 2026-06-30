@@ -39,9 +39,11 @@ struct AddRestIntent: LiveActivityIntent {
 }
 
 /// Opens the app and asks the workout screen to bring up the reps editor on the current set, so
-/// the set is logged by typing reps in the app rather than stepping values on the lock screen.
+/// the set is logged by dialling reps on the wheel in the app. Raised by tapping the reps readout
+/// on the Live Activity, and by the "Log" action for sets that can't be logged at a fixed number
+/// (AMRAP, or a weighted set still missing its load).
 struct EditRepsIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Log set"
+    static let title: LocalizedStringResource = "Edit reps"
     static let openAppWhenRun = true
 
     func perform() async throws -> some IntentResult {

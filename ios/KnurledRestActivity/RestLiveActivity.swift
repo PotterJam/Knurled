@@ -66,8 +66,14 @@ struct RestLiveActivity: Widget {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+            } else if state.isAmrap || state.needsLoad {
+                // Open-ended or weight-missing sets can't be logged at a fixed number — open the app.
+                LogButton(state: state)
             } else {
-                LogInAppButton()
+                HStack(spacing: 10) {
+                    RepsEditButton(state: state)
+                    LogButton(state: state)
+                }
             }
         case .resting:
             HStack(spacing: 10) {
@@ -132,16 +138,32 @@ private struct LockScreenView: View {
                 SetProgressDots(total: state.totalSets, current: state.setNumber)
             }
 
-            Text(state.loadReps)
-                .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                .foregroundStyle(state.needsLoad ? .orange : .primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                // Snap to the new value on a stepper tap instead of the default slow cross-fade.
-                .contentTransition(.identity)
+            bigReps(.system(.largeTitle, design: .rounded).weight(.bold))
 
             readyControls
         }
+    }
+
+    /// The big load×reps readout. On a working set it's a button that opens the app's reps wheel on
+    /// the current set — mirroring the in-app set row, where tapping the number raises the same
+    /// editor. Warm-ups are guidance only, so their number is plain text.
+    @ViewBuilder private func bigReps(_ font: Font) -> some View {
+        if state.isWarmup {
+            repsReadout(font)
+        } else {
+            Button(intent: EditRepsIntent()) { repsReadout(font) }
+                .buttonStyle(.plain)
+        }
+    }
+
+    private func repsReadout(_ font: Font) -> some View {
+        Text(state.loadReps)
+            .font(font)
+            .foregroundStyle(state.needsLoad ? .orange : .primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            // Snap to the new value on a tap instead of the default slow cross-fade.
+            .contentTransition(.identity)
     }
 
     @ViewBuilder private var readyControls: some View {
@@ -159,7 +181,7 @@ private struct LockScreenView: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
         } else {
-            LogInAppButton(controlSize: .large)
+            LogButton(state: state, controlSize: .large)
         }
     }
 
@@ -231,17 +253,47 @@ private struct SetProgressDots: View {
     }
 }
 
-/// A single button that opens the app on the current set with the reps editor ready to type,
-/// rather than logging from the lock screen. Replaces the old on-activity weight/AMRAP steppers.
-private struct LogInAppButton: View {
+/// The "Log" action. A plain working set logs straight from the lock screen at the shown reps; an
+/// AMRAP (open-ended) set, or one still missing its weight, can't be logged at a fixed number, so
+/// it opens the app on the current set instead — the same place tapping the reps number goes.
+private struct LogButton: View {
+    let state: RestActivityAttributes.ContentState
+    var controlSize: ControlSize = .small
+
+    private var logsInApp: Bool { state.isAmrap || state.needsLoad }
+
+    var body: some View {
+        Group {
+            if logsInApp {
+                Button(intent: EditRepsIntent()) { label }
+            } else {
+                Button(intent: LogSetIntent()) { label }
+            }
+        }
+        .tint(.cyan)
+        .buttonStyle(.bordered)
+        .controlSize(controlSize)
+    }
+
+    private var label: some View {
+        Label("Log", systemImage: logsInApp ? "square.and.pencil" : "checkmark.circle")
+            .frame(maxWidth: .infinity)
+    }
+}
+
+/// A button showing the load×reps, which opens the app's reps wheel on the current set. Used in the
+/// Dynamic Island, where there's no room for the big tappable readout the lock screen shows.
+private struct RepsEditButton: View {
+    let state: RestActivityAttributes.ContentState
     var controlSize: ControlSize = .small
 
     var body: some View {
         Button(intent: EditRepsIntent()) {
-            Label("Log set", systemImage: "square.and.pencil")
+            Label(state.loadReps, systemImage: "square.and.pencil")
+                .lineLimit(1)
                 .frame(maxWidth: .infinity)
         }
-        .tint(.cyan)
+        .tint(.secondary)
         .buttonStyle(.bordered)
         .controlSize(controlSize)
     }
