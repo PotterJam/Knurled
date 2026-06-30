@@ -13,6 +13,8 @@ struct ActiveWorkoutView: View {
     @State private var pendingScroll: Task<Void, Never>?
     @State private var restTarget: LiveItem?
     @State private var showRepsEditor = false
+    /// Full width of the jump strip, used to centre the pills when they don't fill it.
+    @State private var stripWidth: CGFloat = 0
 
     private let resumeDraft: WorkoutDraft?
     private let controller = WorkoutLiveController.shared
@@ -73,7 +75,7 @@ struct ActiveWorkoutView: View {
                 .onDrop(of: [.plainText], delegate: ResetDragDelegate(draggingItemID: $draggingItemID))
             }
             .safeAreaInset(edge: .top) {
-                jumpStrip(proxy: proxy)
+                jumpStrip(listProxy: proxy)
             }
             .onAppear {
                 controller.begin(workout, restTimersEnabled: workoutSettings.restTimersEnabled, resumingFrom: resumeDraft)
@@ -212,19 +214,44 @@ struct ActiveWorkoutView: View {
     private var bodyItems: [LiveItem] { workout.items.filter { !$0.isSessionWarmup } }
 
     /// A pinned horizontal strip of the session's exercises for quick jumping. Tapping scrolls to
-    /// an exercise and, unless it's already done, moves the cursor onto it.
-    @ViewBuilder private func jumpStrip(proxy: ScrollViewProxy) -> some View {
+    /// an exercise and, unless it's already done, moves the cursor onto it. The pills sit centred
+    /// when they fit, and the strip auto-scrolls the up-next exercise into view as you progress so
+    /// it's never lost off the edge.
+    @ViewBuilder private func jumpStrip(listProxy: ScrollViewProxy) -> some View {
         if bodyItems.count > 1 {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(bodyItems) { item in
-                        jumpPill(item, proxy: proxy)
+            ScrollViewReader { stripProxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(bodyItems) { item in
+                            jumpPill(item, proxy: listProxy)
+                                .id(item.id)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    // Expand to the full strip width when the pills are narrower, so they centre
+                    // instead of hugging the leading edge; a longer list keeps its natural width
+                    // and scrolls.
+                    .frame(minWidth: stripWidth, alignment: .center)
+                }
+                .background(.bar)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: StripWidthKey.self, value: geo.size.width)
+                    }
+                )
+                .onPreferenceChange(StripWidthKey.self) { stripWidth = $0 }
+                .onChange(of: controller.currentTarget?.item.id) { _, id in
+                    guard let id else { return }
+                    withAnimation(.snappy) { stripProxy.scrollTo(id, anchor: .center) }
+                }
+                .onAppear {
+                    // Resuming partway through a session: bring the up-next exercise into view.
+                    if let id = controller.currentTarget?.item.id {
+                        stripProxy.scrollTo(id, anchor: .center)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
             }
-            .background(.bar)
         }
     }
 
@@ -241,6 +268,10 @@ struct ActiveWorkoutView: View {
             HStack(spacing: 4) {
                 if done {
                     Image(systemName: "checkmark")
+                        .font(.caption2.weight(.bold))
+                } else if isCurrent {
+                    // Mark the up-next exercise so it's obvious which one to return to.
+                    Image(systemName: "arrowtriangle.forward.fill")
                         .font(.caption2.weight(.bold))
                 }
                 Text(item.item.display.title)
@@ -439,5 +470,13 @@ private struct ResetDragDelegate: DropDelegate {
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)
+    }
+}
+
+/// Reports the jump strip's available width so its pills can be centred when they don't fill it.
+private struct StripWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
