@@ -144,12 +144,16 @@ private struct LockScreenView: View {
         }
     }
 
-    /// The big load×reps readout. On a working set it's a button that opens the app's reps wheel on
-    /// the current set — mirroring the in-app set row, where tapping the number raises the same
-    /// editor. Warm-ups are guidance only, so their number is plain text.
+    /// The big load×reps readout. On a working set it's a button that opens the app on the current
+    /// set — mirroring the in-app row, where tapping the number raises the same editor. A set still
+    /// missing its weight goes to the weight field instead of the reps wheel. Warm-ups are guidance
+    /// only, so their number is plain text.
     @ViewBuilder private func bigReps(_ font: Font) -> some View {
         if state.isWarmup {
             repsReadout(font)
+        } else if state.needsLoad {
+            Button(intent: EditLoadIntent()) { repsReadout(font) }
+                .buttonStyle(.plain)
         } else {
             Button(intent: EditRepsIntent()) { repsReadout(font) }
                 .buttonStyle(.plain)
@@ -253,21 +257,28 @@ private struct SetProgressDots: View {
     }
 }
 
-/// The "Log" action. A plain working set logs straight from the lock screen at the shown reps; an
-/// AMRAP (open-ended) set, or one still missing its weight, can't be logged at a fixed number, so
-/// it opens the app on the current set instead — the same place tapping the reps number goes.
+/// The "Log" action. A plain working set logs straight from the lock screen at the shown reps. A
+/// set that can't be logged at a fixed number opens the app on the current set instead: an AMRAP
+/// (open-ended) set goes to the reps editor, and a weighted set still missing its load goes to the
+/// weight field — the same places tapping the readout goes.
 private struct LogButton: View {
     let state: RestActivityAttributes.ContentState
     var controlSize: ControlSize = .small
 
-    private var logsInApp: Bool { state.isAmrap || state.needsLoad }
-
     var body: some View {
         Group {
-            if logsInApp {
-                Button(intent: EditRepsIntent()) { label }
+            if state.needsLoad {
+                Button(intent: EditLoadIntent()) {
+                    label("Set weight", systemImage: "scalemass")
+                }
+            } else if state.isAmrap {
+                Button(intent: EditRepsIntent()) {
+                    label("Log", systemImage: "square.and.pencil")
+                }
             } else {
-                Button(intent: LogSetIntent()) { label }
+                Button(intent: LogSetIntent()) {
+                    label("Log", systemImage: "checkmark.circle")
+                }
             }
         }
         .tint(.cyan)
@@ -275,9 +286,8 @@ private struct LogButton: View {
         .controlSize(controlSize)
     }
 
-    private var label: some View {
-        Label("Log", systemImage: logsInApp ? "square.and.pencil" : "checkmark.circle")
-            .frame(maxWidth: .infinity)
+    private func label(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage).frame(maxWidth: .infinity)
     }
 }
 

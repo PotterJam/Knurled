@@ -66,6 +66,9 @@ final class WorkoutLiveController {
     /// Raised by the Live Activity's "Log set" action so the in-app workout screen opens the reps
     /// editor on the current set, ready to type, instead of logging from the lock screen.
     private(set) var pendingRepsEdit = false
+    /// Raised by the Live Activity when the current set needs a weight before it can be logged, so
+    /// the in-app screen opens the weight editor instead of the reps wheel.
+    private(set) var pendingLoadEdit = false
 
     private var now: Date = .now
     private var restTimersEnabled = true
@@ -351,6 +354,19 @@ final class WorkoutLiveController {
     /// Consume the pending reps-edit request once the in-app screen has acted on it.
     func clearRepsEditRequest() {
         pendingRepsEdit = false
+    }
+
+    /// Raise the request for the in-app workout screen to open the weight editor on the current set.
+    /// Fired from the Live Activity for a weighted set that has no load yet, so the user sets a
+    /// weight in the app before logging rather than dialling reps on a set that can't be logged.
+    func requestLoadEdit() {
+        guard ensureWorkoutLoaded(), currentTarget != nil else { return }
+        pendingLoadEdit = true
+    }
+
+    /// Consume the pending load-edit request once the in-app screen has acted on it.
+    func clearLoadEditRequest() {
+        pendingLoadEdit = false
     }
 
     private func needsLoad(item: LiveItem, set: LiveSet) -> Bool {

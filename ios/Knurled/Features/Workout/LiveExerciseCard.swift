@@ -656,7 +656,7 @@ private struct ValueChip: View {
     }
 }
 
-private struct LoadValueEditor: View {
+struct LoadValueEditor: View {
     let set: LiveSet
     let item: LiveItem
     let units: Units

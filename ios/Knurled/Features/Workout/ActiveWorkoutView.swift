@@ -13,6 +13,7 @@ struct ActiveWorkoutView: View {
     @State private var pendingScroll: Task<Void, Never>?
     @State private var restTarget: LiveItem?
     @State private var showRepsEditor = false
+    @State private var showLoadEditor = false
     /// Full width of the jump strip, used to centre the pills when they don't fill it.
     @State private var stripWidth: CGFloat = 0
 
@@ -83,8 +84,9 @@ struct ActiveWorkoutView: View {
                     proxy.scrollTo(WorkoutScrollDestination.exercise(target.exerciseID), anchor: .top)
                 }
                 // The Live Activity's "Log set" may have opened the app before this screen
-                // appeared — honour any pending request to edit reps on the current set.
+                // appeared — honour any pending request to edit reps (or weight) on the current set.
                 if controller.pendingRepsEdit { openRepsEditor() }
+                if controller.pendingLoadEdit { openLoadEditor() }
                 // Starting the workout commits to it: flush any locally-skipped cursor to GitHub
                 // now, in the background, rather than on every skip tap.
                 Task { await app.syncPendingChanges(in: workout.repo) }
@@ -108,6 +110,9 @@ struct ActiveWorkoutView: View {
             }
             .onChange(of: controller.pendingRepsEdit) { _, pending in
                 if pending { openRepsEditor() }
+            }
+            .onChange(of: controller.pendingLoadEdit) { _, pending in
+                if pending { openLoadEditor() }
             }
         }
         .navigationTitle(workout.session.displayName)
@@ -172,6 +177,16 @@ struct ActiveWorkoutView: View {
                     })
                     .presentationDetents([.height(260)])
                 }
+            }
+        }
+        .sheet(isPresented: $showLoadEditor) {
+            if let (item, set) = controller.currentTarget {
+                // Raised from the Live Activity when a weighted set has no load yet — set the
+                // weight here, then the set can be logged normally.
+                LoadValueEditor(set: set, item: item, units: workout.units) {
+                    controller.modelChanged()
+                }
+                .presentationDetents([.height(250)])
             }
         }
         .sheet(item: $restTarget) { item in
@@ -304,6 +319,14 @@ struct ActiveWorkoutView: View {
         controller.clearRepsEditRequest()
         guard controller.currentTarget != nil else { return }
         showRepsEditor = true
+    }
+
+    /// Present the weight editor on the current set in response to the Live Activity's "Log set"
+    /// action landing on a weighted set with no load yet, then clear the request.
+    private func openLoadEditor() {
+        controller.clearLoadEditRequest()
+        guard controller.currentTarget != nil else { return }
+        showLoadEditor = true
     }
 
     private func scroll(_ request: WorkoutScrollRequest, proxy: ScrollViewProxy) {

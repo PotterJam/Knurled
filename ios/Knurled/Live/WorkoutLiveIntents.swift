@@ -54,6 +54,21 @@ struct EditRepsIntent: LiveActivityIntent {
     }
 }
 
+/// Opens the app and brings up the weight editor on the current set. Raised when the "Log" action
+/// (or the readout tap) lands on a weighted working set that has no load yet — it can't be logged
+/// until a weight is entered, so we go straight to the weight field rather than the reps wheel.
+struct EditLoadIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Set weight"
+    static let openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        #if KNURLED_APP
+        await WorkoutLiveController.shared.requestLoadEdit()
+        #endif
+        return .result()
+    }
+}
+
 struct SkipWarmupIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Skip warm-up"
 
