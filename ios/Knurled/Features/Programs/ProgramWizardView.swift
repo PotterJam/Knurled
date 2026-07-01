@@ -68,7 +68,7 @@ struct ProgramWizardView: View {
                         }
                     }
                 } footer: {
-                    Text("Fork the built-in into the structured editor to add lanes, sessions, or change progression.")
+                    Text("Start from a copy of this template and change its exercises, days, or how weights progress.")
                 }
 
                 Section("Review") {
@@ -86,7 +86,7 @@ struct ProgramWizardView: View {
                         Label("Open structured editor", systemImage: "square.and.pencil")
                     }
                 } footer: {
-                    Text("Build a full multi-lane, multi-session program with live validation and a workout preview.")
+                    Text("Build your own program from scratch, with live checks and a preview of the first workout.")
                 }
             }
 
@@ -94,7 +94,7 @@ struct ProgramWizardView: View {
                 Section { Text(errorMessage).foregroundStyle(.red) }
             }
         }
-        .navigationTitle("Program wizard")
+        .navigationTitle("Add program")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 if source == .builtIn {

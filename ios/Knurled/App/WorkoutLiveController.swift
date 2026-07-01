@@ -188,7 +188,6 @@ final class WorkoutLiveController {
         self.restTimersEnabled = restTimersEnabled
         if let draft { restoreCursor(from: draft, in: workout) }
         syncAmrap()
-        RestNotifier.requestAuthorization()
         startActivity()
         startDraftAutosave()
     }
@@ -573,6 +572,9 @@ final class WorkoutLiveController {
             updateActivity()
             return
         }
+        // Ask for notification permission at the first rest countdown — the moment a
+        // "rest complete" buzz has obvious value — not while the user is starting a workout.
+        RestNotifier.requestAuthorization()
         now = .now
         restEndDate = now.addingTimeInterval(TimeInterval(max(1, seconds)))
         scheduleRestNotification()

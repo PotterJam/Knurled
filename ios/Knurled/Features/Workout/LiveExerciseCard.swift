@@ -5,6 +5,9 @@ struct LiveExerciseCard: View {
     let controller: WorkoutLiveController
     /// Non-nil only for exercises the user added this session, which can be removed.
     var onDelete: (() -> Void)? = nil
+    /// Reports a destructive in-card action (deleting an extra set) with a closure that
+    /// restores it, so the host can offer an undo toast.
+    var onUndoableDelete: ((String, @escaping () -> Void) -> Void)? = nil
     var allActive: Bool = false
     @State private var showChange = false
     @State private var confirmDelete = false
@@ -75,9 +78,13 @@ struct LiveExerciseCard: View {
                             loadMissing: !live.isBodyweight && set.load == nil,
                             isBodyweight: live.isBodyweight,
                             onDelete: set.isExtra ? {
+                                let index = live.sets.firstIndex { $0 === set } ?? live.sets.endIndex
                                 withAnimation(.snappy) {
                                     live.removeSet(set)
                                     controller.modelChanged()
+                                }
+                                onUndoableDelete?("Set removed") {
+                                    live.restoreSet(set, at: index)
                                 }
                             } : nil
                         )
@@ -95,7 +102,7 @@ struct LiveExerciseCard: View {
             footer
         }
         .knurledCard()
-        .opacity(allActive || isCurrentExercise ? 1 : 0.5)
+        .opacity(cardOpacity)
         .overlay {
             if isCurrentExercise {
                 RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
@@ -193,6 +200,13 @@ struct LiveExerciseCard: View {
             }
             .font(.footnote)
         }
+    }
+
+    /// Pending cards stay readable — resting users read the next prescription (and the card
+    /// they're deciding to jump to) off non-current cards. Only finished exercises recede.
+    private var cardOpacity: Double {
+        if allActive || isCurrentExercise { return 1 }
+        return live.isComplete ? 0.55 : 0.85
     }
 
     private var swapPolicyText: String {
@@ -400,6 +414,9 @@ struct SetRowView: View {
                     .font(.title3)
                     .foregroundStyle(set.logged ? completedForeground : .secondary)
                     .frame(width: 28, height: 28)
+                    // The most-tapped control in the app: keep the 28pt visual but extend the
+                    // hit area to the 44pt minimum for one-handed, mid-set taps.
+                    .contentShape(Rectangle().inset(by: -8))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.logged ? "Undo set" : "Mark set done")
@@ -573,6 +590,8 @@ private struct RPEChip: View {
                     value.map(RPEColorScale.background) ?? Color(uiColor: .tertiarySystemFill),
                     in: RoundedRectangle(cornerRadius: 5)
                 )
+                // Extend the hit area towards the 44pt minimum without growing the chip.
+                .contentShape(Rectangle().inset(by: -5))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(value == nil ? "Add RPE" : "Edit RPE \(text)")
@@ -651,6 +670,8 @@ private struct ValueChip: View {
                     (isChanged ? Color.orange.opacity(0.14) : Color(uiColor: .tertiarySystemFill)),
                     in: RoundedRectangle(cornerRadius: 5)
                 )
+                // Extend the hit area towards the 44pt minimum without growing the chip.
+                .contentShape(Rectangle().inset(by: -5))
         }
         .buttonStyle(.plain)
     }

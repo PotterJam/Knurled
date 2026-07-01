@@ -35,6 +35,7 @@ struct NextWorkoutView: View {
     @State private var isSkipping = false
     @State private var skipError: String?
     @State private var draft: WorkoutDraft?
+    @State private var showDiscardConfirm = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -118,13 +119,25 @@ struct NextWorkoutView: View {
                 .controlSize(.large)
 
                 Button(role: .destructive) {
-                    draftStore.clear()
-                    self.draft = nil
+                    showDiscardConfirm = true
                 } label: {
                     Label("Discard & start \(session.displayName)", systemImage: "trash")
                         .frame(maxWidth: .infinity)
                 }
                 .controlSize(.large)
+                .confirmationDialog(
+                    "Discard \(draft.displayName)?",
+                    isPresented: $showDiscardConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Discard workout", role: .destructive) {
+                        draftStore.clear()
+                        self.draft = nil
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This deletes the sets you already logged in \(draft.displayName). This can't be undone.")
+                }
 
                 Text("Finish or discard your in-progress workout before starting a new one.")
                     .font(.footnote)
@@ -141,7 +154,7 @@ struct NextWorkoutView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
 
-                Text("Finish a workout as advance, off-day, or reset when you submit it.")
+                Text("Your progress saves automatically as you log sets.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

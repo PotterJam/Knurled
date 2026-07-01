@@ -53,6 +53,15 @@ never looks at, and several are cheap enough to fix ahead of or alongside Tranch
 
 ## 3. Foibles RFC-0001 does not cover
 
+> **Status (2026-07-01):** fixed on this branch — 3.1 (discard confirm), 3.2 (Reset behind an
+> explicit confirm), 3.3 (finish-failure recovery), 3.4 (44pt hit areas), 3.5 (readable
+> non-current cards), 3.6 (permission at first rest), 3.7 (footnote copy), 3.8 (sample notice
+> on finish, as the pre-D1 stopgap), 3.9 (undo toast for set/exercise deletes), plus the D12
+> orphan deletions (`PatchPlanEditView`, `SwitchProgramView`, `SwapExerciseSheet`,
+> `AdjustTodaySheet`, `SetDetailSheet`) and the §3.10 wizard-copy nits. Still open from §3.10:
+> raw `localizedDescription` error strings (lands with D9) and the Data-tab body-metrics gate
+> (lands with D8).
+
 Ordered by (risk of data loss / trust damage) × (how often a real session hits it).
 
 ### 3.1 One tap destroys an in-progress workout — no confirmation
