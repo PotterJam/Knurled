@@ -17,6 +17,7 @@ struct FinishWorkoutView: View {
     @State private var phase: Phase = .computing
     @State private var timestamp = LiveWorkout.timestamp()
     @State private var mode: SubmitMode = .advance
+    @State private var showResetConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -29,11 +30,7 @@ struct FinishWorkoutView: View {
                 case .submitting:
                     ProgressView("Saving…")
                 case .failed(let message):
-                    ContentUnavailableView {
-                        Label("Couldn't finish", systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(message)
-                    }
+                    failedContent(message)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -50,20 +47,30 @@ struct FinishWorkoutView: View {
     private func previewContent(_ outcome: ReductionResult) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: KnurledTheme.Spacing.l) {
-                Picker("Submit mode", selection: $mode) {
-                    ForEach(SubmitMode.allCases, id: \.self) { option in
-                        Text(option.title).tag(option)
-                    }
+                if workout.repo.isSample {
+                    sampleRepoNotice
                 }
-                .pickerStyle(.segmented)
 
-                Text(mode.subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                // Reset rewrites every baseline, so it is never a peer segment next to Advance —
+                // it is armed via an explicit confirmation and shown as a distinct banner.
+                if mode == .reset {
+                    resetArmedCard
+                } else {
+                    Picker("Submit mode", selection: $mode) {
+                        ForEach([SubmitMode.advance, .offDay], id: \.self) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
 
-                Text("Everything logged becomes this workout. With Advance, only exercises whose required sets are complete progress.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Text(mode.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Text("Everything logged becomes this workout. With Advance, only exercises whose required sets are complete progress.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
                     Text("Effects").font(.headline)
@@ -96,8 +103,97 @@ struct FinishWorkoutView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+
+                if mode != .reset {
+                    Button("Use today's loads as my new baselines…") {
+                        showResetConfirm = true
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                }
             }
             .padding()
+        }
+        .confirmationDialog(
+            "Reset baselines from today's loads?",
+            isPresented: $showResetConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Reset baselines", role: .destructive) { mode = .reset }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every exercise's progression baseline is rewritten to the load you performed today, and future workouts are prescribed from those new numbers. This can't be undone from the app.")
+        }
+    }
+
+    private var resetArmedCard: some View {
+        VStack(alignment: .leading, spacing: KnurledTheme.Spacing.s) {
+            Label("Resetting baselines", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            Text(SubmitMode.reset.subtitle)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Button("Switch back to Advance") { mode = .advance }
+                .font(.footnote.weight(.medium))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(
+            Color.orange.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
+        )
+    }
+
+    private var sampleRepoNotice: some View {
+        Label(
+            "This is the sample program — workouts logged here stay in the demo. Add your own program from the Plan screen to keep your training.",
+            systemImage: "info.circle"
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .padding(KnurledTheme.Spacing.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color(uiColor: .secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
+        )
+    }
+
+    /// A failed finish must never dead-end: the draft is intact, so the user can go back to the
+    /// live workout to fix the problem, or simply retry after a transient failure.
+    private func failedContent(_ message: String) -> some View {
+        VStack(spacing: KnurledTheme.Spacing.l) {
+            ContentUnavailableView {
+                Label("Couldn't finish", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(message)
+            }
+
+            VStack(spacing: KnurledTheme.Spacing.s) {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Back to workout", systemImage: "chevron.left")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button("Try again") {
+                    phase = .computing
+                    Task { await compute() }
+                }
+
+                Text("Nothing was lost — your sets are still logged. Adjust whatever needs fixing and finish again.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding([.horizontal, .bottom])
         }
     }
 

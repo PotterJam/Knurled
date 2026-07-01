@@ -157,6 +157,13 @@ final class LiveItem: Identifiable {
         sets.removeAll { $0 === set }
     }
 
+    /// Undo of `removeSet`: reinsert the same set, clamping the index in case other sets
+    /// were added or removed since the delete.
+    func restoreSet(_ set: LiveSet, at index: Int) {
+        guard set.isExtra, !sets.contains(where: { $0 === set }) else { return }
+        sets.insert(set, at: min(max(0, index), sets.count))
+    }
+
     func swap(to alternative: ExerciseAlternative) {
         performedExercise = alternative.exercise
         swapLabel = alternative.label
@@ -527,6 +534,13 @@ final class LiveWorkout: Identifiable {
     func removeItem(_ item: LiveItem) {
         guard item.isTrackingOnlyExtra else { return }
         items.removeAll { $0.id == item.id }
+    }
+
+    /// Undo of `removeItem`: reinsert the same exercise (with its logged sets), clamping the
+    /// index in case the list changed since the delete.
+    func restoreItem(_ item: LiveItem, at index: Int) {
+        guard item.isTrackingOnlyExtra, !items.contains(where: { $0.id == item.id }) else { return }
+        items.insert(item, at: min(max(0, index), items.count))
     }
 
     @discardableResult

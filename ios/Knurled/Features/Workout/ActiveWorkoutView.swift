@@ -13,6 +13,7 @@ struct ActiveWorkoutView: View {
     @State private var pendingScroll: Task<Void, Never>?
     @State private var restTarget: LiveItem?
     @State private var showRepsEditor = false
+    @State private var undoableDelete: UndoableDelete?
 
     private let resumeDraft: WorkoutDraft?
     private let controller = WorkoutLiveController.shared
@@ -45,11 +46,19 @@ struct ActiveWorkoutView: View {
                             live: item,
                             controller: controller,
                             onDelete: item.isTrackingOnlyExtra ? {
+                                let index = workout.items.firstIndex { $0.id == item.id }
+                                    ?? workout.items.endIndex
                                 withAnimation(.snappy) {
                                     workout.removeItem(item)
                                     controller.modelChanged()
                                 }
-                            } : nil
+                                offerUndo("\(item.item.display.title) removed") {
+                                    workout.restoreItem(item, at: index)
+                                }
+                            } : nil,
+                            onUndoableDelete: { message, restore in
+                                offerUndo(message, restore: restore)
+                            }
                         )
                             .id(WorkoutScrollDestination.exercise(item.id))
                             .onDrag {
@@ -125,12 +134,25 @@ struct ActiveWorkoutView: View {
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
+                if let undoableDelete {
+                    UndoToast(message: undoableDelete.message) {
+                        undoableDelete.restore()
+                        controller.modelChanged()
+                        self.undoableDelete = nil
+                    }
+                }
                 RestTimerBar(controller: controller) {
                     restTarget = controller.currentTarget?.item
                 }
                     .animation(.snappy, value: controller.isResting)
                 bottomBar
             }
+            .animation(.snappy, value: undoableDelete?.id)
+        }
+        .task(id: undoableDelete?.id) {
+            guard undoableDelete != nil else { return }
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled { undoableDelete = nil }
         }
         .confirmationDialog("Leave workout?", isPresented: $showLeaveDialog, titleVisibility: .visible) {
             Button("Pause & leave") { dismiss() }
@@ -353,6 +375,38 @@ struct ActiveWorkoutView: View {
             controller.discard()
             dismiss()
         }
+    }
+
+    private func offerUndo(_ message: String, restore: @escaping () -> Void) {
+        undoableDelete = UndoableDelete(message: message, restore: restore)
+    }
+}
+
+/// A just-deleted set or exercise, held briefly so the user can take the deletion back.
+private struct UndoableDelete: Identifiable {
+    let id = UUID()
+    let message: String
+    let restore: () -> Void
+}
+
+private struct UndoToast: View {
+    let message: String
+    var onUndo: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(message)
+                .font(.subheadline)
+            Spacer()
+            Button("Undo", action: onUndo)
+                .font(.subheadline.weight(.semibold))
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 
