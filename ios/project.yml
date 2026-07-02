@@ -40,6 +40,12 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.knurled.app
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.knurled.app
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.com.knurled.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.knurled.app
@@ -66,6 +72,11 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSSupportsLiveActivities: true
         GitHubClientID: $(GITHUB_CLIENT_ID)
+        NSUbiquitousContainers:
+          iCloud.com.knurled.app:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: Knurled
+            NSUbiquitousContainerSupportedFolderLevels: Any
 
   KnurledRestActivity:
     type: app-extension

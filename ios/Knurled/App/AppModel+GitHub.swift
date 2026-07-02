@@ -1,5 +1,7 @@
 import Foundation
 
+/// The GitHub repository a training repo is backed up to. The working copy in iCloud/local
+/// storage is the source of truth; this remote just mirrors it, one commit per change.
 struct GitHubRemote: Codable, Sendable, Hashable {
     let owner: String
     let name: String
@@ -99,15 +101,74 @@ enum GitHubChangedFiles {
 }
 
 extension AppModel {
-    /// Pulls a GitHub repo into a working copy and makes it the active repo.
+    /// Backs the active training repo up to a brand-new GitHub repository: creates the repo,
+    /// pushes every working-copy file as the initial commit, and records it as the backup
+    /// remote. From then on every training commit also lands on GitHub.
+    func createBackupRepository(name rawName: String, isPrivate: Bool = true) async throws {
+        guard let repo = activeRepo else {
+            throw GitHubError.badResponse("There is no training repo to back up yet.")
+        }
+        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isValidRepositoryName(name) else { throw GitHubError.invalidRepositoryName }
+
+        let githubRepo = try await client.createRepository(name: name, isPrivate: isPrivate)
+        try await backUp(repo, to: githubRepo, client: client)
+        await github.loadRepos()
+    }
+
+    /// Backs the active training repo up into an existing, empty GitHub repository (the
+    /// offer made when a restore attempt hits GitHub's empty-repo 409).
+    func backUpToExistingRepository(_ githubRepo: GitHubRepo) async throws {
+        guard let repo = activeRepo else {
+            throw GitHubError.badResponse("There is no training repo to back up yet.")
+        }
+        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
+        try await backUp(repo, to: githubRepo, client: client)
+    }
+
+    private func backUp(
+        _ repo: ActiveRepo,
+        to githubRepo: GitHubRepo,
+        client: any GitHubClientProtocol
+    ) async throws {
+        let branch = githubRepo.defaultBranch.isEmpty ? "main" : githubRepo.defaultBranch
+        let head = try await client.commitInitial(
+            owner: githubRepo.owner,
+            repo: githubRepo.name,
+            branch: branch,
+            files: GitHubChangedFiles.all(in: repo.url),
+            dir: repo.url,
+            message: "Back up Knurled training repo"
+        )
+        repo.remote = GitHubRemote(
+            owner: githubRepo.owner,
+            name: githubRepo.name,
+            branch: branch,
+            headCommit: head
+        )
+        repo.pendingPush = false
+        persistSelection()
+    }
+
+    /// Stops backing the active repo up to GitHub. The working copy and its history stay
+    /// intact locally and on GitHub; Knurled just stops pushing new commits.
+    func unlinkBackup() {
+        activeRepo?.remote = nil
+        activeRepo?.pendingPush = false
+        persistSelection()
+    }
+
+    /// Restores a training repo from its GitHub backup: pulls the repository into a fresh
+    /// working copy in primary storage and makes it the active repo.
     ///
-    /// Empty repositories (no commits yet) can't be pulled — GitHub's Git Data API answers
-    /// with 409. We surface `GitHubError.emptyRepository` so the caller can offer to seed it
-    /// with a starter template via `initializeRepository(githubRepo:template:)`.
-    func connect(repo githubRepo: GitHubRepo) async throws {
+    /// Empty repositories (no commits yet) can't be restored from — GitHub's Git Data API
+    /// answers with 409. We surface `GitHubError.emptyRepository` so the caller can offer to
+    /// back up into it instead via `backUpToExistingRepository`.
+    func restoreFromBackup(repo githubRepo: GitHubRepo) async throws {
         guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
-        let dir = try repos.workingDirectory(for: slug)
+        let dir = try await repos.workingDirectory(for: slug)
         let head: String
         do {
             head = try await client.pull(
@@ -119,7 +180,7 @@ extension AppModel {
         } catch where GitHubError.isEmptyRepository(error) {
             throw GitHubError.emptyRepository
         }
-        let active = ActiveRepo(displayName: githubRepo.fullName, url: dir, isSample: false)
+        let active = ActiveRepo(displayName: githubRepo.fullName, url: dir)
         active.remote = GitHubRemote(
             owner: githubRepo.owner,
             name: githubRepo.name,
@@ -133,122 +194,12 @@ extension AppModel {
         persistSelection()
     }
 
-    func createStarterRepository(
-        name rawName: String,
-        template: StarterTemplate,
-        initialNumbers: InitialTrainingNumbers,
-        isPrivate: Bool = true
-    ) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
-        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.isValidRepositoryName(name) else { throw GitHubError.invalidRepositoryName }
-
-        let githubRepo = try await client.createRepository(name: name, isPrivate: isPrivate)
-        try await initializeRepository(
-            githubRepo: githubRepo,
-            template: template,
-            initialNumbers: initialNumbers
-        )
-    }
-
-    /// Seeds an existing empty GitHub repository with a starter template: builds the template
-    /// locally, makes the repo's first commit, and makes it the active repo. Shared by the
-    /// create-new flow and the "begin an empty repo" flow.
-    func initializeRepository(
-        githubRepo: GitHubRepo,
-        template: StarterTemplate,
-        initialNumbers: InitialTrainingNumbers
-    ) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
-        let slug = "\(githubRepo.owner)-\(githubRepo.name)"
-        let dir = try repos.workingDirectory(for: slug)
-        if FileManager.default.fileExists(atPath: dir.path(percentEncoded: false)) {
-            try FileManager.default.removeItem(at: dir)
-        }
-        try await engine.initRepo(dir: dir, template: template.reference)
-        try Self.apply(initialNumbers: initialNumbers, to: dir)
-        _ = try await engine.build(dir: dir, write: true)
-        let branch = githubRepo.defaultBranch.isEmpty ? "main" : githubRepo.defaultBranch
-        let head = try await client.commitInitial(
-            owner: githubRepo.owner,
-            repo: githubRepo.name,
-            branch: branch,
-            files: GitHubChangedFiles.all(in: dir),
-            dir: dir,
-            message: "Initialize Knurled training repo"
-        )
-
-        let active = ActiveRepo(displayName: githubRepo.fullName, url: dir, isSample: false)
-        active.remote = GitHubRemote(
-            owner: githubRepo.owner,
-            name: githubRepo.name,
-            branch: branch,
-            headCommit: head
-        )
-        await active.refresh(engine: engine)
-        activeRepo = active
-        phase = .ready
-        persistSelection()
-        await github.loadRepos()
-    }
-
-    static func apply(initialNumbers: InitialTrainingNumbers, to dir: URL) throws {
-        let programDir = RepoLayout.activeProgramDirectory(in: dir)
-        let planURL = programDir.appending(path: "plan.fitspec")
-        var plan = try String(contentsOf: planURL, encoding: .utf8)
-        plan = Self.replacingPlanUnits(in: plan, with: initialNumbers.units)
-        plan = try Self.replacingInitialNumberBlock(in: plan, with: initialNumbers)
-        try plan.write(to: planURL, atomically: true, encoding: .utf8)
-
-        // `initRepo` wrote state from template defaults; drop it so build derives from the
-        // edited first-workout numbers.
-        let stateURL = programDir.appending(path: "state/current.json")
-        if FileManager.default.fileExists(atPath: stateURL.path(percentEncoded: false)) {
-            try FileManager.default.removeItem(at: stateURL)
-        }
-    }
-
-    static func replacingPlanUnits(in plan: String, with units: Units) -> String {
-        guard let range = plan.range(of: "\n  units ") else { return plan }
-        let lineEnd = plan[range.upperBound...].firstIndex(of: "\n") ?? plan.endIndex
-        var updated = plan
-        updated.replaceSubrange(range.upperBound..<lineEnd, with: units.rawValue)
-        return updated
-    }
-
-    static func replacingInitialNumberBlock(
-        in plan: String,
-        with initialNumbers: InitialTrainingNumbers
-    ) throws -> String {
-        let blockName = initialNumbers.spec.block.planBlockName
-        let startMarker = "  \(blockName) {\n"
-        guard let startRange = plan.range(of: startMarker) else {
-            throw GitHubError.badResponse("Template plan is missing a \(blockName) block.")
-        }
-        guard let closeRange = plan[startRange.upperBound...].range(of: "\n  }") else {
-            throw GitHubError.badResponse("Template plan has an unterminated \(blockName) block.")
-        }
-
-        let entries = try initialNumbers.planEntries()
-            .map { exercise, load in #"    \#(exercise) "\#(load)""# }
-            .joined(separator: "\n")
-        let replacement = """
-          \(blockName) {
-        \(entries)
-          }
-        """
-
-        var updated = plan
-        updated.replaceSubrange(startRange.lowerBound..<closeRange.upperBound, with: replacement)
-        return updated
-    }
-
     private static func isValidRepositoryName(_ name: String) -> Bool {
         guard !name.isEmpty else { return false }
         return name.range(of: #"^[A-Za-z0-9._-]+$"#, options: .regularExpression) != nil
     }
 
-    /// Pulls the latest remote state into the active GitHub repo and rebuilds (spec §27).
+    /// Pulls the latest backup state into the active repo and rebuilds (spec §27).
     func sync() async {
         guard let repo = activeRepo, let remote = repo.remote, let client = github.client() else {
             await refresh()

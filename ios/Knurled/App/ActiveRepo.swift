@@ -7,7 +7,6 @@ final class ActiveRepo: Identifiable {
     let id = UUID()
     let displayName: String
     let url: URL
-    let isSample: Bool
 
     var outputs: BuildOutputs?
     var lastValidOutputs: BuildOutputs?
@@ -21,10 +20,9 @@ final class ActiveRepo: Identifiable {
     var remote: GitHubRemote?
     var pendingPush = false
 
-    init(displayName: String, url: URL, isSample: Bool) {
+    init(displayName: String, url: URL) {
         self.displayName = displayName
         self.url = url
-        self.isSample = isSample
     }
 
     private var displayOutputs: BuildOutputs? {

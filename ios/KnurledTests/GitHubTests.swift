@@ -30,7 +30,7 @@ import Foundation
         _ = try await app.engine.build(dir: dir, write: true)
         try await Self.submitRecord(engine: app.engine, dir: dir)
 
-        let repo = ActiveRepo(displayName: "owner/repo", url: dir, isSample: false)
+        let repo = ActiveRepo(displayName: "owner/repo", url: dir)
         repo.remote = GitHubRemote(owner: "owner", name: "repo", branch: "main", headCommit: "base")
         repo.pendingPush = true
         app.activeRepo = repo
@@ -73,7 +73,7 @@ import Foundation
         #expect(Set(records.map(\.id)).count == 2)
     }
 
-    @Test func zeroSizeRepositoryStillConnectsWhenPullSucceeds() async throws {
+    @Test func zeroSizeRepositoryStillRestoresWhenPullSucceeds() async throws {
         let fake = PullingGitHubClient()
         let github = GitHubStore(makeClient: { _ in fake })
         github.authenticateForTesting(token: "token")
@@ -87,7 +87,7 @@ import Foundation
             size: 0
         )
 
-        try await app.connect(repo: githubRepo)
+        try await app.restoreFromBackup(repo: githubRepo)
 
         #expect(await fake.pullCount == 1)
         #expect(app.activeRepo?.displayName == "owner/gym")

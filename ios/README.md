@@ -2,8 +2,9 @@
 
 The Knurled workout **player** for iOS — a thin SwiftUI front-end over the Rust
 `knurled-core` engine. It shows the next prescribed workout, captures what actually
-happened with low friction, validates/reduces through the real engine, and commits
-training records back to a user-owned GitHub repository.
+happened with low friction, and validates/reduces through the real engine. The training
+repo lives in **iCloud Drive** (falling back to on-device storage when iCloud is off),
+and can optionally be mirrored to a user-owned **GitHub repository as a backup**.
 
 > **Design rule:** the app is a thin UI over engine output. No training logic — progression,
 > effects, rest prescriptions, validation — is reimplemented in Swift. Everything comes from
@@ -65,8 +66,18 @@ Swift talks to it through the `WorkoutEngine` protocol:
 - Codable types in `Models/` mirror the engine's `model.rs` verbatim — including per-item
   `rest: RestPrescription`, `execution_contract.input_schema`, and
   `effect_preview.{pass,fail,adjusted_today}`.
-- Each connected repo is a working directory under Application Support
-  (`Knurled/repos/<owner>-<name>/`) mirroring the repo tree.
+- The training repo is a plain working directory and it is the **source of truth**. It
+  lives in the app's iCloud Drive container (`Documents/repos/<slug>/`, browsable in the
+  Files app) when iCloud is available, or under Application Support
+  (`Knurled/repos/<slug>/`) otherwise. `RepoManager` resolves the roots, unique-ifies new
+  slugs, and moves local repos into iCloud the first time it becomes available.
+- **Onboarding:** first launch runs a wizard (`Features/Onboarding/`): pick a built-in
+  starter program → enter first-workout numbers → optionally attach a GitHub backup — or
+  restore an existing backup from GitHub. There is no bundled sample plan anymore; the
+  fixture repo is kept for tests only.
+- **GitHub is a backup, not the primary store.** Linking a backup creates (or seeds) a
+  repository and pushes the whole working copy; from then on each training change is
+  mirrored as one commit. Unlinking stops pushing without touching data.
 - **Submit:** the live session builds an `ExecutionInput` → `knurled_reduce_input` for the
   **consequence-first effect preview** → on confirm, `knurled_submit` writes
   `state/current.json` and writes a session-grain `TrainingRecord` into
@@ -106,10 +117,12 @@ The FFI and Swift app are ported:
 | Rest timer + Live Activity | ✅ | engine-prescribed rest auto-starts after each **non-final** set; ActivityKit lock-screen + Dynamic Island via `KnurledRestActivity`; local notification + haptic when rest ends, and the screen is kept awake while the activity is live |
 | Off-day + reset submit modes | ✅ | record-only off-day; reset performed loads as baselines |
 | Offline push | ✅ | pending-push flag when a commit can't reach GitHub |
-| GitHub sync | ✅* | device-flow sign-in, repo picker, pull, one-commit push, sync |
+| iCloud-first storage + onboarding wizard | ✅ | repo lives in iCloud Drive (local fallback); first launch = program → numbers → optional backup, or restore |
+| GitHub backup | ✅* | device-flow sign-in, create/link backup repo, restore, one-commit push, sync, unlink |
 
 `*` GitHub auth and push compile and present, but need a registered OAuth App **client ID** to
-run end-to-end (see below). Until one is set, the app runs on the bundled sample repo.
+run end-to-end (see below). Without one, the app is fully usable on iCloud/local storage —
+only the backup is unavailable.
 
 ## Build & run
 
@@ -142,8 +155,10 @@ xcodebuild -scheme Knurled -destination 'platform=iOS Simulator,name=iPhone 16' 
   file lands in `Knurled.xcodeproj`. The project globs `Knurled/`, but the generated `.pbxproj`
   is gitignored, so the file is invisible to the build until you regenerate.
 
-The app boots straight onto the bundled `gzclp-repo` sample, so read/log/submit flows are usable
-in the simulator without GitHub.
+The app boots into the onboarding wizard on first launch; creating a program there needs no
+GitHub account, so read/log/submit flows are usable in the simulator end-to-end. (The simulator
+generally has no iCloud, so repos land in local Application Support — the same code path a
+device without iCloud uses.)
 
 ### Xcode Cloud
 
@@ -159,14 +174,23 @@ relative to the selected project directory, so the script lives beside `Knurled.
 Keep `Knurled.xcodeproj` and `Engine/KnurledCore.xcframework` gitignored; the cloud workflow
 should continue to point at `ios/Knurled.xcodeproj` after the post-clone script generates it.
 
-## GitHub setup (optional)
+## iCloud setup
+
+The app uses the default ubiquity container `iCloud.com.knurled.app` (CloudDocuments), declared
+in `project.yml` → `Knurled.entitlements` and exposed in the Files app via
+`NSUbiquitousContainers`. Signing with a team that has the iCloud capability is enough; when the
+user is signed out of iCloud (or disables it for Knurled), storage silently falls back to local
+Application Support and Settings shows "This device".
+
+## GitHub backup setup (optional)
 
 1. Register a GitHub OAuth App at <https://github.com/settings/developers> with **Device Flow**
    enabled.
 2. `cp Config/Secrets.sample.xcconfig Config/Secrets.xcconfig` and paste the **Client ID** into
    `GITHUB_CLIENT_ID` (gitignored; injected into Info.plist as `GitHubClientID`).
-3. Settings → Connect GitHub → enter the device code → pick a repo. Scope: `repo` (or
-   fine-grained contents read/write).
+3. Onboarding (or Settings → Storage & Backup) → Connect GitHub → enter the device code →
+   create a backup repository, or restore an existing one. Scope: `repo` (or fine-grained
+   contents read/write).
 
 ## Project layout
 
@@ -183,12 +207,12 @@ ios/
     DesignSystem/                  theme, components, formatting
     Models/                        Codable contract types mirroring model.rs
     Engine/                        WorkoutEngine protocol, RustWorkoutEngine (FFI), readers
-    Repo/                          LocalRepoStore, LogReader
+    Repo/                          RepoManager (iCloud/local storage roots, migration)
     GitHub/                        DeviceFlow, GitHubClient (Git Data API), TokenStore (Keychain)
     Stores/                        GitHubStore (@Observable)
     Live/                          RestTimer + shared ActivityKit attributes
     Features/                      Onboarding · Workout · History · Plan · Settings
-    Resources/Fixtures/gzclp-repo  bundled sample repo (previews + offline demo)
+    Resources/Fixtures/gzclp-repo  bundled fixture repo (tests only)
   KnurledRestActivity/             Live Activity widget extension (ActivityKit)
   KnurledTests/                    Swift Testing — decoding, FFI round-trip, §40 acceptance, submit/swap/github
 ```
@@ -204,3 +228,5 @@ ios/
 - **Record round-trips** — submit writes `logs/<yyyy>/<mm>.json`; swap records
   performed/prescribed/policy in preview results.
 - **GitHub** — commit-message templates and changed-file discovery.
+- **Onboarding** — local repo creation from a template with applied starting numbers, slug
+  unique-ification, backup link/unlink, and legacy sample-selection skip on restore.

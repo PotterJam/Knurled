@@ -6,7 +6,7 @@ import Observation
 final class AppModel {
     enum Phase: Equatable {
         case launching
-        case needsConnection
+        case onboarding
         case ready
     }
 
@@ -17,6 +17,9 @@ final class AppModel {
     var phase: Phase = .launching
     var activeRepo: ActiveRepo?
     var engineVersion: String?
+    /// Where new training repos are created this launch: iCloud Drive when the user has it
+    /// enabled for Knurled, otherwise on-device storage.
+    var storageLocation: RepoStorageLocation = .local
     var starterTemplates: [StarterTemplate] = []
     var exerciseCatalog: [ExerciseCatalogEntry] = []
 
@@ -35,8 +38,11 @@ final class AppModel {
         await loadStarterTemplates()
         await loadExerciseCatalog()
         await github.restore()
+        await repos.removeLegacySampleRepo()
+        await repos.migrateLocalReposToICloud()
+        storageLocation = await repos.storageLocation()
         if await restoreSelection() { return }
-        await loadSampleRepo()
+        phase = .onboarding
     }
 
     /// Loads the engine's built-in starter templates once. The app shows whatever the engine
@@ -49,18 +55,6 @@ final class AppModel {
     func loadExerciseCatalog() async {
         guard exerciseCatalog.isEmpty else { return }
         exerciseCatalog = (try? await engine.exerciseCatalog()) ?? []
-    }
-
-    func loadSampleRepo() async {
-        do {
-            let url = try repos.ensureSampleRepo()
-            let repo = ActiveRepo(displayName: "Sample · GZCLP", url: url, isSample: true)
-            await repo.refresh(engine: engine)
-            activeRepo = repo
-            phase = .ready
-        } catch {
-            phase = .needsConnection
-        }
     }
 
     func refresh() async {

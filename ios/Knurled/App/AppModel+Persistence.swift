@@ -1,11 +1,13 @@
 import Foundation
 
-/// A persisted pointer to the last-active repo so "connect repo → reopen app → next workout"
-/// survives relaunch, and so unpushed local commits aren't stranded behind a sample-repo boot.
+/// A persisted pointer to the last-active repo so "set up → reopen app → next workout"
+/// survives relaunch, and so unpushed backup commits aren't stranded by a fresh boot.
 struct RepoSelection: Codable, Sendable {
     var slug: String
     var displayName: String
-    var isSample: Bool
+    /// Legacy field: builds before onboarding persisted the bundled sample repo with this
+    /// flag. Kept optional so old selections still decode — and get skipped on restore.
+    var isSample: Bool?
     var remote: GitHubRemote?
     var pendingPush: Bool
 }
@@ -18,7 +20,6 @@ extension AppModel {
         let selection = RepoSelection(
             slug: repo.url.lastPathComponent,
             displayName: repo.displayName,
-            isSample: repo.isSample,
             remote: repo.remote,
             pendingPush: repo.pendingPush
         )
@@ -27,18 +28,17 @@ extension AppModel {
         }
     }
 
-    /// Re-opens the last connected GitHub repo from its on-disk working copy. Returns false
-    /// (so the caller falls back to the sample) when there is no connected selection or its
-    /// working copy is missing.
+    /// Re-opens the last-active repo from its on-disk working copy — iCloud first, then local
+    /// storage. Returns false (so the caller routes into onboarding) when nothing was
+    /// persisted, the working copy is gone, or the selection is a legacy sample repo.
     func restoreSelection() async -> Bool {
         guard let data = UserDefaults.standard.data(forKey: Self.selectionKey),
               let selection = try? JSONDecoder().decode(RepoSelection.self, from: data),
-              !selection.isSample,
-              let dir = try? repos.workingDirectory(for: selection.slug),
-              FileManager.default.fileExists(atPath: dir.path(percentEncoded: false))
+              selection.isSample != true,
+              let dir = await repos.existingWorkingDirectory(for: selection.slug)
         else { return false }
 
-        let repo = ActiveRepo(displayName: selection.displayName, url: dir, isSample: false)
+        let repo = ActiveRepo(displayName: selection.displayName, url: dir)
         repo.remote = selection.remote
         repo.pendingPush = selection.pendingPush
         await repo.refresh(engine: engine)

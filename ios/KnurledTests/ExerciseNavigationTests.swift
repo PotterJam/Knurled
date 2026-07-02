@@ -7,7 +7,7 @@ import Foundation
     private func makeWorkout() async throws -> (URL, LiveWorkout) {
         let dir = try SampleRepo.makeWorkingCopy()
         let engine = RustWorkoutEngine()
-        let repo = ActiveRepo(displayName: "Test", url: dir, isSample: true)
+        let repo = ActiveRepo(displayName: "Test", url: dir)
         let session = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
         return (dir, LiveWorkout(repo: repo, session: session))
     }

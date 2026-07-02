@@ -20,7 +20,7 @@ struct WorkoutHomeView: View {
             ContentUnavailableView {
                 Label("No Workout", systemImage: "dumbbell.fill")
             } description: {
-                Text("Connect a repository in Settings to see your next workout.")
+                Text("Your program has no next workout. Check your plan, or restore a backup from Settings.")
             }
         }
     }
@@ -208,9 +208,6 @@ struct NextWorkoutView: View {
                     StatusChip(text: "Plan valid", style: .ok)
                 } else {
                     StatusChip(text: "Plan invalid", style: .bad)
-                }
-                if repo.isSample {
-                    StatusChip(text: "Sample", style: .neutral)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .center)

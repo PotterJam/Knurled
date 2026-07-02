@@ -194,7 +194,7 @@ import Foundation
     ) {
         let dir = try SampleRepo.makeWorkingCopy()
         let app = AppModel()
-        let repo = ActiveRepo(displayName: "sample", url: dir, isSample: true)
+        let repo = ActiveRepo(displayName: "sample", url: dir)
         await repo.refresh(engine: app.engine)
         let session = try #require(repo.nextWorkout)
         let input = ExecutionInput(

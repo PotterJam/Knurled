@@ -47,10 +47,6 @@ struct FinishWorkoutView: View {
     private func previewContent(_ outcome: ReductionResult) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: KnurledTheme.Spacing.l) {
-                if workout.repo.isSample {
-                    sampleRepoNotice
-                }
-
                 // Reset rewrites every baseline, so it is never a peer segment next to Advance —
                 // it is armed via an explicit confirmation and shown as a distinct banner.
                 if mode == .reset {
@@ -144,21 +140,6 @@ struct FinishWorkoutView: View {
         .padding()
         .background(
             Color.orange.opacity(0.12),
-            in: RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
-        )
-    }
-
-    private var sampleRepoNotice: some View {
-        Label(
-            "This is the sample program — workouts logged here stay in the demo. Add your own program from the Plan screen to keep your training.",
-            systemImage: "info.circle"
-        )
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .padding(KnurledTheme.Spacing.s)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            Color(uiColor: .secondarySystemBackground),
             in: RoundedRectangle(cornerRadius: KnurledTheme.Radius.card, style: .continuous)
         )
     }

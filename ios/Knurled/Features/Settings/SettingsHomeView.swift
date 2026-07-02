@@ -46,11 +46,11 @@ struct SettingsHomeView: View {
 
                 Section("Manage") {
                     NavigationLink {
-                        GitSettingsView()
+                        StorageBackupSettingsView()
                     } label: {
                         SettingsNavigationRow(
-                            title: "Git & Sync",
-                            subtitle: gitSummary,
+                            title: "Storage & Backup",
+                            subtitle: backupSummary,
                             systemImage: "arrow.triangle.2.circlepath"
                         )
                     }
@@ -101,15 +101,15 @@ struct SettingsHomeView: View {
         return "\(formatted) \(metrics.unit.rawValue) · \(metrics.sex.title)"
     }
 
-    private var gitSummary: String {
-        if let login = app.github.login {
-            return app.activeRepo?.remote == nil ? "@\(login), no remote repo" : "@\(login)"
-        }
-        return app.activeRepo?.isSample == true ? "Sample repo" : "Not connected"
+    private var backupSummary: String {
+        let storage = app.storageLocation.title
+        guard app.activeRepo?.remote != nil else { return "\(storage) · not backed up" }
+        return "\(storage) · GitHub backup"
     }
 }
 
 private struct ActiveRepoSummaryRow: View {
+    @Environment(AppModel.self) private var app
     let repo: ActiveRepo
 
     var body: some View {
@@ -122,12 +122,13 @@ private struct ActiveRepoSummaryRow: View {
             }
 
             HStack(spacing: KnurledTheme.Spacing.s) {
+                Label(
+                    app.storageLocation.title,
+                    systemImage: app.storageLocation == .iCloud ? "icloud" : "iphone"
+                )
+
                 if let remote = repo.remote {
                     Label("\(remote.owner)/\(remote.name)", systemImage: "shippingbox")
-                } else if repo.isSample {
-                    Label("Sample repository", systemImage: "tray")
-                } else {
-                    Label("Local repository", systemImage: "folder")
                 }
 
                 if repo.pendingPush {
@@ -288,24 +289,38 @@ private struct SettingsNavigationRow: View {
     }
 }
 
-private struct GitSettingsView: View {
+private struct StorageBackupSettingsView: View {
     @Environment(AppModel.self) private var app
-    @State private var showConnect = false
+    @State private var showBackup = false
     @State private var isSyncing = false
 
     var body: some View {
         List {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(app.storageLocation.title)
+                        Text(app.storageLocation == .iCloud
+                             ? "Your training repo syncs across your devices via iCloud Drive."
+                             : "iCloud Drive is unavailable — your training repo is stored only on this device.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: app.storageLocation == .iCloud ? "icloud.fill" : "iphone")
+                }
+            } header: {
+                Text("Storage")
+            }
+
             Section("Repository") {
                 if let repo = app.activeRepo {
                     LabeledContent("Active", value: repo.displayName)
                     if let remote = repo.remote {
-                        LabeledContent("Remote", value: "\(remote.owner)/\(remote.name)")
+                        LabeledContent("Backup", value: "\(remote.owner)/\(remote.name)")
                         LabeledContent("Branch", value: remote.branch)
-                    } else if repo.isSample {
-                        Text("Sample repository")
-                            .foregroundStyle(.secondary)
                     } else {
-                        Text("No remote repository")
+                        Text("Not backed up to GitHub")
                             .foregroundStyle(.secondary)
                     }
 
@@ -326,7 +341,7 @@ private struct GitSettingsView: View {
                         .disabled(isSyncing)
                     }
                 } else {
-                    Text("No repository connected.")
+                    Text("No training repo yet.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -335,22 +350,22 @@ private struct GitSettingsView: View {
                 if let login = app.github.login {
                     LabeledContent("Signed in", value: "@\(login)")
                     Button {
-                        showConnect = true
+                        showBackup = true
                     } label: {
-                        Label("Manage repository", systemImage: "arrow.left.arrow.right")
+                        Label("Manage backup", systemImage: "arrow.left.arrow.right")
                     }
                 } else {
                     Button {
-                        showConnect = true
+                        showBackup = true
                     } label: {
-                        Label("Connect GitHub", systemImage: "person.crop.circle.badge.plus")
+                        Label("Set up GitHub backup", systemImage: "person.crop.circle.badge.plus")
                     }
                 }
             }
         }
-        .navigationTitle("Git & Sync")
-        .sheet(isPresented: $showConnect) {
-            GitHubConnectView()
+        .navigationTitle("Storage & Backup")
+        .sheet(isPresented: $showBackup) {
+            GitHubBackupView()
         }
     }
 }

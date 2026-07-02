@@ -22,7 +22,7 @@ import Testing
         let dir = try SampleRepo.makeWorkingCopy()
         defer { try? FileManager.default.removeItem(at: dir) }
         let engine = RustWorkoutEngine()
-        let repo = ActiveRepo(displayName: "Test", url: dir, isSample: true)
+        let repo = ActiveRepo(displayName: "Test", url: dir)
         let session = try #require(try await engine.build(dir: dir, write: false).nextWorkout)
         let workout = LiveWorkout(repo: repo, session: session)
         let controller = WorkoutLiveController.shared
