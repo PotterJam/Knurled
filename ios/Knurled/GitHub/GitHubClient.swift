@@ -1,8 +1,12 @@
 import Foundation
 
+/// Produces a user access token that's valid right now, refreshing it first when needed.
+typealias GitHubTokenProvider = @Sendable () async throws -> String
+
 protocol GitHubClientProtocol: Sendable {
     func currentUser() async throws -> GitHubUser
-    func repositories() async throws -> [GitHubRepo]
+    func installations() async throws -> [GitHubInstallation]
+    func repositories(installationID: Int) async throws -> [GitHubRepo]
     func createRepository(name: String, isPrivate: Bool) async throws -> GitHubRepo
     func pull(owner: String, repo: String, branch: String, into dir: URL) async throws -> String
     func commit(
@@ -25,14 +29,23 @@ protocol GitHubClientProtocol: Sendable {
 }
 
 struct GitHubClient: GitHubClientProtocol {
-    let token: String
+    let token: GitHubTokenProvider
 
     func currentUser() async throws -> GitHubUser {
         try await get("/user")
     }
 
-    func repositories() async throws -> [GitHubRepo] {
-        try await get("/user/repos?per_page=100&sort=updated")
+    /// Installations of the GitHub App this user can reach. Repositories are granted per
+    /// installation, so this is the root of repo discovery.
+    func installations() async throws -> [GitHubInstallation] {
+        let list: GitHubInstallationList = try await get("/user/installations?per_page=100")
+        return list.installations
+    }
+
+    /// The repositories one installation grants that this user can also access.
+    func repositories(installationID: Int) async throws -> [GitHubRepo] {
+        let list: GitHubRepoList = try await get("/user/installations/\(installationID)/repositories?per_page=100")
+        return list.repositories
     }
 
     func createRepository(name: String, isPrivate: Bool) async throws -> GitHubRepo {
@@ -212,10 +225,11 @@ struct GitHubClient: GitHubClientProtocol {
         guard let url = URL(string: "https://api.github.com" + path) else {
             throw GitHubError.badResponse("Invalid request URL for path: \(path)")
         }
+        let accessToken = try await token()
         var request = URLRequest(url: url)
         request.httpMethod = method
         GitHub.applyCommonHeaders(to: &request)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         if let body {

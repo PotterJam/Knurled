@@ -108,7 +108,7 @@ The FFI and Swift app are ported:
 | Offline push | ✅ | pending-push flag when a commit can't reach GitHub |
 | GitHub sync | ✅* | device-flow sign-in, repo picker, pull, one-commit push, sync |
 
-`*` GitHub auth and push compile and present, but need a registered OAuth App **client ID** to
+`*` GitHub auth and push compile and present, but need a registered GitHub App **client ID** to
 run end-to-end (see below). Until one is set, the app runs on the bundled sample repo.
 
 ## Build & run
@@ -161,19 +161,33 @@ should continue to point at `ios/Knurled.xcodeproj` after the post-clone script 
 
 ## GitHub setup (optional)
 
-1. Register a GitHub OAuth App at <https://github.com/settings/developers> with **Device Flow**
-   enabled.
-2. `cp Config/Secrets.sample.xcconfig Config/Secrets.xcconfig` and paste the **Client ID** into
-   `GITHUB_CLIENT_ID` (gitignored; injected into Info.plist as `GitHubClientID`).
-3. Settings → Connect GitHub → enter the device code → pick a repo. Scope: `repo` (or
-   fine-grained contents read/write).
+Knurled authenticates as a **GitHub App**: users sign in with a device code and then choose
+exactly which repositories the app can reach on GitHub's installation page — no `repo`-wide
+OAuth scope, no client secret, no server. Access tokens expire after 8 hours and the app
+refreshes them automatically (device-flow apps may refresh with the client ID alone).
+
+1. Register a GitHub App at <https://github.com/settings/apps/new>:
+   - **Repository permissions**: Contents — *Read and write* (pull/commit), Administration —
+     *Read and write* (create starter repos). Metadata read is added automatically.
+   - Check **Enable Device Flow**. Leave **Webhook** unchecked; no callback URL is needed.
+   - "Where can this app be installed?" → *Any account*.
+2. `cp Config/Secrets.sample.xcconfig Config/Secrets.xcconfig` and fill in (gitignored):
+   - `GITHUB_APP_CLIENT_ID` — the app's **Client ID** (starts with `Iv`); injected into
+     Info.plist as `GitHubAppClientID`.
+   - `GITHUB_APP_NAME` — the app's URL slug (the `<name>` in `github.com/apps/<name>`);
+     injected as `GitHubAppName` and used to link users to the repository picker.
+3. In the app: Settings → Connect GitHub → enter the device code → tap **Select repositories
+   on GitHub** to install the app on the repos you want → pick one from the list.
+
+For Xcode Cloud, set the same two values as environment variables (`GITHUB_APP_CLIENT_ID`,
+`GITHUB_APP_NAME`); `ci_post_clone.sh` writes them into `Secrets.xcconfig`.
 
 ## Project layout
 
 ```
 ios/
   project.yml                      xcodegen spec (generates Knurled.xcodeproj)
-  Config/*.xcconfig                build settings + GITHUB_CLIENT_ID
+  Config/*.xcconfig                build settings + GITHUB_APP_CLIENT_ID / GITHUB_APP_NAME
   scripts/build-xcframework.sh     builds KnurledCore.xcframework
   Engine/
     knurled-ios-ffi/               Rust C-ABI crate over knurled-core
@@ -184,7 +198,7 @@ ios/
     Models/                        Codable contract types mirroring model.rs
     Engine/                        WorkoutEngine protocol, RustWorkoutEngine (FFI), readers
     Repo/                          LocalRepoStore, LogReader
-    GitHub/                        DeviceFlow, GitHubClient (Git Data API), TokenStore (Keychain)
+    GitHub/                        GitHubAppAuth (device flow + refresh), GitHubClient (Git Data API), TokenStore (Keychain)
     Stores/                        GitHubStore (@Observable)
     Live/                          RestTimer + shared ActivityKit attributes
     Features/                      Onboarding · Workout · History · Plan · Settings

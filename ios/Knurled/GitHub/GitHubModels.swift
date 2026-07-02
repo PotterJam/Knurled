@@ -58,17 +58,24 @@ enum GitHub {
 
 enum GitHubError: Error, Sendable, LocalizedError {
     case noClientID
+    case notSignedIn
+    case sessionExpired
     case http(Int, String)
     case expiredToken
     case accessDenied
     case badResponse(String)
     case invalidRepositoryName
     case emptyRepository
+    case repositoryNotAccessible(String)
 
     var errorDescription: String? {
         switch self {
         case .noClientID:
-            return "No GitHub client ID is configured. Add GITHUB_CLIENT_ID to Config/Secrets.xcconfig."
+            return "No GitHub App client ID is configured. Add GITHUB_APP_CLIENT_ID to Config/Secrets.xcconfig."
+        case .notSignedIn:
+            return "Not signed in to GitHub."
+        case .sessionExpired:
+            return "Your GitHub session expired. Please connect GitHub again."
         case .http(let code, let body):
             return "GitHub request failed (\(code)). \(body.prefix(200))"
         case .expiredToken:
@@ -81,6 +88,8 @@ enum GitHubError: Error, Sendable, LocalizedError {
             return "Choose a repository name using letters, numbers, dashes, underscores, or dots."
         case .emptyRepository:
             return "This repository is empty. Pick a starter template to initialize it."
+        case .repositoryNotAccessible(let fullName):
+            return "Created \(fullName), but the app hasn't been granted access to it yet. Add it under Manage repository access, then connect it from the list."
         }
     }
 
@@ -104,12 +113,63 @@ struct DeviceCodeResponse: Codable, Sendable {
 
 struct AccessTokenResponse: Codable, Sendable {
     let accessToken: String?
+    let expiresIn: Int?
+    let refreshToken: String?
+    let refreshTokenExpiresIn: Int?
     let error: String?
     let interval: Int?
+
+    /// Converts the relative `expires_in` fields into absolute dates. GitHub omits them
+    /// entirely when the app has token expiration disabled, leaving non-expiring
+    /// credentials.
+    func credentials(now: Date = .now) -> GitHubCredentials? {
+        guard let accessToken else { return nil }
+        return GitHubCredentials(
+            accessToken: accessToken,
+            accessTokenExpiresAt: expiresIn.map { now.addingTimeInterval(TimeInterval($0)) },
+            refreshToken: refreshToken,
+            refreshTokenExpiresAt: refreshTokenExpiresIn.map { now.addingTimeInterval(TimeInterval($0)) }
+        )
+    }
+}
+
+/// A GitHub App user access token (`ghu_…`) plus the refresh token (`ghr_…`) needed to
+/// renew it. Access tokens live 8 hours, refresh tokens 6 months; both dates are nil when
+/// the app has token expiration disabled.
+struct GitHubCredentials: Codable, Sendable {
+    let accessToken: String
+    var accessTokenExpiresAt: Date? = nil
+    var refreshToken: String? = nil
+    var refreshTokenExpiresAt: Date? = nil
+
+    /// True when the access token is expired or about to be. The 5-minute margin keeps
+    /// requests already in flight from racing the expiry.
+    func needsRefresh(now: Date = .now) -> Bool {
+        guard let accessTokenExpiresAt else { return false }
+        return now > accessTokenExpiresAt.addingTimeInterval(-300)
+    }
 }
 
 struct GitHubUser: Codable, Sendable {
     let login: String
+}
+
+/// One installation of the GitHub App — a user or organization that installed it and
+/// granted it some set of repositories.
+struct GitHubInstallation: Codable, Sendable, Identifiable {
+    struct Account: Codable, Sendable { let login: String }
+    let id: Int
+    let account: Account?
+    /// "all" or "selected".
+    let repositorySelection: String?
+}
+
+struct GitHubInstallationList: Codable, Sendable {
+    let installations: [GitHubInstallation]
+}
+
+struct GitHubRepoList: Codable, Sendable {
+    let repositories: [GitHubRepo]
 }
 
 struct GitHubRepo: Codable, Sendable, Identifiable, Hashable {

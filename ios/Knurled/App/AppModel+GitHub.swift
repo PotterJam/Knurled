@@ -105,7 +105,7 @@ extension AppModel {
     /// with 409. We surface `GitHubError.emptyRepository` so the caller can offer to seed it
     /// with a starter template via `initializeRepository(githubRepo:template:)`.
     func connect(repo githubRepo: GitHubRepo) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
+        guard let client = github.client() else { throw GitHubError.notSignedIn }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
         let dir = try repos.workingDirectory(for: slug)
         let head: String
@@ -139,16 +139,22 @@ extension AppModel {
         initialNumbers: InitialTrainingNumbers,
         isPrivate: Bool = true
     ) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
+        guard let client = github.client() else { throw GitHubError.notSignedIn }
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.isValidRepositoryName(name) else { throw GitHubError.invalidRepositoryName }
 
         let githubRepo = try await client.createRepository(name: name, isPrivate: isPrivate)
-        try await initializeRepository(
-            githubRepo: githubRepo,
-            template: template,
-            initialNumbers: initialNumbers
-        )
+        do {
+            try await initializeRepository(
+                githubRepo: githubRepo,
+                template: template,
+                initialNumbers: initialNumbers
+            )
+        } catch GitHubError.http(let code, _) where code == 403 || code == 404 {
+            // The repo was created, but the user's installation covers "selected
+            // repositories" and doesn't include the new one, so the token can't see it.
+            throw GitHubError.repositoryNotAccessible(githubRepo.fullName)
+        }
     }
 
     /// Seeds an existing empty GitHub repository with a starter template: builds the template
@@ -159,7 +165,7 @@ extension AppModel {
         template: StarterTemplate,
         initialNumbers: InitialTrainingNumbers
     ) async throws {
-        guard let client = github.client() else { throw GitHubError.badResponse("Not signed in to GitHub.") }
+        guard let client = github.client() else { throw GitHubError.notSignedIn }
         let slug = "\(githubRepo.owner)-\(githubRepo.name)"
         let dir = try repos.workingDirectory(for: slug)
         if FileManager.default.fileExists(atPath: dir.path(percentEncoded: false)) {

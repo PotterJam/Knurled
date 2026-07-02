@@ -20,8 +20,10 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>GitHubClientID</key>
-	<string>$(GITHUB_CLIENT_ID)</string>
+	<key>GitHubAppClientID</key>
+	<string>$(GITHUB_APP_CLIENT_ID)</string>
+	<key>GitHubAppName</key>
+	<string>$(GITHUB_APP_NAME)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSSupportsLiveActivities</key>

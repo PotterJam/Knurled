@@ -65,7 +65,8 @@ targets:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false
         NSSupportsLiveActivities: true
-        GitHubClientID: $(GITHUB_CLIENT_ID)
+        GitHubAppClientID: $(GITHUB_APP_CLIENT_ID)
+        GitHubAppName: $(GITHUB_APP_NAME)
 
   KnurledRestActivity:
     type: app-extension

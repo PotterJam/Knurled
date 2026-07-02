@@ -1,8 +1,9 @@
 // Shared build settings. Debug.xcconfig and Release.xcconfig include this file.
 
-// Default is empty so the project always compiles. Copy
-// Secrets.sample.xcconfig -> Secrets.xcconfig to supply a real value; the
-// optional include below overrides this default when that file exists.
-GITHUB_CLIENT_ID =
+// Defaults are empty so the project always compiles. Copy
+// Secrets.sample.xcconfig -> Secrets.xcconfig to supply real values; the
+// optional include below overrides these defaults when that file exists.
+GITHUB_APP_CLIENT_ID =
+GITHUB_APP_NAME =
 
 #include? "Secrets.xcconfig"

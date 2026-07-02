@@ -157,6 +157,55 @@ import Foundation
         #expect(ConnectionLostURLProtocol.attempts == 3)
     }
 
+    // GitHub App user access tokens arrive with relative expiries; they must land as
+    // absolute dates so the store can judge staleness across launches.
+    @Test func accessTokenResponseMapsExpiryToAbsoluteDates() throws {
+        let json = """
+        {"access_token":"ghu_x","expires_in":28800,"refresh_token":"ghr_y",\
+        "refresh_token_expires_in":15897600,"token_type":"bearer","scope":""}
+        """
+        let response = try GitHub.decoder().decode(AccessTokenResponse.self, from: Data(json.utf8))
+        let now = Date(timeIntervalSince1970: 1_000_000)
+
+        let credentials = try #require(response.credentials(now: now))
+
+        #expect(credentials.accessToken == "ghu_x")
+        #expect(credentials.accessTokenExpiresAt == now.addingTimeInterval(28_800))
+        #expect(credentials.refreshToken == "ghr_y")
+        #expect(credentials.refreshTokenExpiresAt == now.addingTimeInterval(15_897_600))
+    }
+
+    // Apps can disable token expiration; those tokens have no expiry and never refresh.
+    @Test func credentialsWithoutExpiryNeverNeedRefresh() {
+        #expect(GitHubCredentials(accessToken: "token").needsRefresh() == false)
+    }
+
+    @Test func credentialsRefreshInsideTheExpiryMargin() {
+        let now = Date()
+        var credentials = GitHubCredentials(
+            accessToken: "token",
+            accessTokenExpiresAt: now.addingTimeInterval(600),
+            refreshToken: "refresh"
+        )
+        #expect(credentials.needsRefresh(now: now) == false)
+
+        credentials.accessTokenExpiresAt = now.addingTimeInterval(200)
+        #expect(credentials.needsRefresh(now: now) == true)
+    }
+
+    // Repos are granted per installation (personal account, orgs); the picker must show
+    // the union, sorted for stable display.
+    @Test func loadReposAggregatesAcrossInstallations() async throws {
+        let fake = InstallationsGitHubClient()
+        let github = GitHubStore(makeClient: { _ in fake })
+        github.authenticateForTesting(token: "token")
+
+        await github.loadRepos()
+
+        #expect(github.hasInstallations)
+        #expect(github.repos.map(\.fullName) == ["acme/tools", "me/training"])
+    }
+
     @Test func githubCommonHeadersIncludeUserAgent() throws {
         let url = try #require(URL(string: "https://api.github.com/user"))
         var request = URLRequest(url: url)
@@ -376,7 +425,11 @@ private actor FakeGitHubClient: GitHubClientProtocol {
         GitHubUser(login: "test")
     }
 
-    func repositories() async throws -> [GitHubRepo] {
+    func installations() async throws -> [GitHubInstallation] {
+        []
+    }
+
+    func repositories(installationID: Int) async throws -> [GitHubRepo] {
         []
     }
 
@@ -415,6 +468,62 @@ private actor FakeGitHubClient: GitHubClientProtocol {
     }
 }
 
+/// Two installations (a personal account and an org), each granting one repository.
+private actor InstallationsGitHubClient: GitHubClientProtocol {
+    func currentUser() async throws -> GitHubUser {
+        GitHubUser(login: "test")
+    }
+
+    func installations() async throws -> [GitHubInstallation] {
+        [
+            GitHubInstallation(id: 1, account: .init(login: "me"), repositorySelection: "selected"),
+            GitHubInstallation(id: 2, account: .init(login: "acme"), repositorySelection: "selected"),
+        ]
+    }
+
+    func repositories(installationID: Int) async throws -> [GitHubRepo] {
+        switch installationID {
+        case 1:
+            return [GitHubRepo(id: 10, name: "training", fullName: "me/training", defaultBranch: "main", private: true, size: 1)]
+        case 2:
+            return [GitHubRepo(id: 20, name: "tools", fullName: "acme/tools", defaultBranch: "main", private: false, size: 1)]
+        default:
+            return []
+        }
+    }
+
+    func createRepository(name: String, isPrivate: Bool) async throws -> GitHubRepo {
+        GitHubRepo(id: 1, name: name, fullName: "test/\(name)", defaultBranch: "main", private: isPrivate, size: 1)
+    }
+
+    func pull(owner: String, repo: String, branch: String, into dir: URL) async throws -> String {
+        "pulled-head"
+    }
+
+    func commit(
+        owner: String,
+        repo: String,
+        branch: String,
+        baseCommit: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String {
+        "pushed-head"
+    }
+
+    func commitInitial(
+        owner: String,
+        repo: String,
+        branch: String,
+        files: [String],
+        dir: URL,
+        message: String
+    ) async throws -> String {
+        "initial-head"
+    }
+}
+
 private actor PullingGitHubClient: GitHubClientProtocol {
     private(set) var pullCount = 0
 
@@ -422,7 +531,11 @@ private actor PullingGitHubClient: GitHubClientProtocol {
         GitHubUser(login: "test")
     }
 
-    func repositories() async throws -> [GitHubRepo] {
+    func installations() async throws -> [GitHubInstallation] {
+        []
+    }
+
+    func repositories(installationID: Int) async throws -> [GitHubRepo] {
         []
     }
 

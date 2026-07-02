@@ -3,6 +3,7 @@ import SwiftUI
 struct GitHubConnectView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var connectingRepo: GitHubRepo?
     @State private var selectedRepoID: GitHubRepo.ID?
@@ -51,6 +52,17 @@ struct GitHubConnectView: View {
                     newRepoTemplate = app.starterTemplates.first
                     resetNewRepoInitialValues(for: newRepoTemplate)
                 }
+                // A restored session arrives signed in but with no repos fetched yet.
+                if app.github.login != nil, app.github.repos.isEmpty {
+                    await app.github.loadRepos()
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // Coming back from Safari after (de)selecting repositories on GitHub:
+                // pick up the new grant without making the user hunt for a refresh button.
+                if phase == .active, app.github.login != nil {
+                    Task { await app.github.loadRepos() }
+                }
             }
         }
     }
@@ -60,7 +72,7 @@ struct GitHubConnectView: View {
     private var signedOut: some View {
         Form {
             Section {
-                Text("Connect a GitHub account to sync training to your own repository. Knurled commits one signed commit per session straight to the Git Data API — no servers in between.")
+                Text("Connect a GitHub account to sync training to your own repository. You sign in with a device code, then choose exactly which repositories the app can access — Knurled commits straight to the GitHub API, no servers in between.")
                     .font(.subheadline)
             }
             if app.github.isConfigured {
@@ -73,7 +85,7 @@ struct GitHubConnectView: View {
                 }
             } else {
                 Section("Setup required") {
-                    Text("No OAuth client ID is configured. Register a GitHub OAuth App with Device Flow enabled, then add its Client ID to `Config/Secrets.xcconfig` as `GITHUB_CLIENT_ID`.")
+                    Text("No GitHub App client ID is configured. Register a GitHub App with Device Flow enabled, then add its Client ID to `Config/Secrets.xcconfig` as `GITHUB_APP_CLIENT_ID`.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -121,13 +133,23 @@ struct GitHubConnectView: View {
                 LabeledContent("Signed in", value: "@\(login)")
                 Button("Sign out", role: .destructive) { app.github.signOut() }
             }
-            Section("Choose a repository") {
-                if app.github.isLoadingRepos {
+            Section {
+                if app.github.isLoadingRepos && app.github.repos.isEmpty {
                     HStack { ProgressView(); Text("Loading repositories…").foregroundStyle(.secondary) }
                 } else if app.github.repos.isEmpty {
-                    Text("No repositories found.")
-                        .foregroundStyle(.secondary)
-                    Button("Reload repositories") { Task { await app.github.loadRepos() } }
+                    Text(
+                        app.github.hasInstallations
+                            ? "The app is installed, but no repositories are selected yet."
+                            : "Install the app on your GitHub account and pick which repositories it can access. Only those repositories are visible to Knurled."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    selectRepositoriesLink
+                    Button {
+                        Task { await app.github.loadRepos() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
                 } else {
                     Picker("Repository", selection: selectedRepoBinding) {
                         ForEach(app.github.repos) { repo in
@@ -146,6 +168,14 @@ struct GitHubConnectView: View {
                         }
                     }
                     .disabled(connectingRepo != nil || selectedRepo == nil)
+
+                    selectRepositoriesLink
+                }
+            } header: {
+                Text("Choose a repository")
+            } footer: {
+                if !app.github.repos.isEmpty {
+                    Text("Only repositories you've granted to the app appear here. The list refreshes when you return from GitHub.")
                 }
             }
             Section("Create starter repository") {
@@ -209,6 +239,17 @@ struct GitHubConnectView: View {
 
     private var newRepoInitialNumbersComplete: Bool {
         InitialTrainingNumbers.isComplete(values: newRepoInitialValues, for: newRepoInitialSpec)
+    }
+
+    private var selectRepositoriesLink: some View {
+        Link(destination: GitHubConfig.installURL) {
+            Label(
+                app.github.repos.isEmpty && !app.github.hasInstallations
+                    ? "Select repositories on GitHub"
+                    : "Manage repository access",
+                systemImage: "arrow.up.forward.app"
+            )
+        }
     }
 
     private var selectedRepo: GitHubRepo? {

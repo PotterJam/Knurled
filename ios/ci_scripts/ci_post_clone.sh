@@ -31,7 +31,10 @@ echo "==> Generating Knurled.xcodeproj"
 cd "$IOS_DIR"
 
 echo "==> Writing Secrets.xcconfig from Xcode Cloud environment"
-printf '%s\n' "GITHUB_CLIENT_ID = ${GITHUB_CLIENT_ID:-}" > "$IOS_DIR/Config/Secrets.xcconfig"
+{
+  printf '%s\n' "GITHUB_APP_CLIENT_ID = ${GITHUB_APP_CLIENT_ID:-}"
+  printf '%s\n' "GITHUB_APP_NAME = ${GITHUB_APP_NAME:-}"
+} > "$IOS_DIR/Config/Secrets.xcconfig"
 
 xcodegen generate
 
