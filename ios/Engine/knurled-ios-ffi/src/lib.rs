@@ -5,8 +5,11 @@
 //!
 //! ```json
 //! { "ok": true,  "data": <result> }
-//! { "ok": false, "error": "<message>" }
+//! { "ok": false, "error": "<message>", "error_detail": { "kind": "...", "retryable": false } }
 //! ```
+//!
+//! `error_detail` is additive (RFC-0001 D9): older clients keep reading
+//! `error`, newer ones branch on the stable `kind` instead of message text.
 //!
 //! Swift copies the string, decodes the envelope, and must call
 //! `knurled_string_free` on the returned pointer. No training logic lives here;
@@ -18,13 +21,16 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use knurled_core::{
     AddProgramRequest, AmendRecordRequest, DslTemplate, ENGINE_VERSION, ExecutionInput, PlanEdit,
-    PreviewTemplateRequest, RenderedSession, SubmitMode,
+    PreviewTemplateRequest, ProfileRequest, RenderedSession, SubmitMode,
     Units, amend_training_record, apply_plan_edit, build_outputs, build_repo, builtin_templates,
-    exercise_catalog, init_training_repo, merge_record_repos, preview_plan_edit, preview_template,
+    exercise_catalog, explain, init_training_repo, merge_record_repos, preview_plan_edit,
+    preview_template,
     parse_template_dsl, read_records,
-    read_state, read_training_repo, reduce_input, render_session, render_template_dsl,
+    read_state, read_training_repo, recommend_template, reduce_input, render_session,
+    render_template_dsl,
     skip_workout_repo, submit_rendered_repo,
     suggest_initial_numbers, suggest_load, validate_execution_input, validate_repo,
+    validation_code_message,
     add_program, delete_program, list_programs, set_active_program,
     suggest_program_adjustments, vendor_template,
 };
@@ -45,8 +51,34 @@ fn ok<T: Serialize>(data: T) -> *mut c_char {
     into_raw(envelope.to_string())
 }
 
-fn fail(message: impl std::fmt::Display) -> *mut c_char {
-    into_raw(json!({ "ok": false, "error": message.to_string() }).to_string())
+/// Stable machine-readable detail for the failure envelope (RFC-0001 D9).
+/// Engine errors report their own kind; anything else is a bad argument from
+/// the caller's side of the bridge.
+trait ErrorDetail: std::fmt::Display {
+    fn detail(&self) -> (&'static str, bool) {
+        ("invalid_argument", false)
+    }
+}
+
+impl ErrorDetail for knurled_core::KnurledError {
+    fn detail(&self) -> (&'static str, bool) {
+        (self.kind(), self.retryable())
+    }
+}
+
+impl ErrorDetail for String {}
+impl ErrorDetail for &str {}
+
+fn fail(error: impl ErrorDetail) -> *mut c_char {
+    let (kind, retryable) = error.detail();
+    into_raw(
+        json!({
+            "ok": false,
+            "error": error.to_string(),
+            "error_detail": { "kind": kind, "retryable": retryable },
+        })
+        .to_string(),
+    )
 }
 
 /// # Safety
@@ -63,7 +95,14 @@ unsafe fn borrow<'a>(ptr: *const c_char) -> Result<&'a str, String> {
 fn guard<F: FnOnce() -> *mut c_char>(name: &str, body: F) -> *mut c_char {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(pointer) => pointer,
-        Err(_) => fail(format!("panic in {name}")),
+        Err(_) => into_raw(
+            json!({
+                "ok": false,
+                "error": format!("panic in {name}"),
+                "error_detail": { "kind": "panic", "retryable": false },
+            })
+            .to_string(),
+        ),
     }
 }
 
@@ -644,6 +683,50 @@ pub extern "C" fn knurled_preview_template(request_json: *const c_char) -> *mut 
             Ok(result) => ok(result),
             Err(error) => fail(error),
         }
+    })
+}
+
+/// Glossary lookup for a template term (RFC-0001 D3). Unknown terms return
+/// `{ "explanation": null }` rather than an error, so the app can probe freely.
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_explain(term: *const c_char) -> *mut c_char {
+    guard("knurled_explain", || {
+        let term = match unsafe { borrow(term) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        ok(json!({ "explanation": explain(term) }))
+    })
+}
+
+/// Engine-owned human copy for a validation code (RFC-0001 D9):
+/// `{ code, title, body, hint }`. Unknown codes get honest generic copy.
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_validation_message(code: *const c_char) -> *mut c_char {
+    guard("knurled_validation_message", || {
+        let code = match unsafe { borrow(code) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        ok(validation_code_message(code))
+    })
+}
+
+/// "Help me choose" wizard backend (RFC-0001 D2). Request JSON is a
+/// `ProfileRequest { experience, days_per_week, goal }`; the engine owns the
+/// matching logic and rationale copy.
+#[unsafe(no_mangle)]
+pub extern "C" fn knurled_recommend_template(request_json: *const c_char) -> *mut c_char {
+    guard("knurled_recommend_template", || {
+        let request_json = match unsafe { borrow(request_json) } {
+            Ok(value) => value,
+            Err(error) => return fail(error),
+        };
+        let profile: ProfileRequest = match serde_json::from_str(request_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid profile request: {error}")),
+        };
+        ok(recommend_template(&profile))
     })
 }
 

@@ -6,6 +6,9 @@ struct RenderedSession: Codable, Sendable, Hashable, Identifiable {
     var engineVersion: String
     var sessionId: String
     var displayName: String
+    /// The day's lifts at a glance ("Squat · Bench Press · Lat Pulldown"),
+    /// composed by the engine (RFC-0001 D3).
+    var displayDescription: String? = nil
     var suggestedDate: String?
     var planHash: String
     var templateHash: String
@@ -93,6 +96,28 @@ enum RenderedItemPhase: String, Codable, Sendable, Hashable {
 struct DisplayFields: Codable, Sendable, Hashable {
     var title: String
     var subtitle: String
+    /// Clean engine-owned exercise name ("Overhead Press") — render this, not
+    /// raw lane/tier ids (RFC-0001 D3). Falls back to `title` for snapshots
+    /// captured before the field existed.
+    var label: String
+    /// The lift's role in the program's own vocabulary ("Main lift").
+    var group: String?
+
+    init(title: String, subtitle: String, label: String = "", group: String? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+        self.label = label.isEmpty ? title : label
+        self.group = group
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        subtitle = try container.decode(String.self, forKey: .subtitle)
+        let decodedLabel = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
+        label = decodedLabel.isEmpty ? title : decodedLabel
+        group = try container.decodeIfPresent(String.self, forKey: .group)
+    }
 }
 
 struct Prescription: Codable, Sendable, Hashable {

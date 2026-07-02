@@ -28,7 +28,7 @@ struct ProgramEditorView: View {
                     ForEach(suggestions) { suggestion in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(suggestion.lane).font(.headline)
-                            Text(suggestion.reason).font(.footnote).foregroundStyle(.secondary)
+                            Text(suggestion.displayText).font(.footnote).foregroundStyle(.secondary)
                             if let value = suggestion.proposedValue {
                                 Text("Current: \(value)").font(.caption.monospaced())
                             }

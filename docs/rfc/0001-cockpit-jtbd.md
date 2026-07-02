@@ -1,7 +1,7 @@
 # RFC-0001 — Knurled Cockpit: user jobs, engine UX, and human-readable training
 
 **Status:** Proposed — **Tranche 1 accepted** (D1–D6, D9, D10, D12–D13); **D7, D8, D11 deferred** to [RFC-0002](0002-rpe-autoregulation.md), [RFC-0003](0003-progress-engine.md), [RFC-0004](0004-structural-edit-preserve-compatible.md) respectively (see D0)
-**Date:** 2026-07-01
+**Date:** 2026-07-01 — **refined 2026-07-02** during implementation review: D4's calendar schema replaced by a derivation rule (it could not represent rotation programs), D5 re-specified as a date pin, D6 loses `until`, D10 rebuilt on the existing patch machinery, D9's FFI envelope made additive (Risk 3 closed), `repo_summary` cut, Risk 1 resolved as option (A), D12 noted as already shipped. Each refinement is recorded inline in its decision.
 **Scope:** onboarding + local repo, reschedule/deload/AutoReg, progress/trust/errors, program editing + Phase 6B
 **Boundary:** Every concept the app needs to *display to a user* becomes an engine response. iOS only collects intent, renders, commits. (AGENTS.md)
 **Supersedes:** the "structural edit resets progress" decision recorded in `PHASE6B_REMAINING.md §1` — see D11.
@@ -61,8 +61,8 @@ The current first-run path creates a local repo in `Application Support` and pus
 - **Decision:** On first launch, the app creates `my-knurled` in the iCloud container (`NSUbiquitousContainerIdentifier`). The user gets cross-device sync for free via iCloud Drive, with no account setup.
 - **GitHub** moves to **Settings → Backup & Sync** and is presented as an optional secondary backup with full Git history.
 - The bundled `sample-gzclp` remains available as a "Try a sample workout" entry inside onboarding, but it is a separate read-only repo. "Start my program" always creates a fresh local repo.
-- Engine: no behavioural change; `init_training_repo` already works locally. A new FFI `knurled_repo_summary` exposes path, iCloud availability, and last-sync timestamp for the sync-status dot.
-- **Unresolved (blocks implementation):** the repo is a live **git working tree**, and iCloud Drive is not a safe transport for one (see Risk 1). "Put `my-knurled` in the iCloud container" is accepted as the *default-location* intent; the *sync mechanism* is not yet chosen. Resolve Risk 1 before building D1.
+- Engine: **no change.** `init_training_repo` already works locally. *(Refined 2026-07-02: the originally proposed `knurled_repo_summary` is cut — iCloud availability and last-sync time are platform facts the engine cannot know; the sync-status dot is owned by iOS `RepoManager`. Adding an engine API that iOS must populate anyway inverts the boundary.)*
+- **Sync mechanism — RESOLVED (2026-07-02) as Risk 1 option (A):** the git repo stays local in `Application Support`; iCloud carries a serialized snapshot (state projection + logs), re-hydrated into a local repo per device. Git internals never cross iCloud. Full history remains available via the opt-in GitHub backup. See Risk 1 for the rejected alternatives.
 
 ### D2 — Program picker first; recommendation wizard secondary
 
@@ -78,36 +78,40 @@ The target user is self-coached and often knows they want "GZCLP" or "5/3/1 begi
 
 The root cause of the "engine vocabulary everywhere" problem is that the rendered models don't carry human labels for their *own primitives* — even though partial display scaffolding already exists (`RenderedSession.display_name` and `RenderedItem.display: DisplayFields { title, subtitle }` are present in `engine/src/model.rs` today; they are just not populated with template-aware labels, and iOS still renders raw `lane`/`tier`/`sessionId` alongside them).
 
-- **Decision (extend existing fields, don't parallel them):** `RenderedItem.display` (`DisplayFields`) gains `label: String` and `group: Option<String>` so it stops being just `{ title, subtitle }`. `RenderedSession` already has `display_name`; it gains `display_description: Option<String>` and its `display_name` is populated per-template (today it is effectively the session id). `ValidationMessage` gains `user_message: String`. `ProgramAdjustmentSuggestion` gains `user_description: String`.
-- The engine computes these per template. For GZCLP: `progression_lane: "squat.t1"` → `display_label: "Squat"`, `display_group: Some("Main lift")`. For 5/3/1: `session_id: "week1.day1"` → `display_name: "Week 1, Day 1 — Press"`, `display_description: Some("3×5 at 65% TM")`.
+- **Decision (extend existing fields, don't parallel them):** `RenderedItem.display` (`DisplayFields`) gains `label: String` (the clean exercise name, "Squat") and `group: Option<String>` (the template-vocabulary role, "Main lift") so it stops being just `{ title, subtitle }`. `RenderedSession` gains `display_description: Option<String>` (the day's lifts at a glance). `ValidationMessage` gains `user_message: String`. `ProgramAdjustmentSuggestion` gains `user_description: String`. All new fields are `#[serde(default)]` so snapshots captured before this change still decode.
+- *(Refined 2026-07-02: `RenderedSession.display_name` is already populated per-template — the DSL has `session display="…"` and the engine renders "GZCLP - A1" today — so re-populating it is dropped from scope. The real gaps are the item-level `label`/`group`, the session `display_description`, and the user-facing message fields.)*
+- The engine computes `group` from the template family's own vocabulary: GZCL `t1/t2/t3` → "Main lift" / "Supplemental" / "Accessory"; 5/3/1 `main` → "5/3/1 sets"; Starting Strength `linear` → "Work sets". Custom templates fall back to the authored tier name. For GZCLP: `progression_lane: "squat.t1"` → `label: "Squat"`, `group: Some("Main lift")`.
 - iOS drops all raw `lane` / `tier` / `sessionId` display and uses engine-provided labels. One "About this program" screen (linked from Plan Overview) explains template-specific vocabulary once; no scattered glossary chips.
 - **Engine:** new API `explain(term: &str) -> Explanation { title, body, examples }` for truly untranslatable terms (AMRAP, e1RM, deload). Used sparingly.
 
-### D4 — Calendar model lives in the engine
+### D4 — Suggested dates live in the engine *(refined 2026-07-02: derived, not stored)*
 
 `Schedule.rotation` is a `Vec<String>` with no anchor date. `RenderedSession.suggested_date` is always `None`. A missed day breaks the rotation silently.
 
-- **Decision:** `Schedule` gains `calendar: Option<Calendar>`, where `Calendar { anchor_date: NaiveDate, day_map: Map<u8, String> }` maps weekday index → session_id. `anchor_date` is set to the first Monday of the current week at repo creation.
-- `render_next` computes `suggested_date` from `anchor_date + week_offset + weekday_offset` using `state.cursor.week`.
-- Legacy repos without `calendar` keep current behaviour (date `None`). No migration.
-- **Engine:** `create_initial_state` writes `calendar` for new repos. `render_next` and `render_session` populate `suggested_date`.
+The originally proposed `Calendar { anchor_date, day_map: Map<u8, String> }` is **withdrawn**: a static weekday→session map cannot represent the flagship template — GZCLP rotates four sessions (`a1 b1 a2 b2`) over three training days, so the session that lands on Monday changes every week — and `cursor.week` counts rotation wraps, not calendar weeks, so `anchor + week_offset` arithmetic is wrong for exactly those programs. The schedule the user already authored (`schedule.suggested_days`, present in every plan) plus the training log already determine the next date.
 
-### D5 — Reschedule is a PlanEdit
+- **Decision:** `suggested_date` is **derived, never stored**. Rule: the next workout's date is the first weekday in `schedule.suggested_days` **strictly after** the date of the latest dated record (workout, deload, or program marker); a reschedule marker (D5) pins it to the marker's date exactly. With no records yet, `suggested_date` stays `None` (there is nothing to anchor to; iOS shows the suggested-days summary it already has).
+- This is a pure function of repo files, so generated `build/` outputs stay deterministic (ADR 0006) — no "today" input, no daily churn, and no schema change or migration (Risk 2 and Q5 are moot).
+- **Engine:** new `calendar` module with the date math; the repo layer stamps `suggested_date` onto rendered output in `build_repo`, `skip_workout_repo`, and plan-edit outcomes. The stamp happens after session hashing, so a reschedule never changes workout identity.
+
+### D5 — Reschedule is a PlanEdit *(refined 2026-07-02: a date pin, not a cursor move)*
 
 There is no "move Tuesday's workout to Thursday" operation.
 
-- **Decision:** New `PlanEdit::Reschedule { from_date: NaiveDate, to_date: NaiveDate, write_skip_marker: bool }`.
-- The engine re-points the cursor. When `write_skip_marker = true`, a `RecordKind::SkipMarker` is written to logs with the original date (ADR 0010-compatible — no in-progress record, just history).
+The original text said the engine "re-points the cursor" — but moving a workout to another day does not change *which* session is next; changing the session is what skip does, and skip already exists (`skip_workout_repo`). Rescheduling only changes *when*. The `write_skip_marker` flag and `from_date` are dropped with it.
+
+- **Decision:** New `PlanEdit::Reschedule { to_date, note? }`. The engine validates the date and writes a `RecordKind::Reschedule` marker dated `to_date` to the logs (ADR 0010-compatible — no in-progress record, just history). The D4 derivation then suggests exactly `to_date` for the next workout, and later sessions flow from it.
+- The cursor and lanes never move; a reschedule is pure schedule intent.
 - iOS surfaces it from the Workout tab via a "Can't make it? Reschedule" row that opens a date sheet. No persistent calendar strip on the primary screen.
 
 ### D6 — Deload API exists
 
 Deloading currently requires hand-typing lighter loads for every exercise, or authoring a patch, or using `SubmitMode::Reset` (which permanently changes the baseline).
 
-- **Decision:** New `PlanEdit::Deload { percent: f32, scope: DeloadScope::{AllLanes, NamedLanes(Vec<String>)}, until: Option<NaiveDate> }`.
-- The engine rewrites each affected lane's `load` (or `training_max` when `basis = training_max`) by `percent`, snapping to plate pairs via the existing equipment rounder. A `RecordKind::DeloadMarker` is written.
-- `suggest_program_adjustments` is extended to return `kind: "deload_week"` when 8+ consecutive training weeks have elapsed without a deload marker. **Tranche-1 constraint:** this trigger is computed from cursor weeks + the last `DeloadMarker` only. It must **not** call `progress_summary` (D8 is deferred); the richer progress-driven suggestions land when D8 does.
-- **Interaction with D10 `TemporaryLoadAdjust`:** undefined today — do a `Deload` and a temporary load drop stack, or does the later marker win? See §7 Q8. Resolve before D6/D10 implementation.
+- **Decision:** New `PlanEdit::Deload { percent, scope: DeloadScope::{AllLanes, Lanes(Vec<String>)}, date, note? }`. *(Refined 2026-07-02: `until: Option<NaiveDate>` is dropped — auto-restoring a deload at a future date would make rendering time-dependent or require storing shadow pre-deload state; a time-bounded lighter stretch is exactly D10's `TemporaryLoadAdjust`. A deload is a permanent rebaseline, same as the DSL's own `deload` effect.)*
+- The engine rewrites each affected lane's `load` and/or `training_max` by `percent`, snapping via the existing equipment rounder, resets the lane's stall count (matching the DSL `deload` effect), and writes a `RecordKind::Deload` marker to the logs.
+- `suggest_program_adjustments` is extended to return `kind: "deload_week"` when 8+ distinct calendar weeks contain workouts since the last deload or program marker. *(Refined: counted from record dates, not `cursor.week` — cursor weeks are rotation wraps, not calendar weeks.)* **Tranche-1 constraint:** this trigger must **not** call `progress_summary` (D8 is deferred); the richer progress-driven suggestions land when D8 does.
+- **Interaction with D10 `TemporaryLoadAdjust` — resolved (supersedes §7 Q8's "last-marker-wins"):** the two never chain. A deload rewrites *state*; a temporary adjust is a render-time *overlay* on whatever state says. Applying a `Deload` deletes any active temporary load-adjust on the affected lanes (recorded in `changed_files`), so a lane's prescription is always `state × at-most-one overlay`.
 - iOS surfaces a proactive card on the Workout tab when the engine suggests a deload: "Time for a deload week? → Plan a lighter week". Manual entry lives in Plan Overview.
 
 ### D7 — ADR 0004 accepted: RPE autoregulation  — *Deferred (own RFC)*
@@ -138,9 +142,9 @@ The Data tab is a single Epley chart. The engine knows every state transition bu
 
 `EngineError.engine(String)` is the only granularity. Network failures and malformed plans look identical. `repo.loadError` is never shown.
 
-- **Decision:** `KnurledError` gains typed variants: `Transient { kind, retryable, source }` and `Permanent { kind, context }`.
-- The FFI error envelope becomes a JSON object: `{ kind, transient, retryable, message }`. Swift decodes into a typed `EngineError` enum.
-- New API `validation_code_message(code: &str) -> ValidationExplanation { title, body, hint }`. iOS drops all ad-hoc per-code strings.
+- **Decision *(refined 2026-07-02)*:** every `KnurledError` variant reports a stable `kind()` and `retryable()` — the engine has no network path, so nearly everything it raises is permanent; only I/O is marked retryable. Restructuring the enum into `Transient`/`Permanent` wrappers is dropped: it would encode a network taxonomy the engine cannot observe. iOS's own transport errors stay a Swift concern.
+- The FFI error envelope is extended **additively**: `{ ok: false, error: "<message>", error_detail: { kind, retryable } }`. Existing clients that read `error` keep working; Swift decodes `error_detail` into a typed `EngineError` when present. *(This closes Risk 3 — no breaking envelope change, no lockstep client update.)*
+- New API `validation_code_message(code: &str) -> ValidationExplanation { code, title, body, hint }`, and `ValidationMessage.user_message` is populated from the same table at construction, so every report already carries human copy. iOS drops all ad-hoc per-code strings.
 - `BuildOutputs` gains `stale_reason: Option<String>` when `next_workout` falls back to last-valid due to invalid build. iOS renders a yellow banner instead of the silent "Plan invalid" chip.
 - iOS adds a transient sync toast + status dot in the header. No persistent banner on the Workout tab (the default user has no GitHub).
 
@@ -148,12 +152,13 @@ The Data tab is a single Epley chart. The engine knows every state transition bu
 
 Raw patch editing is orphaned and unusable. Common needs (temporary exercise swap, temporary load drop) have no mobile path.
 
-- **Decision:** `PlanEdit::Quick` is a flat struct variant of optional fields (`suggested_days`, `equipment`, `custom_exercise`, `accessory`, `session_exercises`, `rest` — `engine/src/plan_edit.rs`), not an enum with sub-variants. These three are **new top-level `PlanEdit` variants**, consistent with `PlanEdit::Reschedule` (D5) and `PlanEdit::Deload` (D6):
-  - `PlanEdit::SwapExercise { from_lane, to_exercise, swap_policy }` — engine rewrites `exercise_options`.
-  - `PlanEdit::TemporaryLoadAdjust { lane, percent, until }` — the deferred patch op from `docs/LANGUAGE.md:283-291`; shares the existing equipment rounder with D6 so temporary loads snap to plate pairs identically.
-  - `PlanEdit::TemporarySwap { from_lane, to_exercise, until }` — temporary exercise swap for injury recovery.
+- **Decision *(refined 2026-07-02: built on the patch machinery that already exists)*:** the engine already has the right mechanism for reversible, lane-scoped overlays — patches. `ReplaceExercise` is already applied at render time, and `active_from`/`expires` are already parsed (but until now never enforced). These three **new top-level `PlanEdit` variants** (consistent with D5/D6) are typed constructors of **engine-managed patches** with deterministic filenames, rather than a parallel mechanism:
+  - `PlanEdit::SwapExercise { lane, to_exercise }` — writes `patches/swap-<lane>.fitspec` with a `replace-exercise` op pinned to that lane; swapping back to the authored exercise deletes it. Progression-carrying by construction (the lane id is derived from the *authored* exercise, so state follows). One-off tracking-only swaps already exist in the live workout — `swap_policy` is dropped from this API.
+  - `PlanEdit::TemporaryLoadAdjust { lane, percent, until? }` — the deferred patch op from `docs/LANGUAGE.md` becomes real: a new `scale-load percent=… lane=…` patch operation, applied to prescribed set loads at render time and snapped via the same equipment rounder as D6. Progression is untouched: effects still compute from lane state, so a temporary −10% never corrupts the baseline.
+  - `PlanEdit::TemporarySwap { lane, to_exercise, until? }` — the swap patch with an expiry.
+- **Expiry semantics:** rendering stays date-free (ADR 0006 determinism), so `expires` is enforced at the first *dated* mutation: submitting a workout dated after a patch's expiry deletes the patch file before the next build. A temporary change therefore applies to every workout started on or before its expiry and disappears with the submit after it. Users can end one early — the managed patch shows up as a removable "temporary change" row (`DeletePatch` already exists).
 - iOS adds a "Swap exercise" sheet (catalog picker) and a "Temporary change" sheet with two tabs: Load / Swap. Each submits through the matching top-level `PlanEdit` variant above.
-- `PatchPlanEditView` is **deleted from iOS** (confirmed by ProgramEditorView footer and AGENTS.md boundary). Raw patches remain a workbench concern.
+- `PatchPlanEditView` is **deleted from iOS** (confirmed by ProgramEditorView footer and AGENTS.md boundary). Raw patches remain a workbench concern. *(Done 2026-07-01 in PR #22.)*
 
 ### D11 — Program structural edit with PreserveCompatible  — *Deferred (own RFC)*
 
@@ -166,10 +171,11 @@ Phase 6B #1 is deferred because `PlanEdit` has no template-rewrite operation, an
 - New FFI `knurled_structural_edit_preview` returns `StructuralEditPreview { preserved: Vec<String>, reset: Vec<String>, validation }`.
 - iOS shows the diff before saving: "These lanes keep their progress: Squat, Bench… These reset: New backoff, Removed accessory." User confirms.
 
-### D12 — Orphaned code removal
+### D12 — Orphaned code removal *(done 2026-07-01, PR #22)*
 
 - `SwitchProgramView` (`PlanEditViews.swift:635`) is deleted. The bank path (add program → activate) is canonical. `PlanEdit::SwitchProgram` stays in the engine for the workbench but is not surfaced in iOS.
 - `PatchPlanEditView` is deleted from iOS per D10.
+- *(PR #22 additionally removed `SwapExerciseSheet`, `AdjustTodaySheet`, and `SetDetailSheet` per the gym-floor audit.)*
 
 ### D13 — Workbench parity
 
@@ -184,28 +190,28 @@ New engine APIs (`recommend_template`, `next_session_loads`, `progress_summary`,
 | API | Input | Output | Module |
 |---|---|---|---|
 | `recommend_template` | `ProfileRequest` | `TemplateRecommendation` | `suggest.rs` |
-| `repo_summary` | `repo_path` | `RepoSummary { path, icloud_available, last_sync }` | `repo.rs` |
-| `render_next` (updated) | — | `RenderedSession` with `suggested_date`, `display_name`, `display_description` | `core.rs` |
-| `render_session` (updated) | — | `RenderedSession` with display fields | `core.rs` |
-| `create_initial_state` (updated) | — | `StateProjection` with `calendar` | `core.rs` |
-| `PlanEdit::Reschedule` | `from_date`, `to_date`, `write_skip_marker` | `PlanEditOutcome` | `plan_edit.rs` |
-| `PlanEdit::Deload` | `percent`, `scope`, `until` | `PlanEditOutcome` | `plan_edit.rs` |
-| `PlanEdit::SwapExercise` | `from_lane`, `to_exercise`, `swap_policy` | `PlanEditOutcome` | `plan_edit.rs` |
-| `PlanEdit::TemporaryLoadAdjust` | `lane`, `percent`, `until` | `PlanEditOutcome` | `plan_edit.rs` |
-| `PlanEdit::TemporarySwap` | `from_lane`, `to_exercise`, `until` | `PlanEditOutcome` | `plan_edit.rs` |
+| ~~`repo_summary`~~ | — | *cut 2026-07-02: iCloud availability / last-sync are platform facts; iOS owns the sync dot* | — |
+| `suggest_next_date` + stamping in `build_repo` / `skip_workout_repo` / plan edits | `suggested_days`, records | `RenderedSession.suggested_date` populated | `calendar.rs`, `repo.rs` |
+| `PlanEdit::Reschedule` | `to_date`, `note?` | `PlanEditOutcome` (+ `Reschedule` log marker) | `plan_edit.rs` |
+| `PlanEdit::Deload` | `percent`, `scope`, `date`, `note?` | `PlanEditOutcome` (+ `Deload` log marker, state rewrite) | `plan_edit.rs` |
+| `PlanEdit::SwapExercise` | `lane`, `to_exercise` | `PlanEditOutcome` (managed swap patch) | `plan_edit.rs` |
+| `PlanEdit::TemporaryLoadAdjust` | `lane`, `percent`, `until?` | `PlanEditOutcome` (managed `scale-load` patch) | `plan_edit.rs` |
+| `PlanEdit::TemporarySwap` | `lane`, `to_exercise`, `until?` | `PlanEditOutcome` (managed swap patch with expiry) | `plan_edit.rs` |
+| `PatchOperation::ScaleLoad` | `percent`, `lane_regex` | applied to prescribed loads at render | `model.rs`, `parser.rs`, `core.rs` |
 | `next_session_loads` | `repo_path` | `Vec<NextLoadReport>` | `plan_edit.rs` |
 | `progress_summary` | `repo_path`, `weeks` | `ProgressSummary` | `progress.rs` |
 | `history_feed` | `repo_path`, `since` | `Vec<TrainingRecord>` | `progress.rs` |
-| `validation_code_message` | `code` | `ValidationExplanation` | `messages.rs` |
-| `explain` | `term` | `Explanation` | `messages.rs` |
+| `validation_code_message` | `code` | `ValidationExplanation { code, title, body, hint }` | `messages.rs` |
+| `explain` | `term` | `Option<Explanation>` | `messages.rs` |
 | `ProgramStructuralEdit` | `slug`, `new_template_text`, `behavior` | `ProgramMutationOutcome` | `programs.rs` |
 | `structural_edit_preview` | `slug`, `new_template_text` | `StructuralEditPreview` | `programs.rs` |
 | `suggest_program_adjustments` (updated) | `repo_path` | `Vec<ProgramAdjustmentSuggestion>` with `user_description` | `suggest.rs` |
 | `BuildOutputs` (updated) | — | adds `stale_reason: Option<String>` | `model.rs` |
 | `RenderedItem.display` (`DisplayFields`, updated) | — | adds `label`, `group` to the existing `{ title, subtitle }` | `model.rs` |
-| `RenderedSession` (updated) | — | populates existing `display_name` per-template; adds `display_description` | `model.rs` |
+| `RenderedSession` (updated) | — | adds `display_description` (`display_name` was already per-template) | `model.rs` |
 | `ValidationMessage` (updated) | — | adds `user_message` | `model.rs` |
-| `KnurledError` (updated) | — | adds `Transient`, `Permanent` | `error.rs` |
+| `KnurledError` (updated) | — | adds `kind()` / `retryable()`; FFI envelope gains additive `error_detail` | `error.rs` |
+| `RecordKind` (updated) | — | adds `Reschedule`, `Deload` marker kinds | `record.rs` |
 | ADR 0004 types | — | `DslBasis::E1rm`, `OnRpe`, `OnE1rmPR`, `SetLoadPctOfE1rm` | `dsl.rs`, `core.rs` |
 
 ---
@@ -257,14 +263,16 @@ Each step is one PR-sized cluster. The RFC itself lands first as `docs/rfc/0001-
 
 ### Tranche 1 — accepted
 
-1. **RFC + ADR updates** — land this RFC; add ADRs 0011 (calendar), 0012 (error taxonomy), 0015 (iCloud local-first). *(ADR 0004 promotion, the progress-module ADR, and the structural-edit ADR move to the deferred RFCs, not here.)*
-2. **Display labels + glossary (D3)** — add `display_label`, `display_group`, `display_name`, `display_description`, `user_message`, `user_description` to engine models; implement `explain`; expose via `engine-wasm`; update iOS to use them; remove raw code display.
-3. **Trust cluster (D9)** — error taxonomy + FFI JSON envelope; `validation_code_message`; `BuildOutputs.stale_reason`; **update `engine-wasm` to the new error envelope in this same PR**; iOS sync toast + status dot + invalid-plan banner.
-4. **iCloud onboarding (D1, D2)** — *gated on Risk 1 being resolved.* `recommend_template`; default-repo creation via the chosen sync mechanism; onboarding sheet; move GitHub to Backup & Sync.
-5. **Calendar + reschedule (D4, D5)** — `Schedule.calendar`; `PlanEdit::Reschedule`; `SkipMarker`; iOS reschedule sheet.
-6. **Deload (D6)** — `PlanEdit::Deload`; `DeloadMarker`; marker/cursor-based `deload_week` suggestion (no D8 dependency); iOS deload card + form.
-7. **Guided quick edits (D10)** — `PlanEdit::SwapExercise`, `::TemporaryLoadAdjust`, `::TemporarySwap` (new top-level variants); iOS sheets; delete `PatchPlanEditView` from iOS.
-8. **Orphan cleanup (D12)** — delete `SwitchProgramView`, retire destructive `SwitchProgram` from iOS.
+1. **RFC + ADR updates** — land this RFC; add ADR 0011 (suggested dates + schedule markers in the log) and ADR 0012 (engine-owned user messages + error detail). *(Refined 2026-07-02: the iCloud ADR waits until D1 is actually built — its decision is recorded in Risk 1. ADR 0004 promotion, the progress-module ADR, and the structural-edit ADR move to the deferred RFCs, not here.)*
+2. **Display labels + glossary (D3)** — add `label`, `group`, `display_description`, `user_message`, `user_description` to engine models; implement `explain`; expose via `engine-wasm`; update iOS to use them; remove raw code display.
+3. **Trust cluster (D9)** — `kind()`/`retryable()` + additive `error_detail` envelope; `validation_code_message`; `BuildOutputs.stale_reason`; `engine-wasm` in the same PR; iOS sync toast + status dot + invalid-plan banner.
+4. **iCloud onboarding (D1, D2)** — `recommend_template` (engine, can land any time); iOS default-repo creation via the Risk-1(A) snapshot mechanism; onboarding sheet; move GitHub to Backup & Sync.
+5. **Suggested dates + reschedule (D4, D5)** — `calendar` module + stamping; `PlanEdit::Reschedule` + `Reschedule` marker; iOS reschedule sheet.
+6. **Deload (D6)** — `PlanEdit::Deload`; `Deload` marker; record-week-based `deload_week` suggestion (no D8 dependency); iOS deload card + form.
+7. **Guided quick edits (D10)** — `scale-load` patch op; `PlanEdit::SwapExercise`, `::TemporaryLoadAdjust`, `::TemporarySwap` as managed patches; expiry-at-submit; iOS sheets.
+8. **Orphan cleanup (D12)** — ~~delete `SwitchProgramView` / `PatchPlanEditView`~~ *done in PR #22.*
+
+*(2026-07-02: steps 1–3 and the engine halves of 4–7 are implemented together on `claude/rfc-review-refinement-gw3t2v`; the iOS surfaces for 4–7 follow as separate PRs — see `ios/BACKLOG.md`.)*
 
 Each Tranche-1 engine PR includes: engine unit tests in `engine/tests/`, the `engine-wasm` binding, and the matching iOS change. Calendar math (D4), deload rounding via the equipment rounder (D6), and reschedule cursor re-pointing (D5) each get explicit test cases.
 
@@ -289,14 +297,14 @@ Each Tranche-1 engine PR includes: engine unit tests in `engine/tests/`, the `en
    - **(B) GitHub is the real sync layer; iCloud is local-container only.** iCloud gives on-device durability and Files.app visibility; genuine multi-device sync requires the GitHub opt-in. Simplest, but weakens the "sync for free" pitch.
    - **(C) Sync a single git *bundle* file.** `git bundle` produces one file that iCloud can move atomically; each device unbundles/rebundles. Single-file granularity sidesteps torn writes and conflict siblings, at the cost of bundle merge/rebase logic on the client.
 
-   Until this is decided, the D1 engine work (`repo_summary`, container-path selection) cannot be specified precisely (it must report *which* mechanism is active and its sync state). **Recommendation: (A).** *iCloud-disabled* fallback is unchanged from the original text: fall back to `Application Support` with a one-time "iCloud Drive is off…" notice.
-2. **Backward compatibility of `Schedule.calendar`:** Kept `Option<Calendar>`; legacy repos without it continue with `suggested_date = None`. No migration required.
-3. **`KnurledError` taxonomy breaks the FFI string contract:** The `error` field becomes a JSON object. This is a breaking change for the iOS FFI and workbench. Mitigation: bump the engine minor version; update both clients in the same PR.
+   **RESOLVED 2026-07-02: (A).** The git repo stays local; iCloud carries the serialized snapshot; GitHub remains the full-history backup. There is no engine work in this decision (`repo_summary` is cut — see D1); the snapshot format and re-hydration live in iOS `RepoManager` and get their own ADR when D1 is built. *iCloud-disabled* fallback is unchanged from the original text: fall back to `Application Support` with a one-time "iCloud Drive is off…" notice.
+2. **Backward compatibility of `Schedule.calendar`:** *moot 2026-07-02 — D4 stores nothing; `suggested_date` is derived from existing fields, so there is no schema to be compatible with.*
+3. **`KnurledError` taxonomy breaks the FFI string contract:** *closed 2026-07-02 — the envelope change is additive (`error_detail` alongside the existing `error` string), so neither client needs a lockstep update.*
 4. **Phase 6B `PreserveCompatible` semantics** *(deferred with D11)* — only same `basis` + same normalized exercise preserves state; a different basis always resets. This is the crux question for the D11 RFC and is **why D11 is deferred rather than accepted** — the "right line" is not yet settled.
-5. **Calendar `anchor_date` — RESOLVED (pins D4 API):** anchor to the **Monday of the creation week** regardless of the actual start day. Rationale: `Calendar.day_map` is weekday-indexed, so a Monday anchor keeps `weekday_offset` arithmetic uniform; a Tuesday start simply means week 1's Monday slot is empty. This fixes `Calendar { anchor_date, day_map }` as specified in D4 — no schema change needed, just the documented convention.
+5. **Calendar `anchor_date`:** *superseded 2026-07-02 — D4 no longer has an anchor or a day map (see D4 for why the weekday-indexed model could not represent rotation programs). The derivation rule anchors on the last dated record instead.*
 6. **ADR 0004 RPE table location** *(deferred with D7)* — `engine/data/rpe_table.v1.toml` (committed, versioned) preferred over an embedded const, so the table can be revised without an engine rebuild and its version is auditable. Confirm in the D7 RFC.
 7. **Sample repo graduation:** The sample repo is read-only in onboarding. Should it be deletable after the user creates their own repo, or kept as a permanent demo? *(Tranche 1, non-blocking — default to keeping it as a permanent read-only demo unless it complicates the repo picker.)*
-8. **Deload × temporary-load-adjust stacking — RESOLVED (pins D6/D10 behaviour):** operations do **not** stack. A `Deload` and a `TemporaryLoadAdjust` on the same lane are resolved last-marker-wins: applying one supersedes any active adjustment of the other kind on that lane, and its marker records the supersession. This keeps load resolution a pure function of the most recent marker per lane rather than an ordered multiply-chain. Confirm before D6/D10 implementation.
+8. **Deload × temporary-load-adjust stacking — RESOLVED (re-resolved 2026-07-02, pins D6/D10 behaviour):** operations do **not** chain, but "last-marker-wins" is superseded by a cleaner split: a `Deload` rewrites *state*; a `TemporaryLoadAdjust` is a render-time *overlay* on state (a managed patch). Applying a `Deload` deletes any active load-adjust overlay on the affected lanes, so a lane's prescription is always `state × at-most-one overlay` — never an ordered multiply-chain, and never two markers racing.
 
 ---
 
@@ -311,7 +319,7 @@ These are illustrative. The engine computes them per template, so iOS never hard
 | `session_id: "a1"` | "Day A1" | "Week 1, Day 1" | "Workout A" |
 | `stage: "5x5"` | "5 sets of 5" | "3 sets of 5" | "3 sets of 5" |
 | `progression_rule: "stages"` | "Progress through stages" | "Wave progression" | "Linear progression" |
-| `E2043` | "Your rest policy has an invalid number. Check the rest stepper in Quick Edit." | (same, template-agnostic) | (same) |
+| `missing_custom_start` | "This program needs a starting weight for Squat. Add it in Plan Overview." | (same, template-agnostic) | (same) |
 
 ---
 

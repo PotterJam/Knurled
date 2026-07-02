@@ -41,6 +41,18 @@ enum HistoryBuilder {
 
     private static func item(from record: TrainingRecord, activeProgram: String?) -> HistoryItem? {
         let date = WorkoutFormat.relativeDay(fromISO: record.date) ?? record.date
+        if record.kind == .deload || record.kind == .reschedule {
+            return HistoryItem(
+                id: record.id,
+                title: record.kind == .deload ? "Deload" : "Rescheduled",
+                detail: date,
+                context: activeProgram.map(programShorthand),
+                summary: record.note
+                    ?? (record.kind == .deload ? "Lighter baseline applied" : "Next workout moved"),
+                kind: .program,
+                record: record
+            )
+        }
         if !record.lifts.isEmpty {
             return HistoryItem(
                 id: record.id,

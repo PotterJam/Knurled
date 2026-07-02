@@ -409,7 +409,10 @@ pub fn render_template_dsl(dsl: &DslTemplate) -> String {
                 out.push_str(&format!(" accessory={}", kdl_string(accessory)));
             }
             if let Some(default_exercise) = &item.default_exercise {
-                out.push_str(&format!(" default_exercise={}", kdl_string(default_exercise)));
+                out.push_str(&format!(
+                    " default_exercise={}",
+                    kdl_string(default_exercise)
+                ));
             }
             out.push('\n');
         }
@@ -437,9 +440,7 @@ fn render_lane(out: &mut String, id: &str, lane: &DslLane) {
     match lane.initial {
         DslInitial::Basis => {}
         DslInitial::Performed => out.push_str(" initial=\"performed\""),
-        DslInitial::Percent { percentage } => {
-            out.push_str(&format!(" initial=\"{percentage}%\""))
-        }
+        DslInitial::Percent { percentage } => out.push_str(&format!(" initial=\"{percentage}%\"")),
     }
     if lane.sequence != DslSequence::None {
         out.push_str(&format!(

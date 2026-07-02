@@ -49,6 +49,10 @@ enum SubmitMode: String, Codable, Sendable, Hashable, CaseIterable {
 enum RecordKind: String, Codable, Sendable, Hashable {
     case workout
     case programMarker = "program_marker"
+    /// The next workout was moved to this record's date (ADR 0011).
+    case reschedule
+    /// A manual deload was applied on this record's date (ADR 0011).
+    case deload
 }
 
 struct TrainingRecord: Codable, Sendable, Hashable, Identifiable {
@@ -314,4 +318,7 @@ struct BuildOutputs: Codable, Sendable {
     var ir: JSONValue
     var nextWorkout: RenderedSession?
     var validation: ValidationReport
+    /// Why `nextWorkout` is absent (the plan failed validation), for the
+    /// invalid-plan banner (RFC-0001 D9).
+    var staleReason: String? = nil
 }

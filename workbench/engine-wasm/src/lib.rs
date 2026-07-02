@@ -5,8 +5,11 @@
 //!
 //! ```json
 //! { "ok": true,  "data": <result> }
-//! { "ok": false, "error": "<message>" }
+//! { "ok": false, "error": "<message>", "error_detail": { "kind": "...", "retryable": false } }
 //! ```
+//!
+//! `error_detail` is additive (RFC-0001 D9): callers keep reading `error`, or
+//! branch on the stable `kind` instead of message text.
 //!
 //! No training logic lives here. The browser has no filesystem, so we bind the
 //! engine's **in-memory** functions (`compile_plan`, `build_outputs`,
@@ -15,10 +18,11 @@
 //! unwraps the envelope and throws on `ok:false`.
 
 use knurled_core::{
-    CompiledPlan, ENGINE_VERSION, ExecutionInput, PatchFile, StateProjection, SubmitMode,
-    TrainingRecord, backtest, build_outputs, builtin_template, builtin_templates, compile_plan,
-    create_initial_state, exercise_catalog, merge_training_records, render_lockfile, render_next,
-    serialize_record_files, simulate, submit_session, validate_compiled,
+    CompiledPlan, ENGINE_VERSION, ExecutionInput, PatchFile, ProfileRequest, StateProjection,
+    SubmitMode, TrainingRecord, backtest, build_outputs, builtin_template, builtin_templates,
+    compile_plan, create_initial_state, exercise_catalog, explain, merge_training_records,
+    recommend_template, render_lockfile, render_next, serialize_record_files, simulate,
+    submit_session, suggest_next_date, validate_compiled, validation_code_message,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -39,8 +43,30 @@ fn ok<T: Serialize>(data: T) -> String {
     }
 }
 
-fn fail(message: impl std::fmt::Display) -> String {
-    json!({ "ok": false, "error": message.to_string() }).to_string()
+/// Stable machine-readable detail for the failure envelope (RFC-0001 D9).
+trait ErrorDetail: std::fmt::Display {
+    fn detail(&self) -> (&'static str, bool) {
+        ("invalid_argument", false)
+    }
+}
+
+impl ErrorDetail for knurled_core::KnurledError {
+    fn detail(&self) -> (&'static str, bool) {
+        (self.kind(), self.retryable())
+    }
+}
+
+impl ErrorDetail for String {}
+impl ErrorDetail for &str {}
+
+fn fail(error: impl ErrorDetail) -> String {
+    let (kind, retryable) = error.detail();
+    json!({
+        "ok": false,
+        "error": error.to_string(),
+        "error_detail": { "kind": kind, "retryable": retryable },
+    })
+    .to_string()
 }
 
 fn parse_patches(patches_json: &str) -> Result<Vec<PatchFile>, String> {
@@ -279,6 +305,51 @@ pub fn lock_for(template_ref: &str) -> String {
         Ok(text) => ok(text),
         Err(error) => fail(error),
     }
+}
+
+/// Glossary lookup for a template term (RFC-0001 D3). Unknown terms yield
+/// `{ "explanation": null }`.
+#[wasm_bindgen]
+pub fn explain_term(term: &str) -> String {
+    ok(json!({ "explanation": explain(term) }))
+}
+
+/// Engine-owned human copy for a validation code (RFC-0001 D9).
+#[wasm_bindgen]
+pub fn validation_message(code: &str) -> String {
+    ok(validation_code_message(code))
+}
+
+/// "Help me choose" wizard backend (RFC-0001 D2). `profile_json` is a
+/// `ProfileRequest { experience, days_per_week, goal }`.
+#[wasm_bindgen]
+pub fn recommend(profile_json: &str) -> String {
+    let profile: ProfileRequest = match serde_json::from_str(profile_json) {
+        Ok(value) => value,
+        Err(error) => return fail(format!("invalid profile json: {error}")),
+    };
+    ok(recommend_template(&profile))
+}
+
+/// Derived next-workout date (RFC-0001 D4): first weekday in
+/// `suggested_days_json` (array of "mon"-style tokens) strictly after the
+/// latest dated record in `records_json`, or the date a reschedule marker
+/// pins. The browser holds the records, so they are passed in.
+#[wasm_bindgen]
+pub fn next_workout_date(suggested_days_json: &str, records_json: &str) -> String {
+    let days: Vec<String> = match serde_json::from_str(suggested_days_json) {
+        Ok(value) => value,
+        Err(error) => return fail(format!("invalid suggested days json: {error}")),
+    };
+    let records: Vec<TrainingRecord> = if records_json.trim().is_empty() {
+        Vec::new()
+    } else {
+        match serde_json::from_str(records_json) {
+            Ok(value) => value,
+            Err(error) => return fail(format!("invalid records json: {error}")),
+        }
+    };
+    ok(json!({ "suggested_date": suggest_next_date(&days, &records) }))
 }
 
 #[wasm_bindgen]

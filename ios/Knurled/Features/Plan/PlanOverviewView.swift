@@ -101,7 +101,7 @@ private struct ValidationPanel: View {
                     Text(message.code)
                         .font(.caption.monospaced())
                         .foregroundStyle(.red)
-                    Text(message.message)
+                    Text(message.displayText)
                         .font(.callout)
                 }
             }

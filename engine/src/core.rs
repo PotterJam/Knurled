@@ -184,13 +184,25 @@ pub fn validate_compiled(compiled: &CompiledPlan) -> ValidationReport {
             | PatchOperation::Cap {
                 lane_regex: Some(lane_regex),
                 ..
-            } = operation
+            }
+            | PatchOperation::ScaleLoad { lane_regex, .. } = operation
                 && let Err(error) = Regex::new(lane_regex)
             {
                 errors.push(message(
                     "invalid_lane_regex",
                     format!(
                         "{} contains invalid lane regex {lane_regex}: {error}",
+                        patch.filename
+                    ),
+                ));
+            }
+            if let PatchOperation::ScaleLoad { percent, .. } = operation
+                && (*percent == 0 || *percent < -90 || *percent > 100)
+            {
+                errors.push(message(
+                    "invalid_scale_percent",
+                    format!(
+                        "{} scales load by {percent}% (must be −90…100 and non-zero)",
                         patch.filename
                     ),
                 ));
@@ -387,7 +399,10 @@ pub fn preview_template(request: PreviewTemplateRequest) -> Result<PreviewTempla
     } else {
         None
     };
-    Ok(PreviewTemplateResult { validation, preview })
+    Ok(PreviewTemplateResult {
+        validation,
+        preview,
+    })
 }
 
 fn invalid_preview(code: &str, message: impl Into<String>) -> PreviewTemplateResult {
@@ -397,10 +412,7 @@ fn invalid_preview(code: &str, message: impl Into<String>) -> PreviewTemplateRes
             schema_version: SCHEMA_VERSION.into(),
             engine_version: ENGINE_VERSION.into(),
             status: ValidationStatus::Invalid,
-            errors: vec![ValidationMessage {
-                code: code.into(),
-                message: message.into(),
-            }],
+            errors: vec![self::message(code, message)],
             warnings: Vec::new(),
             checked: ValidationChecks {
                 plan_syntax: false,
@@ -647,6 +659,14 @@ pub fn build_outputs(compiled: &CompiledPlan, state: &StateProjection) -> Result
     } else {
         None
     };
+    let stale_reason = (next_workout.is_none()).then(|| {
+        validation
+            .errors
+            .first()
+            .map(|error| error.user_message.clone())
+            .filter(|text| !text.is_empty())
+            .unwrap_or_else(|| "The plan failed validation.".to_owned())
+    });
     let mut ir = serde_json::to_value(compiled)?;
     if let Some(object) = ir.as_object_mut() {
         object.remove("lock");
@@ -656,6 +676,7 @@ pub fn build_outputs(compiled: &CompiledPlan, state: &StateProjection) -> Result
         ir,
         next_workout,
         validation,
+        stale_reason,
     })
 }
 
@@ -1103,7 +1124,11 @@ fn dsl_lane_tier(lane_id: &str, lane: &DslLane) -> String {
         .unwrap_or_else(|| lane_id.rsplit('.').next().unwrap_or("main").to_owned())
 }
 
-fn dsl_item_exercise(compiled: &CompiledPlan, item: &DslSessionItem, lane: &DslLane) -> String {
+pub(crate) fn dsl_item_exercise(
+    compiled: &CompiledPlan,
+    item: &DslSessionItem,
+    lane: &DslLane,
+) -> String {
     item.accessory_key
         .as_ref()
         .and_then(|key| compiled.accessories.get(key))
@@ -1112,7 +1137,7 @@ fn dsl_item_exercise(compiled: &CompiledPlan, item: &DslSessionItem, lane: &DslL
         .unwrap_or_else(|| lane.exercise.clone())
 }
 
-fn dsl_progression_lane(lane_id: &str, lane: &DslLane, exercise: &str) -> String {
+pub(crate) fn dsl_progression_lane(lane_id: &str, lane: &DslLane, exercise: &str) -> String {
     format!(
         "{}.{}",
         normalize_exercise(exercise),
@@ -1189,6 +1214,7 @@ fn render_dsl_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
                 set_number += 1;
             }
         }
+        apply_scale_load_patches(compiled, &progression_lane, &rendered_exercise, &mut sets);
         let rendered_rules = lane
             .rules
             .iter()
@@ -1311,6 +1337,15 @@ fn render_dsl_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
         }
         items.push(item);
     }
+    let display_description = {
+        let mut labels: Vec<String> = Vec::new();
+        for item in &items {
+            if !labels.contains(&item.display.label) {
+                labels.push(item.display.label.clone());
+            }
+        }
+        (!labels.is_empty()).then(|| labels.join(" · "))
+    };
     attach_rendered_session_hash(
         compiled,
         RenderedSession {
@@ -1326,6 +1361,7 @@ fn render_dsl_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
                     .cloned()
                     .unwrap_or_else(|| session_id.to_ascii_uppercase())
             ),
+            display_description,
             suggested_date: None,
             plan_hash: compiled.plan_hash.clone(),
             template_hash: compiled.template_hash.clone(),
@@ -1333,6 +1369,36 @@ fn render_dsl_next(compiled: &CompiledPlan, state: &StateProjection) -> Result<R
             items: with_session_exercises(compiled, items),
         },
     )
+}
+
+/// Apply active `scale-load` patch overlays to an item's prescribed sets
+/// (RFC-0001 D10). Loads snap via the equipment rounder; progression state is
+/// untouched, so a temporary −10% never corrupts the baseline.
+fn apply_scale_load_patches(
+    compiled: &CompiledPlan,
+    lane: &str,
+    exercise: &str,
+    sets: &mut [PrescribedSet],
+) {
+    for patch in &compiled.patches {
+        for operation in &patch.operations {
+            if let PatchOperation::ScaleLoad {
+                percent,
+                lane_regex,
+            } = operation
+                && Regex::new(lane_regex)
+                    .map(|regex| regex.is_match(lane))
+                    .unwrap_or(false)
+            {
+                let multiplier = 1.0 + f64::from(*percent) / 100.0;
+                for set in sets.iter_mut() {
+                    if let Some(load) = set.load.as_deref() {
+                        set.load = Some(scale_load(compiled, exercise, load, multiplier));
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn custom_warmups(
@@ -1562,6 +1628,8 @@ fn session_exercise_item(
         exercise: exercise.exercise.clone(),
         implement,
         display: DisplayFields {
+            label: title.clone(),
+            group: Some(phase_title.to_owned()),
             title,
             subtitle: exercise
                 .note
@@ -1674,6 +1742,8 @@ fn rendered_item(
                 slot.tier.to_ascii_uppercase()
             ),
             subtitle: subtitle_for(&sets, spec.stage.as_deref()),
+            label: label_for_compiled(compiled, &spec.exercise),
+            group: crate::messages::tier_group_label(&compiled.plan.template_id, &slot.tier),
         },
         prescription: Prescription {
             warmups: compute_warmups(compiled, slot, &spec),
@@ -2248,7 +2318,12 @@ fn parse_load(load: &str) -> ParsedLoad<'_> {
     ParsedLoad { value, unit }
 }
 
-fn scale_load(compiled: &CompiledPlan, exercise: &str, load: &str, multiplier: f64) -> String {
+pub(crate) fn scale_load(
+    compiled: &CompiledPlan,
+    exercise: &str,
+    load: &str,
+    multiplier: f64,
+) -> String {
     let parsed = parse_load(load);
     format_load(
         snap_load(compiled, exercise, parsed.value * multiplier),
@@ -2341,6 +2416,25 @@ fn implement_for_compiled(compiled: &CompiledPlan, exercise: &str) -> Implement 
     } else {
         Implement::Barbell
     }
+}
+
+/// Engine-owned display label for an exercise: explicit plan metadata first,
+/// then the built-in catalogue, then a title-cased id (RFC-0001 D3).
+fn label_for_compiled(compiled: &CompiledPlan, exercise: &str) -> String {
+    let normalized = normalize_exercise(exercise);
+    if let Some(label) = compiled
+        .exercises
+        .get(&normalized)
+        .map(|exercise| exercise.label.clone())
+        .filter(|label| !label.trim().is_empty())
+    {
+        return label;
+    }
+    exercise_catalog()
+        .into_iter()
+        .find(|entry| entry.id == normalized)
+        .map(|entry| entry.label)
+        .unwrap_or_else(|| title_case(exercise))
 }
 
 fn implement_from_metadata(value: &str) -> Implement {
@@ -2519,8 +2613,12 @@ fn title_case(value: &str) -> String {
 }
 
 fn message(code: impl Into<String>, message: impl Into<String>) -> ValidationMessage {
+    let code = code.into();
+    let message = message.into();
+    let user_message = crate::messages::user_message(&code, &message);
     ValidationMessage {
-        code: code.into(),
-        message: message.into(),
+        code,
+        message,
+        user_message,
     }
 }

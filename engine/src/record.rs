@@ -81,6 +81,12 @@ impl LiftRecord {
 pub enum RecordKind {
     Workout,
     ProgramMarker,
+    /// The next workout was moved to this record's date (RFC-0001 D5). Pure
+    /// schedule intent: no lifts, no lane movement.
+    Reschedule,
+    /// A manual deload was applied on this record's date (RFC-0001 D6). The
+    /// note says what was lightened; `state` already carries the new loads.
+    Deload,
 }
 
 /// One independently identifiable entry in the human training record.
@@ -183,6 +189,43 @@ impl TrainingRecord {
             updated_at: None,
             program: Some(program),
             note: None,
+            lifts: Vec::new(),
+        }
+    }
+
+    /// Marker pinning the next workout to `date` (RFC-0001 D5).
+    pub fn reschedule_marker(date: impl Into<String>, note: Option<String>) -> Self {
+        let date = date.into();
+        Self {
+            id: sha256_text(&format!("reschedule\0{date}")),
+            revision: 1,
+            kind: RecordKind::Reschedule,
+            date,
+            session_id: None,
+            started_at: None,
+            completed_at: None,
+            updated_at: None,
+            program: None,
+            note,
+            lifts: Vec::new(),
+        }
+    }
+
+    /// Marker recording a manual deload applied on `date` (RFC-0001 D6).
+    pub fn deload_marker(date: impl Into<String>, note: impl Into<String>) -> Self {
+        let date = date.into();
+        let note = note.into();
+        Self {
+            id: sha256_text(&format!("deload\0{date}\0{note}")),
+            revision: 1,
+            kind: RecordKind::Deload,
+            date,
+            session_id: None,
+            started_at: None,
+            completed_at: None,
+            updated_at: None,
+            program: None,
+            note: Some(note),
             lifts: Vec::new(),
         }
     }
@@ -291,6 +334,14 @@ impl LogMonth {
                     {
                         return Err(KnurledError::Parse(format!(
                             "program marker {:?} has invalid workout fields",
+                            record.id
+                        )));
+                    }
+                }
+                RecordKind::Reschedule | RecordKind::Deload => {
+                    if !record.lifts.is_empty() || record.session_id.is_some() {
+                        return Err(KnurledError::Parse(format!(
+                            "schedule marker {:?} has invalid workout fields",
                             record.id
                         )));
                     }
@@ -444,5 +495,4 @@ mod tests {
         let old = r#"{"month":"2026-06","days":[]}"#;
         assert!(LogMonth::parse(old).is_err());
     }
-
 }

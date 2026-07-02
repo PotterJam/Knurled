@@ -114,6 +114,7 @@ pub fn parse_patch(text: &str, filename: impl Into<String>) -> Result<Patch> {
             "replace-exercise" => operations.push(parse_replace_exercise(node)?),
             "add-conditioning" => operations.push(parse_add_conditioning(node)?),
             "cap" => operations.push(parse_cap(node)?),
+            "scale-load" => operations.push(parse_scale_load(node)?),
             other => {
                 return Err(parse_error(format!(
                     "unknown patch operation in {filename}: {other}"
@@ -667,6 +668,17 @@ fn parse_cap(node: &KdlNode) -> Result<PatchOperation> {
     Ok(PatchOperation::Cap {
         target,
         value,
+        lane_regex,
+    })
+}
+
+fn parse_scale_load(node: &KdlNode) -> Result<PatchOperation> {
+    let percent = required_prop(node, "percent", "scale-load")?
+        .parse::<i32>()
+        .map_err(|_| parse_error("scale-load `percent=` must be an integer"))?;
+    let lane_regex = required_prop(node, "lane", "scale-load")?;
+    Ok(PatchOperation::ScaleLoad {
+        percent,
         lane_regex,
     })
 }

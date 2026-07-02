@@ -62,6 +62,57 @@ pub enum PlanEdit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
     },
+    /// Move the next workout to `to_date` (RFC-0001 D5). Writes a
+    /// `Reschedule` marker; the cursor and lanes never move.
+    Reschedule {
+        to_date: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    /// Lighten lane baselines by `percent` (RFC-0001 D6). Rewrites `state`
+    /// (loads and training maxes snap via the equipment rounder, stall counts
+    /// reset), writes a `Deload` marker, and removes any active temporary
+    /// load adjustment on the affected lanes so overlays never chain.
+    Deload {
+        percent: u32,
+        #[serde(default)]
+        scope: DeloadScope,
+        date: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    /// Permanently swap the lift a lane prescribes (RFC-0001 D10). Writes an
+    /// engine-managed `replace-exercise` patch pinned to the lane; swapping
+    /// back to the authored lift removes it. Progression follows the lane.
+    SwapExercise {
+        lane: String,
+        to_exercise: String,
+    },
+    /// Time-bounded exercise swap (injury recovery). Same managed patch as
+    /// `SwapExercise` plus an expiry enforced at the first submit after it.
+    TemporarySwap {
+        lane: String,
+        to_exercise: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        until: Option<String>,
+    },
+    /// Time-bounded load overlay: prescriptions on the lane scale by
+    /// `percent` (−10 = 10% lighter) while progression state is untouched.
+    TemporaryLoadAdjust {
+        lane: String,
+        percent: i32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        until: Option<String>,
+    },
+}
+
+/// Which lanes a manual deload touches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DeloadScope {
+    #[default]
+    All,
+    Lanes(Vec<String>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -98,6 +149,10 @@ pub enum PatchEditOperation {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lane_regex: Option<String>,
     },
+    ScaleLoad {
+        percent: i32,
+        lane_regex: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -114,7 +169,20 @@ struct Candidate {
     writes: Vec<(String, Option<String>)>,
     marker: Option<TrainingRecord>,
     changed_files: Vec<String>,
-    switch_program: bool,
+    state_action: StateAction,
+}
+
+/// How an edit moves `state/current.json`.
+enum StateAction {
+    /// Plan-only edit; state is untouched.
+    Keep,
+    /// Program switch: state restarts from the new program's initial numbers.
+    Reinitialize,
+    /// Manual deload: matching lanes are lightened by `percent` (RFC-0001 D6).
+    Deload {
+        percent: u32,
+        lanes: Option<BTreeSet<String>>,
+    },
 }
 
 pub fn preview_plan_edit(repo_path: impl AsRef<Path>, edit: PlanEdit) -> Result<PlanEditOutcome> {
@@ -160,7 +228,7 @@ pub fn apply_plan_edit(repo_path: impl AsRef<Path>, edit: PlanEdit) -> Result<Pl
     if let Some(marker) = candidate.marker.clone() {
         write_training_record(root, marker)?;
     }
-    if candidate.switch_program {
+    if !matches!(candidate.state_action, StateAction::Keep) {
         write_state(root, &outputs.state)?;
     }
     write_generated_files(root, &outputs)?;
@@ -283,7 +351,7 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
     let mut writes = Vec::new();
     let mut changed = BTreeSet::new();
     let mut marker = None;
-    let mut switch_program = false;
+    let mut state_action = StateAction::Keep;
 
     match edit {
         PlanEdit::Quick {
@@ -389,7 +457,149 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
             let mut day = TrainingRecord::program_marker(date, reference.id);
             day.note = note;
             marker = Some(day);
-            switch_program = true;
+            state_action = StateAction::Reinitialize;
+        }
+        PlanEdit::Reschedule { to_date, note } => {
+            let to_date = to_date.trim().to_owned();
+            changed.insert(month_path(&to_date)?);
+            marker = Some(TrainingRecord::reschedule_marker(to_date, note));
+        }
+        PlanEdit::Deload {
+            percent,
+            scope,
+            date,
+            note,
+        } => {
+            if !(1..=90).contains(&percent) {
+                return Err(KnurledError::Parse(format!(
+                    "deload percent must be 1–90, got {percent}"
+                )));
+            }
+            let known_lanes: BTreeSet<String> = read_state(root)?.lanes.into_keys().collect();
+            let lanes = match scope {
+                DeloadScope::All => None,
+                DeloadScope::Lanes(list) => {
+                    let lanes: BTreeSet<String> = list.into_iter().collect();
+                    if let Some(unknown) = lanes.iter().find(|lane| !known_lanes.contains(*lane)) {
+                        return Err(KnurledError::Parse(format!("unknown lane {unknown:?}")));
+                    }
+                    if lanes.is_empty() {
+                        return Err(KnurledError::Parse("deload scope names no lanes".into()));
+                    }
+                    Some(lanes)
+                }
+            };
+            // Overlays never chain (RFC-0001 §7 Q8): a deload removes any
+            // active temporary load adjustment on the lanes it rebaselines.
+            for lane in lanes
+                .as_ref()
+                .map(|set| set.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_else(|| known_lanes.iter().cloned().collect())
+            {
+                let filename = managed_patch_filename("tmp-load", &lane);
+                if patch_files.iter().any(|file| file.filename == filename) {
+                    patch_files.retain(|file| file.filename != filename);
+                    let write_path = active_program_relative_path(root, &filename)?;
+                    writes.push((write_path.clone(), None));
+                    changed.insert(write_path);
+                }
+            }
+            let scope_text = match &lanes {
+                None => "all lifts".to_owned(),
+                Some(set) => set
+                    .iter()
+                    .map(|lane| lane_display(lane))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            };
+            let mut text = format!("Deloaded {scope_text} by {percent}%");
+            if let Some(note) = note.filter(|note| !note.trim().is_empty()) {
+                text = format!("{text} — {}", note.trim());
+            }
+            changed.insert(month_path(&date)?);
+            marker = Some(TrainingRecord::deload_marker(date, text));
+            state_action = StateAction::Deload { percent, lanes };
+        }
+        PlanEdit::SwapExercise { lane, to_exercise } => {
+            let authored = authored_exercise_for_lane(&repo.compiled, &lane)?;
+            let to = normalize_exercise(&to_exercise);
+            let filename = managed_patch_filename("swap", &lane);
+            if to == authored {
+                patch_files.retain(|file| file.filename != filename);
+                let write_path = active_program_relative_path(root, &filename)?;
+                writes.push((write_path.clone(), None));
+                changed.insert(write_path);
+            } else {
+                let text = render_patch(
+                    &format!("Swap {}", lane_display(&lane)),
+                    &format!("Use {to} instead of {authored}"),
+                    None,
+                    None,
+                    &[PatchEditOperation::ReplaceExercise {
+                        from: authored,
+                        to,
+                        lane_regex: lane_anchor_regex(&lane),
+                    }],
+                );
+                upsert_patch_file(&mut patch_files, &filename, text.clone());
+                let write_path = active_program_relative_path(root, &filename)?;
+                writes.push((write_path.clone(), Some(text)));
+                changed.insert(write_path);
+            }
+        }
+        PlanEdit::TemporarySwap {
+            lane,
+            to_exercise,
+            until,
+        } => {
+            let authored = authored_exercise_for_lane(&repo.compiled, &lane)?;
+            let to = normalize_exercise(&to_exercise);
+            let filename = managed_patch_filename("tmp-swap", &lane);
+            if to == authored {
+                patch_files.retain(|file| file.filename != filename);
+                let write_path = active_program_relative_path(root, &filename)?;
+                writes.push((write_path.clone(), None));
+                changed.insert(write_path);
+            } else {
+                let text = render_patch(
+                    &format!("Temporary swap {}", lane_display(&lane)),
+                    &format!("Use {to} instead of {authored} for now"),
+                    None,
+                    validated_until(until)?,
+                    &[PatchEditOperation::ReplaceExercise {
+                        from: authored,
+                        to,
+                        lane_regex: lane_anchor_regex(&lane),
+                    }],
+                );
+                upsert_patch_file(&mut patch_files, &filename, text.clone());
+                let write_path = active_program_relative_path(root, &filename)?;
+                writes.push((write_path.clone(), Some(text)));
+                changed.insert(write_path);
+            }
+        }
+        PlanEdit::TemporaryLoadAdjust {
+            lane,
+            percent,
+            until,
+        } => {
+            authored_exercise_for_lane(&repo.compiled, &lane)?;
+            let filename = managed_patch_filename("tmp-load", &lane);
+            let direction = if percent < 0 { "lighter" } else { "heavier" };
+            let text = render_patch(
+                &format!("Temporary load change {}", lane_display(&lane)),
+                &format!("{}% {direction} for now", percent.abs()),
+                None,
+                validated_until(until)?,
+                &[PatchEditOperation::ScaleLoad {
+                    percent,
+                    lane_regex: lane_anchor_regex(&lane),
+                }],
+            );
+            upsert_patch_file(&mut patch_files, &filename, text.clone());
+            let write_path = active_program_relative_path(root, &filename)?;
+            writes.push((write_path.clone(), Some(text)));
+            changed.insert(write_path);
         }
     }
 
@@ -409,8 +619,88 @@ fn candidate(root: &Path, edit: PlanEdit) -> Result<Candidate> {
         writes,
         marker,
         changed_files: changed.into_iter().collect(),
-        switch_program,
+        state_action,
     })
+}
+
+/// Engine-managed patch path for a guided quick edit: one file per (kind, lane)
+/// so re-applying replaces rather than stacks (RFC-0001 D10).
+fn managed_patch_filename(kind: &str, lane: &str) -> String {
+    format!("patches/{kind}-{}.fitspec", slug(lane))
+}
+
+/// Regex matching exactly one progression lane.
+fn lane_anchor_regex(lane: &str) -> String {
+    format!("^{}$", regex::escape(lane))
+}
+
+/// Short human name for a lane id ("squat.t1" → "Squat T1"), for marker and
+/// patch copy only — rendered output carries proper labels (D3).
+fn lane_display(lane: &str) -> String {
+    let (exercise, tier) = lane.rsplit_once('.').unwrap_or((lane, ""));
+    let mut text = crate::messages::title_words(&normalize_exercise(exercise));
+    if !tier.is_empty() {
+        text = format!("{text} {}", tier.to_ascii_uppercase());
+    }
+    text
+}
+
+/// Validate an optional expiry date, normalising empty to `None`.
+fn validated_until(until: Option<String>) -> Result<Option<String>> {
+    match until.map(|value| value.trim().to_owned()) {
+        None => Ok(None),
+        Some(value) if value.is_empty() => Ok(None),
+        Some(value) => {
+            month_path(&value)?;
+            Ok(Some(value))
+        }
+    }
+}
+
+/// The exercise a lane prescribes before any patches — what `replace-exercise`
+/// swaps *from*. Errors on lanes the active program doesn't have.
+fn authored_exercise_for_lane(compiled: &CompiledPlan, lane: &str) -> Result<String> {
+    let dsl = &compiled.template.dsl;
+    for item in dsl.sessions.values().flatten() {
+        let Some(dsl_lane) = dsl.lanes.get(&item.lane) else {
+            continue;
+        };
+        let exercise = crate::core::dsl_item_exercise(compiled, item, dsl_lane);
+        if crate::core::dsl_progression_lane(&item.lane, dsl_lane, &exercise) == lane {
+            return Ok(exercise);
+        }
+    }
+    Err(KnurledError::Parse(format!("unknown lane {lane:?}")))
+}
+
+/// Apply a manual deload to `state` (RFC-0001 D6): matching lanes' loads and
+/// training maxes scale down and snap via the equipment rounder; stall counts
+/// reset, matching the DSL `deload` effect.
+fn deload_state(
+    compiled: &CompiledPlan,
+    mut state: StateProjection,
+    percent: u32,
+    lanes: Option<&BTreeSet<String>>,
+) -> StateProjection {
+    let multiplier = 1.0 - f64::from(percent) / 100.0;
+    for (lane_id, lane) in state.lanes.iter_mut() {
+        if lanes.is_some_and(|set| !set.contains(lane_id)) {
+            continue;
+        }
+        let exercise = lane_id.rsplit_once('.').map(|(e, _)| e).unwrap_or(lane_id);
+        if let Some(load) = lane.load.as_deref() {
+            lane.load = Some(crate::core::scale_load(
+                compiled, exercise, load, multiplier,
+            ));
+        }
+        if let Some(tm) = lane.training_max.as_deref() {
+            lane.training_max = Some(crate::core::scale_load(compiled, exercise, tm, multiplier));
+        }
+        if lane.stall.is_some() {
+            lane.stall = Some(0);
+        }
+    }
+    state
 }
 
 fn candidate_outputs(root: &Path, candidate: &Candidate) -> Result<BuildOutputs> {
@@ -437,12 +727,25 @@ fn candidate_outputs(root: &Path, candidate: &Candidate) -> Result<BuildOutputs>
             &candidate.patch_files,
         )?
     };
-    let state = if candidate.switch_program {
-        create_initial_state(&compiled)
-    } else {
-        read_state(root)?
+    let state = match &candidate.state_action {
+        StateAction::Keep => read_state(root)?,
+        StateAction::Reinitialize => create_initial_state(&compiled),
+        StateAction::Deload { percent, lanes } => {
+            deload_state(&compiled, read_state(root)?, *percent, lanes.as_ref())
+        }
     };
-    build_outputs(&compiled, &state)
+    let mut outputs = build_outputs(&compiled, &state)?;
+    // Stamp the derived next-workout date (RFC-0001 D4), including the edit's
+    // own pending marker so a reschedule previews the date it will pin.
+    if let Some(next) = outputs.next_workout.as_mut() {
+        let mut records = read_records(root)?;
+        if let Some(marker) = candidate.marker.clone() {
+            records.push(marker);
+        }
+        next.suggested_date =
+            crate::calendar::suggest_next_date(&compiled.schedule.suggested_days, &records);
+    }
+    Ok(outputs)
 }
 
 pub(crate) fn starter_plan(
@@ -745,6 +1048,13 @@ fn render_patch(
                     lane
                 ));
             }
+            PatchEditOperation::ScaleLoad {
+                percent,
+                lane_regex,
+            } => out.push(format!(
+                "  scale-load percent={percent} lane=\"{}\"",
+                escape(lane_regex)
+            )),
         }
     }
     out.push("}".into());

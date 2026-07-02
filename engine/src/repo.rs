@@ -147,11 +147,30 @@ pub fn build_repo(repo_path: impl AsRef<Path>, write: bool) -> Result<BuildOutpu
     let root = repo_path.as_ref();
     let repo = read_training_repo(root)?;
     let state = read_state(root)?;
-    let outputs = build_outputs(&repo.compiled, &state)?;
+    let mut outputs = build_outputs(&repo.compiled, &state)?;
+    stamp_suggested_date(root, &repo.compiled, &mut outputs)?;
     if write {
         write_generated_files(root, &outputs)?;
     }
     Ok(outputs)
+}
+
+/// Fill `next_workout.suggested_date` from the derivation rule (RFC-0001 D4):
+/// the first suggested training day strictly after the latest dated record, or
+/// the date a `Reschedule` marker pins. Happens after session hashing, so a
+/// date never changes workout identity.
+fn stamp_suggested_date(
+    root: &Path,
+    compiled: &CompiledPlan,
+    outputs: &mut BuildOutputs,
+) -> Result<()> {
+    if let Some(next) = outputs.next_workout.as_mut() {
+        next.suggested_date = crate::calendar::suggest_next_date(
+            &compiled.schedule.suggested_days,
+            &read_records(root)?,
+        );
+    }
+    Ok(())
 }
 
 pub fn preview_repo(repo_path: impl AsRef<Path>, weeks: u32) -> Result<PreviewReport> {
@@ -159,7 +178,8 @@ pub fn preview_repo(repo_path: impl AsRef<Path>, weeks: u32) -> Result<PreviewRe
     let repo = read_training_repo(root)?;
     let state = read_state(root)?;
     if weeks <= 1 {
-        let outputs = build_outputs(&repo.compiled, &state)?;
+        let mut outputs = build_outputs(&repo.compiled, &state)?;
+        stamp_suggested_date(root, &repo.compiled, &mut outputs)?;
         Ok(PreviewReport {
             kind: "preview_report".into(),
             schema_version: SCHEMA_VERSION.into(),
@@ -192,7 +212,8 @@ pub fn check_generated_repo(repo_path: impl AsRef<Path>) -> Result<GeneratedFile
     let root = repo_path.as_ref();
     let repo = read_training_repo(root)?;
     let state = read_state(root)?;
-    let outputs = build_outputs(&repo.compiled, &state)?;
+    let mut outputs = build_outputs(&repo.compiled, &state)?;
+    stamp_suggested_date(root, &repo.compiled, &mut outputs)?;
     let expected = generated_file_map(&outputs)?;
     let mut changed = Vec::new();
     let mut missing = Vec::new();
@@ -629,8 +650,37 @@ fn persist_rendered_submit(
             active_program_relative_path(root, "state/current.json")?,
             record_path,
         ];
+        outcome
+            .changed_files
+            .extend(prune_expired_patches(root, date)?);
     }
     Ok(outcome)
+}
+
+/// Delete patch files whose `expires` date is strictly before `date`
+/// (RFC-0001 D10). Rendering stays date-free; expiry is enforced here, at the
+/// first dated mutation, so a temporary change applies to every workout
+/// started on or before its expiry and disappears with the submit after it.
+fn prune_expired_patches(root: &Path, date: &str) -> Result<Vec<String>> {
+    if crate::calendar::parse_date(date).is_none() {
+        return Ok(Vec::new());
+    }
+    let program_dir = active_program_dir(root)?;
+    let mut removed = Vec::new();
+    for file in read_patch_files(&program_dir)? {
+        let Ok(patch) = crate::parser::parse_patch(&file.text, file.filename.clone()) else {
+            continue;
+        };
+        let expired = patch.expires.as_deref().is_some_and(|expires| {
+            crate::calendar::parse_date(expires).is_some() && expires < date
+        });
+        if expired {
+            let path = program_dir.join(&file.filename);
+            fs::remove_file(&path).map_err(|source| io_error(&path, source))?;
+            removed.push(active_program_relative_path(root, &file.filename)?);
+        }
+    }
+    Ok(removed)
 }
 
 /// Skip the next workout one step forward or backward through the rotation
@@ -644,7 +694,8 @@ pub fn skip_workout_repo(repo_path: impl AsRef<Path>, forward: bool) -> Result<B
     let repo = read_training_repo(root)?;
     let mut state = read_state(root)?;
     crate::core::skip_cursor(&mut state, &repo.compiled.schedule.rotation, forward);
-    let outputs = build_outputs(&repo.compiled, &state)?;
+    let mut outputs = build_outputs(&repo.compiled, &state)?;
+    stamp_suggested_date(root, &repo.compiled, &mut outputs)?;
     write_generated_files(root, &outputs)?;
     Ok(outputs)
 }
