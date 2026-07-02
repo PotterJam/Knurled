@@ -15,6 +15,16 @@ struct ValidationReport: Codable, Sendable, Hashable {
 struct ValidationMessage: Codable, Sendable, Hashable {
     var code: String
     var message: String
+    /// Engine-owned human sentence for this problem (RFC-0001 D9). Absent
+    /// only in reports written by older engines.
+    var userMessage: String? = nil
+
+    /// What the UI should show: the engine's user copy, falling back to the
+    /// technical message for old reports.
+    var displayText: String {
+        if let userMessage, !userMessage.isEmpty { return userMessage }
+        return message
+    }
 }
 
 struct ValidationChecks: Codable, Sendable, Hashable {

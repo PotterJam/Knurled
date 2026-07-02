@@ -11,6 +11,17 @@ enum PlanEdit: Encodable, Sendable {
     case savePatch(PatchPlanEdit)
     case deletePatch(filename: String)
     case switchProgram(SwitchProgramEdit)
+    /// Move the next workout to `toDate` (RFC-0001 D5). Schedule intent only —
+    /// the cursor and lanes never move.
+    case reschedule(toDate: String, note: String?)
+    /// Lighten lane baselines by `percent` (RFC-0001 D6).
+    case deload(percent: Int, scope: DeloadScope, date: String, note: String?)
+    /// Permanently swap the lift a lane prescribes (RFC-0001 D10).
+    case swapExercise(lane: String, toExercise: String)
+    /// Time-bounded swap; expires at the first submit after `until`.
+    case temporarySwap(lane: String, toExercise: String, until: String?)
+    /// Time-bounded load overlay (−10 = 10% lighter); progression untouched.
+    case temporaryLoadAdjust(lane: String, percent: Int, until: String?)
 
     private enum CodingKeys: String, CodingKey {
         case kind
@@ -32,6 +43,12 @@ enum PlanEdit: Encodable, Sendable {
         case initialNumbers
         case date
         case note
+        case toDate
+        case percent
+        case scope
+        case lane
+        case toExercise
+        case until
     }
 
     func encode(to encoder: Encoder) throws {
@@ -65,7 +82,52 @@ enum PlanEdit: Encodable, Sendable {
             try container.encodeIfPresent(edit.suggestedDays, forKey: .suggestedDays)
             try container.encode(edit.date, forKey: .date)
             try container.encodeIfPresent(edit.note, forKey: .note)
+        case .reschedule(let toDate, let note):
+            try container.encode("reschedule", forKey: .kind)
+            try container.encode(toDate, forKey: .toDate)
+            try container.encodeIfPresent(note, forKey: .note)
+        case .deload(let percent, let scope, let date, let note):
+            try container.encode("deload", forKey: .kind)
+            try container.encode(percent, forKey: .percent)
+            try container.encode(scope, forKey: .scope)
+            try container.encode(date, forKey: .date)
+            try container.encodeIfPresent(note, forKey: .note)
+        case .swapExercise(let lane, let toExercise):
+            try container.encode("swap_exercise", forKey: .kind)
+            try container.encode(lane, forKey: .lane)
+            try container.encode(toExercise, forKey: .toExercise)
+        case .temporarySwap(let lane, let toExercise, let until):
+            try container.encode("temporary_swap", forKey: .kind)
+            try container.encode(lane, forKey: .lane)
+            try container.encode(toExercise, forKey: .toExercise)
+            try container.encodeIfPresent(until, forKey: .until)
+        case .temporaryLoadAdjust(let lane, let percent, let until):
+            try container.encode("temporary_load_adjust", forKey: .kind)
+            try container.encode(lane, forKey: .lane)
+            try container.encode(percent, forKey: .percent)
+            try container.encodeIfPresent(until, forKey: .until)
         }
+    }
+}
+
+/// Which lanes a deload touches. Mirrors the engine's `DeloadScope`.
+enum DeloadScope: Encodable, Sendable, Hashable {
+    case all
+    case lanes([String])
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case .all:
+            var container = encoder.singleValueContainer()
+            try container.encode("all")
+        case .lanes(let lanes):
+            var container = encoder.container(keyedBy: LanesKey.self)
+            try container.encode(lanes, forKey: .lanes)
+        }
+    }
+
+    private enum LanesKey: String, CodingKey {
+        case lanes
     }
 }
 

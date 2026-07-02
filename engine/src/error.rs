@@ -30,3 +30,25 @@ pub enum KnurledError {
     #[error("invalid execution input: {0}")]
     InvalidExecutionInput(String),
 }
+
+impl KnurledError {
+    /// Stable machine-readable kind for the FFI/wasm `error_detail` envelope
+    /// (RFC-0001 D9). Clients branch on this, never on message text.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::MissingRequiredFile(_) => "missing_file",
+            Self::Io { .. } => "io",
+            Self::Json { .. } => "invalid_json",
+            Self::UnknownTemplate(_) => "unknown_template",
+            Self::Parse(_) => "parse",
+            Self::InvalidExecutionInput(_) => "invalid_input",
+        }
+    }
+
+    /// Whether retrying the same call can plausibly succeed. The engine has no
+    /// network path, so only I/O qualifies; everything else is permanent until
+    /// the inputs change.
+    pub fn retryable(&self) -> bool {
+        matches!(self, Self::Io { .. })
+    }
+}

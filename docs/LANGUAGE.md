@@ -267,8 +267,13 @@ patch "shoulder-friendly-press" {
 | `replace-exercise` | `from=… to=… lane=…` | all three properties required; `lane` is a regex |
 | `add-conditioning` | `day=… activity=…` | both required |
 | `cap` | `target=… value=… [lane=…]` | cap a target (e.g. volume/RPE); `lane` optional regex |
+| `scale-load` | `percent=… lane=…` | scale prescribed set loads on matching lanes by an integer percent (−10 = 10% lighter), snapped via the equipment rounder; progression state is untouched (RFC-0001 D10, ADR 0011) |
 
 Any other operation is a parse error.
+
+`expires` is enforced at the first *dated* mutation (normally the next workout submit): a patch
+whose expiry is before the submitted date is deleted. Rendering itself never reads a clock
+(ADR 0006/0011). `active-from` is recorded but not yet enforced.
 
 ---
 
@@ -286,9 +291,9 @@ Specced in mvp-spec §11 but **not** currently accepted by the parser:
 
 - **Plan-level:** `substitutions`, `overrides`, plan-level `active patches`.
 - **Patch ops:** `add cooldown`, a distinct `cap rpe`, `change suggested days`,
-  `temporary load adjustment`, `enable` / `disable`. (Plan-level `warmup` and `equipment` are now
-  implemented — see above; a patch-level `add-warmup` op that layers a warmup change for a
-  date-bounded period is still future work.)
+  `enable` / `disable`. (Plan-level `warmup` and `equipment` are now implemented — see above;
+  `temporary load adjustment` is now the `scale-load` op; a patch-level `add-warmup` op that
+  layers a warmup change for a date-bounded period is still future work.)
 
 ## Out of scope (by design)
 

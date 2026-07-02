@@ -5,8 +5,11 @@
  * C ABI for knurled-core (see ../src/lib.rs).
  *
  * Every function returns a heap-allocated, NUL-terminated JSON string holding an
- * envelope: {"ok":true,"data":...} or {"ok":false,"error":"..."}. The caller
- * owns the returned pointer and must release it with knurled_string_free.
+ * envelope: {"ok":true,"data":...} or
+ * {"ok":false,"error":"...","error_detail":{"kind":"...","retryable":false}}.
+ * error_detail is additive (RFC-0001 D9); branch on its stable kind, never on
+ * message text. The caller owns the returned pointer and must release it with
+ * knurled_string_free.
  */
 
 #ifdef __cplusplus
@@ -89,6 +92,20 @@ char *knurled_parse_template(const char *text);
  * Request JSON is a PreviewTemplateRequest ({ dsl|text, units, initial_numbers,
  * suggested_days, rest }). -> { "validation": ..., "preview": ... } */
 char *knurled_preview_template(const char *request_json);
+
+/* Glossary lookup for a template term (AMRAP, RPE, T1…). Unknown terms return
+ * { "explanation": null }. -> { "explanation": { term, title, body } | null } */
+char *knurled_explain(const char *term);
+
+/* Engine-owned human copy for a validation code. Unknown codes get honest
+ * generic copy. -> { code, title, body, hint? } */
+char *knurled_validation_message(const char *code);
+
+/* "Help me choose" wizard backend. Request JSON: { "experience":
+ * "beginner"|"intermediate"|"advanced", "days_per_week": n, "goal":
+ * "strength"|"hypertrophy"|"mixed" }.
+ * -> { primary_ref, display_name, rationale, alternates } */
+char *knurled_recommend_template(const char *request_json);
 
 /* -> engine version string */
 char *knurled_engine_version(void);

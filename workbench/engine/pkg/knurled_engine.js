@@ -74,19 +74,18 @@ function getStringFromWasm0(ptr, len) {
     return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 /**
- * Compile + render the next workout from `state` (ADR 0007). Returns
- * `BuildOutputs` (`state`, `ir`, `next_workout`, `validation`) — the
- * workbench's main call. An empty `state_json` means the program's initial
- * state.
+ * Project the plan forward from `state`. Returns a `SimulationReport`.
  * @param {string} plan_text
  * @param {string} lock_text
  * @param {string} patches_json
  * @param {string} state_json
+ * @param {number} weeks
+ * @param {string} strategy
  * @returns {string}
  */
-export function build(plan_text, lock_text, patches_json, state_json) {
-    let deferred5_0;
-    let deferred5_1;
+export function simulate_plan(plan_text, lock_text, patches_json, state_json, weeks, strategy) {
+    let deferred6_0;
+    let deferred6_1;
     try {
         const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -96,97 +95,34 @@ export function build(plan_text, lock_text, patches_json, state_json) {
         const len2 = WASM_VECTOR_LEN;
         const ptr3 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len3 = WASM_VECTOR_LEN;
-        const ret = wasm.build(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-        deferred5_0 = ret[0];
-        deferred5_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-    }
-}
-
-/**
- * @returns {string}
- */
-export function exercise_catalog_json() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.exercise_catalog_json();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
-}
-
-/**
- * Submit a finished session (ADR 0007). The browser holds `state` and the
- * record, so they are passed in and returned: this renders the next workout
- * from `state_json`, reduces the input per `mode` (`advance` | `off_day` |
- * `reset`), and returns a `SubmitOutcome` (`validation`, `record` to
- * upsert into the month file, `new_state` to persist, `effects`). An empty
- * `state_json` means the program's initial state.
- * @param {string} plan_text
- * @param {string} lock_text
- * @param {string} patches_json
- * @param {string} state_json
- * @param {string} input_json
- * @param {string} mode
- * @param {string} date
- * @returns {string}
- */
-export function submit(plan_text, lock_text, patches_json, state_json, input_json, mode, date) {
-    let deferred8_0;
-    let deferred8_1;
-    try {
-        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr4 = passStringToWasm0(strategy, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ptr6 = passStringToWasm0(date, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len6 = WASM_VECTOR_LEN;
-        const ret = wasm.submit(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, ptr6, len6);
-        deferred8_0 = ret[0];
-        deferred8_1 = ret[1];
+        const ret = wasm.simulate_plan(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, weeks, ptr4, len4);
+        deferred6_0 = ret[0];
+        deferred6_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
     }
 }
 
 /**
- * Compile + validate a plan. Returns a `ValidationReport`.
- * @param {string} plan_text
- * @param {string} lock_text
- * @param {string} patches_json
+ * Engine-owned human copy for a validation code (RFC-0001 D9).
+ * @param {string} code
  * @returns {string}
  */
-export function validate(plan_text, lock_text, patches_json) {
-    let deferred4_0;
-    let deferred4_1;
+export function validation_message(code) {
+    let deferred2_0;
+    let deferred2_1;
     try {
-        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.validate(ptr0, len0, ptr1, len1, ptr2, len2);
-        deferred4_0 = ret[0];
-        deferred4_1 = ret[1];
+        const ret = wasm.validation_message(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -232,6 +168,22 @@ export function record_files(records_json) {
 }
 
 /**
+ * @returns {string}
+ */
+export function engine_version() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.engine_version();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * Backtest the plan over training records (ADR 0007). `days_json` is a JSON array
  * of records (`logs/<yyyy>/<mm>.json` `records[]`). Returns a
  * `BacktestProjection`.
@@ -263,64 +215,13 @@ export function backtest_records(plan_text, lock_text, patches_json, days_json) 
 }
 
 /**
- * Project the plan forward from `state`. Returns a `SimulationReport`.
- * @param {string} plan_text
- * @param {string} lock_text
- * @param {string} patches_json
- * @param {string} state_json
- * @param {number} weeks
- * @param {string} strategy
  * @returns {string}
  */
-export function simulate_plan(plan_text, lock_text, patches_json, state_json, weeks, strategy) {
-    let deferred6_0;
-    let deferred6_1;
-    try {
-        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(strategy, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ret = wasm.simulate_plan(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, weeks, ptr4, len4);
-        deferred6_0 = ret[0];
-        deferred6_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
-    }
-}
-
-/**
- * @returns {string}
- */
-export function engine_version() {
+export function exercise_catalog_json() {
     let deferred1_0;
     let deferred1_1;
     try {
-        const ret = wasm.engine_version();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
-}
-
-/**
- * List built-in templates with their session/slot/tier skeleton so the builder
- * canvas reflects real structure instead of hardcoded assumptions.
- * @returns {string}
- */
-export function builtin_template_catalog() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.builtin_template_catalog();
+        const ret = wasm.exercise_catalog_json();
         deferred1_0 = ret[0];
         deferred1_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -346,6 +247,193 @@ export function lock_for(template_ref) {
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Compile + render the next workout from `state` (ADR 0007). Returns
+ * `BuildOutputs` (`state`, `ir`, `next_workout`, `validation`) — the
+ * workbench's main call. An empty `state_json` means the program's initial
+ * state.
+ * @param {string} plan_text
+ * @param {string} lock_text
+ * @param {string} patches_json
+ * @param {string} state_json
+ * @returns {string}
+ */
+export function build(plan_text, lock_text, patches_json, state_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * "Help me choose" wizard backend (RFC-0001 D2). `profile_json` is a
+ * `ProfileRequest { experience, days_per_week, goal }`.
+ * @param {string} profile_json
+ * @returns {string}
+ */
+export function recommend(profile_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(profile_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.recommend(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Glossary lookup for a template term (RFC-0001 D3). Unknown terms yield
+ * `{ "explanation": null }`.
+ * @param {string} term
+ * @returns {string}
+ */
+export function explain_term(term) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(term, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.explain_term(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Compile + validate a plan. Returns a `ValidationReport`.
+ * @param {string} plan_text
+ * @param {string} lock_text
+ * @param {string} patches_json
+ * @returns {string}
+ */
+export function validate(plan_text, lock_text, patches_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.validate(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * List built-in templates with their session/slot/tier skeleton so the builder
+ * canvas reflects real structure instead of hardcoded assumptions.
+ * @returns {string}
+ */
+export function builtin_template_catalog() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.builtin_template_catalog();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * Derived next-workout date (RFC-0001 D4): first weekday in
+ * `suggested_days_json` (array of "mon"-style tokens) strictly after the
+ * latest dated record in `records_json`, or the date a reschedule marker
+ * pins. The browser holds the records, so they are passed in.
+ * @param {string} suggested_days_json
+ * @param {string} records_json
+ * @returns {string}
+ */
+export function next_workout_date(suggested_days_json, records_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(suggested_days_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(records_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.next_workout_date(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Submit a finished session (ADR 0007). The browser holds `state` and the
+ * record, so they are passed in and returned: this renders the next workout
+ * from `state_json`, reduces the input per `mode` (`advance` | `off_day` |
+ * `reset`), and returns a `SubmitOutcome` (`validation`, `record` to
+ * upsert into the month file, `new_state` to persist, `effects`). An empty
+ * `state_json` means the program's initial state.
+ * @param {string} plan_text
+ * @param {string} lock_text
+ * @param {string} patches_json
+ * @param {string} state_json
+ * @param {string} input_json
+ * @param {string} mode
+ * @param {string} date
+ * @returns {string}
+ */
+export function submit(plan_text, lock_text, patches_json, state_json, input_json, mode, date) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(plan_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(lock_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(patches_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passStringToWasm0(mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ptr6 = passStringToWasm0(date, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len6 = WASM_VECTOR_LEN;
+        const ret = wasm.submit(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, ptr6, len6);
+        deferred8_0 = ret[0];
+        deferred8_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
     }
 }
 

@@ -210,7 +210,7 @@ struct FinishWorkoutView: View {
             if outcome.validation.isValid {
                 phase = .preview(outcome)
             } else {
-                let message = outcome.validation.errors.map(\.message).joined(separator: "\n")
+                let message = outcome.validation.errors.map(\.displayText).joined(separator: "\n")
                 phase = .failed(message.isEmpty ? "The workout could not be validated." : message)
             }
         } catch {
@@ -230,7 +230,7 @@ struct FinishWorkoutView: View {
                 timestamp: timestamp
             )
             guard submitted.validation.isValid else {
-                let message = submitted.validation.errors.map(\.message).joined(separator: "\n")
+                let message = submitted.validation.errors.map(\.displayText).joined(separator: "\n")
                 phase = .failed(message.isEmpty ? "The workout could not be submitted." : message)
                 return
             }

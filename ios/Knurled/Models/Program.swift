@@ -32,6 +32,14 @@ struct ProgramAdjustmentSuggestion: Codable, Sendable, Hashable, Identifiable {
     var lane: String
     var reason: String
     var proposedValue: String?
+    /// Engine-owned human copy for the suggestion card (RFC-0001 D3);
+    /// `reason` stays the technical explanation.
+    var userDescription: String? = nil
 
     var id: String { "\(kind):\(lane)" }
+
+    var displayText: String {
+        if let userDescription, !userDescription.isEmpty { return userDescription }
+        return reason
+    }
 }

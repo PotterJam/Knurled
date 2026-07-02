@@ -135,6 +135,14 @@ pub enum PatchOperation {
         value: String,
         lane_regex: Option<String>,
     },
+    /// Scale prescribed set loads on matching lanes by `percent` (−10 = 10%
+    /// lighter) at render time, snapped via the equipment rounder. Progression
+    /// state is untouched — this is the render-time overlay behind
+    /// `PlanEdit::TemporaryLoadAdjust` (RFC-0001 D10).
+    ScaleLoad {
+        percent: i32,
+        lane_regex: String,
+    },
     Raw {
         text: String,
     },
@@ -512,6 +520,10 @@ pub enum ValidationStatus {
 pub struct ValidationMessage {
     pub code: String,
     pub message: String,
+    /// Human sentence for this problem, stamped at construction so every
+    /// report already carries user copy (RFC-0001 D9).
+    #[serde(default)]
+    pub user_message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -588,6 +600,10 @@ pub struct RenderedSession {
     pub engine_version: String,
     pub session_id: String,
     pub display_name: String,
+    /// The day's lifts at a glance ("Squat · Bench Press · Lat Pulldown"),
+    /// engine-composed so clients never re-derive it (RFC-0001 D3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_description: Option<String>,
     pub suggested_date: Option<String>,
     pub plan_hash: String,
     pub template_hash: String,
@@ -661,6 +677,15 @@ pub enum RestSource {
 pub struct DisplayFields {
     pub title: String,
     pub subtitle: String,
+    /// Clean exercise name ("Overhead Press") — the engine-owned label clients
+    /// render instead of raw ids (RFC-0001 D3). `default` so snapshots captured
+    /// before this field existed still decode.
+    #[serde(default)]
+    pub label: String,
+    /// The lift's role in this program, in the template's own vocabulary
+    /// ("Main lift", "Supplemental", "5/3/1 sets").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -841,6 +866,11 @@ pub struct BuildOutputs {
     pub ir: serde_json::Value,
     pub next_workout: Option<RenderedSession>,
     pub validation: ValidationReport,
+    /// Why `next_workout` is absent (the plan failed validation), so the app
+    /// can explain the fallback instead of a silent "plan invalid" chip
+    /// (RFC-0001 D9).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

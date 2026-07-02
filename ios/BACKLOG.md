@@ -3,6 +3,36 @@
 Deferred items from the code review. These are real but post-MVP — captured here so they
 aren't lost. Nothing here blocks the core loop (next workout → log → submit → commit → sync).
 
+## RFC-0001 Tranche 1 — iOS surfaces (engine + models ready, UI pending)
+
+The engine work landed on `claude/rfc-review-refinement-gw3t2v` (see the refined
+[RFC-0001](../docs/rfc/0001-cockpit-jtbd.md) §5/§6 and ADRs 0011/0012). The Swift models,
+FFI functions, and `PlanEdit` cases already exist; each item below is a thin SwiftUI surface
+over a typed engine call:
+
+- **Workout header date + description.** Show `nextWorkout.suggestedDate` ("Thu 2 Jul") and
+  `displayDescription` in `WorkoutHomeView`; the engine derives both (RFC-0001 D4/D3).
+- **Reschedule row.** "Can't make it? Reschedule" → date sheet → `PlanEdit.reschedule(toDate:note:)`.
+- **Deload card + form.** Show a dismissible card when `suggestProgramAdjustments` returns
+  `kind == "deload_week"` (`displayText` carries the copy); Plan Overview gets "Plan a deload
+  week" (percent slider, lane scope, preview) → `PlanEdit.deload(...)`.
+- **Swap + temporary-change sheets.** "Swap exercise" (catalog picker) →
+  `PlanEdit.swapExercise`; "Temporary change" (Load / Swap tabs, optional until-date) →
+  `PlanEdit.temporaryLoadAdjust` / `.temporarySwap`. Active managed patches
+  (`patches/swap-*`, `tmp-*`) should list as removable rows via `deletePatch`.
+- **Labels everywhere.** Replace remaining raw `progressionLane`/tier text with
+  `display.label` + `display.group`; add the "About this program" screen backed by
+  `knurled_explain` (FFI binding exists; add the Swift protocol method when building this).
+- **Invalid-plan banner + retry affordance.** Surface `BuildOutputs.staleReason` as the yellow
+  "showing the previous workout" banner; use `EngineError.isRetryable` for a retry affordance
+  on I/O failures.
+- **Onboarding picker + wizard (D1/D2).** Searchable template picker first;
+  "Not sure? Help me choose" → 3 questions → `knurled_recommend_template`. iCloud
+  default-repo per RFC-0001 Risk 1 resolution (A): git repo stays local, iCloud carries a
+  serialized snapshot; needs its own ADR when built.
+- **History rendering of new markers.** Log months now contain `reschedule` and `deload`
+  records (ADR 0011); History should render them like program markers (the `note` is the copy).
+
 ## Feature surface
 
 - **Broader corrections.** `HistoryDetailView` edits reps only. The spec also wants: correct a

@@ -37,14 +37,23 @@ protocol WorkoutEngine: Sendable {
 
 enum EngineError: Error, Sendable, LocalizedError {
     case engine(String)
+    /// Failure carrying the engine's typed detail (RFC-0001 D9): a stable
+    /// `kind` to branch on and whether retrying can plausibly succeed.
+    case typed(kind: String, retryable: Bool, message: String)
     case emptyResponse
     case missingData
 
     var errorDescription: String? {
         switch self {
         case .engine(let message): return message
+        case .typed(_, _, let message): return message
         case .emptyResponse: return "The engine returned no response."
         case .missingData: return "The engine response was missing its payload."
         }
+    }
+
+    var isRetryable: Bool {
+        if case .typed(_, let retryable, _) = self { return retryable }
+        return false
     }
 }

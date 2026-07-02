@@ -262,7 +262,15 @@ actor RustWorkoutEngine: WorkoutEngine {
             from: Data(raw.utf8)
         )
         if !envelope.ok {
-            throw EngineError.engine(envelope.error ?? "unknown engine error")
+            let message = envelope.error ?? "unknown engine error"
+            if let detail = envelope.errorDetail {
+                throw EngineError.typed(
+                    kind: detail.kind,
+                    retryable: detail.retryable,
+                    message: message
+                )
+            }
+            throw EngineError.engine(message)
         }
         guard let payload = envelope.data else { throw EngineError.missingData }
         return payload
